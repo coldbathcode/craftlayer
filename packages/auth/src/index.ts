@@ -538,6 +538,7 @@ export class AuthService {
         user: p.user,
         organizations,
         instance_owner: !!owner.rowCount,
+        current_session_id: p.sessionId,
         csrf_token: this.csrfToken(token),
       };
     });
@@ -811,7 +812,12 @@ export class AuthService {
           true,
           org,
         );
-        return { id, ...value };
+        return {
+          id,
+          name: value.name,
+          project_id: value.projectId,
+          type: value.type,
+        };
       },
       true,
     );
@@ -1069,7 +1075,7 @@ export class AuthService {
             [org, id, permission],
           );
         await this.audit(client, p.user.id, "role.created", id, true, org);
-        return { id, ...value };
+        return { id, name: value.name, permissions: value.permissions };
       },
       true,
     );
@@ -1985,6 +1991,77 @@ export class AuthService {
     await this.#pool.query(
       "delete from auth_rate_limits where bucket in(select bucket from auth_rate_limits where window_started_at<$1 limit 500)",
       [new Date(this.now().getTime() - 86400000)],
+    );
+  }
+
+  async authorityView(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "organization:read",
+      { kind: "organization", id: org },
+      async (_c, _p, a, member) => ({
+        account_type: a.accountType,
+        membership_version: member.auth_version,
+        roles: a.roles,
+        permissions: a.permissions.filter(
+          (permission) =>
+            a.accountType !== "child" || childPermissions.includes(permission),
+        ),
+        can_manage_members: canAccess(a, "membership:manage", {
+          kind: "organization",
+          id: org,
+        }),
+        can_manage_roles: canAccess(a, "role:manage", {
+          kind: "organization",
+          id: org,
+        }),
+        can_create_projects: canAccess(a, "project:create", {
+          kind: "organization",
+          id: org,
+        }),
+        can_manage_environments: canAccess(a, "environment:admin", {
+          kind: "organization",
+          id: org,
+        }),
+        can_invite: canAccess(a, "user:invite", {
+          kind: "organization",
+          id: org,
+        }),
+        can_read_audit: canAccess(a, "audit:read", {
+          kind: "organization",
+          id: org,
+        }),
+      }),
+    );
+  }
+  async listAudit(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "audit:read",
+      { kind: "organization", id: org },
+      async (client) =>
+        (
+          await client.query(
+            "select id,actor_id,action,target_id,outcome,created_at,details from audit_events where organization_id=$1 order by id desc limit 100",
+            [org],
+          )
+        ).rows,
+    );
+  }
+  async recordDenied(token: string, source: string) {
+    this.ensureReady();
+    await this.rate("denial-audit", source, 100);
+    const principal = await this.authenticate(token).catch(() => null);
+    await this.transaction((client) =>
+      this.audit(
+        client,
+        principal?.user.id ?? null,
+        "http.access_denied",
+        null,
+        false,
+      ),
     );
   }
 

@@ -41,12 +41,16 @@ export async function buildApp(options: {
       "Request complete",
     );
   });
-  app.setErrorHandler((error, request, reply) => {
+  app.setErrorHandler(async (error, request, reply) => {
     options.logger?.warn(
       { request_id: request.id, code: "REQUEST_FAILED" },
       "Request failed",
     );
     if (error instanceof AuthError) {
+      if ([401, 403, 404].includes(error.status))
+        await options.auth
+          ?.recordDenied(request.cookies?.craftlayer_session ?? "", request.ip)
+          .catch(() => {});
       void reply.code(error.status).send({
         error: {
           code: error.code,

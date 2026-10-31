@@ -869,13 +869,20 @@ describe("password recovery and child onboarding", () => {
     const person = await fixtureMember("viewer"),
       updated = "CLI recovered fixture password 22!";
     const r = spawnSync(
-      "pnpm",
-      ["cli", "owner", "reset-password", person.login],
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        "apps/cli/src/main.ts",
+        "owner",
+        "reset-password",
+        person.login,
+      ],
       {
         encoding: "utf8",
         input: `${updated}\n`,
         env: {
-          ...process.env,
+          PATH: process.env.PATH,
           AUTH_DATABASE_URL: databaseUrl,
           CRAFTLAYER_BOOTSTRAP_TOKEN: bootstrapToken,
           CRAFTLAYER_RECOVERY_TOKEN: recoveryToken,
@@ -898,6 +905,59 @@ describe("password recovery and child onboarding", () => {
       ).user.id,
     ).toBe(person.userId);
   });
+});
+
+it("projects strict public identity DTOs and audits allowed and denied actions without credentials", async () => {
+  const name = `audit-project-${counter++}`;
+  const created = await auth.createProject(ownerToken, orgId, name);
+  const viewer = await fixtureMember("viewer");
+  const headers = {
+    cookie: `craftlayer_session=${ownerToken}`,
+    "x-craftlayer-organization": orgId,
+  };
+  const me = await app.inject({ url: "/api/v1/auth/me", headers });
+  expect(me.statusCode).toBe(200);
+  expect(me.json().current_session_id).toMatch(/^[a-f0-9-]{36}$/);
+  const denied = await app.inject({
+    url: "/api/v1/audit",
+    headers: { ...headers, cookie: `craftlayer_session=${viewer.token}` },
+  });
+  expect(denied.statusCode).toBe(403);
+  const audit = await app.inject({ url: "/api/v1/audit", headers });
+  expect(audit.statusCode).toBe(200);
+  expect(audit.headers["cache-control"]).toBe("no-store");
+  expect(
+    audit
+      .json()
+      .items.some(
+        (e: { target_id: string; outcome: string }) =>
+          e.target_id === created.id && e.outcome === "allowed",
+      ),
+  ).toBe(true);
+  const global = (
+    await pool.query(
+      "select action,outcome from instance_audit_events where actor_id=$1 and outcome='denied'",
+      [viewer.userId],
+    )
+  ).rows;
+  expect(global.some((e) => e.action === "http.access_denied")).toBe(true);
+  const members = await app.inject({ url: "/api/v1/memberships", headers });
+  expect(members.statusCode).toBe(200);
+  for (const privateValue of [
+    ownerToken,
+    password,
+    bootstrapToken,
+    recoveryToken,
+    "password_hash",
+    "token_hash",
+    "auth_version",
+    "ciphertext",
+  ])
+    expect(
+      JSON.stringify([me.json(), members.json(), audit.json()]),
+    ).not.toContain(privateValue);
+  const doc = await app.inject({ url: "/api/v1/openapi.json" });
+  expect(doc.json().paths["/api/v1/auth/me"].get.responses["200"]).toBeTruthy();
 });
 
 // CHAPTER_TESTS

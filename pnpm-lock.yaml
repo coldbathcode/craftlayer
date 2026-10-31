@@ -90,6 +90,9 @@ importers:
       '@craftlayer/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@craftlayer/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
       next:
         specifier: 16.4.3
         version: 16.4.3(@playwright/test@1.64.1)(@types/node@22.20.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -99,6 +102,9 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/react':
         specifier: 19.3.0
@@ -183,6 +189,15 @@ importers:
       '@types/pg':
         specifier: 8.23.1
         version: 8.23.1
+
+  packages/sdk:
+    dependencies:
+      '@craftlayer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
 packages:
 

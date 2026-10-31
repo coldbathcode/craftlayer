@@ -10,6 +10,31 @@ const runtimeUrl = z.url().refine((value) => {
     !!u.password
   );
 }, "requires the restricted craftlayer_runtime database role");
+const ownerRecoverySchema = z.strictObject({
+  AUTH_DATABASE_URL: z.url().refine((value) => {
+    const u = new URL(value);
+    return (
+      ["postgres:", "postgresql:"].includes(u.protocol) &&
+      u.username === "craftlayer_identity" &&
+      Boolean(u.password)
+    );
+  }),
+  CRAFTLAYER_BOOTSTRAP_TOKEN: z.string().regex(/^[a-f0-9]{64}$/),
+  CRAFTLAYER_RECOVERY_TOKEN: z.string().regex(/^[a-f0-9]{64}$/),
+  CRAFTLAYER_CSRF_SECRET: z.string().regex(/^[a-f0-9]{64}$/),
+});
+export function parseOwnerRecoveryConfig(
+  env: Record<string, string | undefined>,
+) {
+  const result = ownerRecoverySchema.safeParse(
+    Object.fromEntries(
+      Object.keys(ownerRecoverySchema.shape).map((key) => [key, env[key]]),
+    ),
+  );
+  if (!result.success)
+    throw new Error("Invalid local identity configuration; values omitted.");
+  return result.data;
+}
 const schema = z
   .strictObject({
     NODE_ENV: z

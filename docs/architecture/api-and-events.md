@@ -1,12 +1,12 @@
 # API, event stream, CLI and extension contracts
 
-Status: design contract. These routes are planned, not available. Zod schemas are canonical for runtime validation; generate OpenAPI and SDK from a single schema source. Do not maintain handwritten divergent clients.
+Status: Chapters 00–01 routes are implemented; later routes remain design contracts. Strict Zod response projections are shared by Fastify/OpenAPI and the browser SDK; request schemas live in explicit Fastify route definitions. SDK transport validates the shared schema rather than duplicating DTO types. See [identity runbook](../development/identity-and-recovery.md). A generated endpoint-method SDK can extend this transport in Chapter 03.
 
 ## HTTP conventions
 
-Prefix `/api/v1`. JSON request/response content type; UUID IDs; UTC ISO timestamps; explicit schema versions on persisted/exported objects. Reject unknown action/tool fields. Cursor pagination defaults to 50, maximum 100. Validate body/file size and bound filter complexity. No secrets in URLs or errors.
+Prefix `/api/v1`. JSON request/response content type; UUID IDs; UTC ISO timestamps; explicit schema versions on persisted/exported objects. Reject unknown action/tool fields. Planned cursor pagination defaults to 50, maximum 100. Chapter 01 identity lists return a bounded 100-row snapshot with no global totals; complete cursor navigation is deferred and recorded in ADR 0012. Validate body/file size and bound filter complexity. No secrets in URLs or errors.
 
-Context uses authenticated identity plus a selected organization header (proposed `X-CraftLayer-Organization`); validate membership before using it. Resource URLs stay simple while all repository calls require the validated context. Request-body organization fields are absent or must match canonical scope; they cannot select authority. CLI follows the same contract.
+Context uses authenticated identity plus a selected organization header (`X-CraftLayer-Organization`); validate membership before using it. Resource URLs stay simple while all repository calls require the validated context. Request-body organization fields are absent or must match canonical scope; they cannot select authority. CLI follows the same contract.
 
 Error envelope:
 
@@ -36,7 +36,7 @@ Require `Idempotency-Key` on execute/create operations with external consequence
 | `GET /auth/sessions`; `DELETE /auth/sessions/:id` | Own sessions; org/admin operations separately scoped | 01 |
 | `POST /auth/cli/exchange`; `DELETE /auth/cli/:id` | Scoped CLI token issuance/revocation; no password argv | 03 |
 | `/users`, `/organizations`, `/memberships`, `/roles` | Scoped identity administration; instance org creation is explicit | 01 |
-| `/invitations`, `/invitations/:id/consume` | Expiring single-use invite with approved role | 01 |
+| `/invitations`, `POST /invitations/consume`, `DELETE /invitations/:id` | Expiring single-use invite with approved role | 01 |
 | `/projects`, `/environments` | Project/env config and policy; `environment:admin` | 01, 04 |
 | `/providers`, `/providers/:id/models`, `/providers/:id/test` | Redacted config/catalog and bounded admin test | 02 |
 | `/budgets`, `/usage` | Scoped limits/reports; changes audited | 02 |

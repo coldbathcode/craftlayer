@@ -66,9 +66,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Expired/replayed reset fails, successful reset revokes sessions, child cannot self-upgrade or invoke owner tools.
 
-### [ ] CL-01-06 — Identity API and audit projection
+### [x] CL-01-06 — Identity API and audit projection
 
-**Depends on:** CL-01-05. **Size:** M. **Status:** not started.
+**Depends on:** CL-01-05. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Expose explicit safe routes with validation, rate limits, redacted responses and transactional audit. Add minimal administrative UI/API fixtures sufficient to operate accounts until Chapter 05.
 

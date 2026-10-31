@@ -79,12 +79,16 @@ for (const [base, pkg] of owners) {
           !["@craftlayer/contracts", "@craftlayer/sdk"].includes(name)
         )
           violations.push(`${label} exposes a server package to web`);
+        if (pkg.name === "@craftlayer/sdk" && name !== "@craftlayer/contracts")
+          violations.push(`${label} exposes a server package to SDK`);
         if (["@craftlayer/core", "@craftlayer/contracts"].includes(pkg.name))
           violations.push(`${label} violates pure domain boundary`);
       }
       if (
-        pkg.name === "@craftlayer/web" &&
-        /^(pg|redis|pino|drizzle-orm|fastify|node:)/.test(spec)
+        ["@craftlayer/web", "@craftlayer/sdk"].includes(pkg.name) &&
+        /^(pg|redis|pino|drizzle-orm|fastify|node:|nodemailer|@node-rs)/.test(
+          spec,
+        )
       )
         violations.push(`${label} is forbidden in dashboard source`);
     }

@@ -1,7 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { parseEnv } from "node:util";
 import { AuthService } from "@craftlayer/auth";
-import { parseServerConfig } from "@craftlayer/config";
+import {
+  parseOwnerRecoveryConfig,
+  parseServerConfig,
+} from "@craftlayer/config";
 import { readSecret } from "./secret.js";
 
 const [command, subcommand, file] = process.argv.slice(2);
@@ -38,7 +41,7 @@ if (!command || ["help", "--help", "-h"].includes(command)) {
 ) {
   let auth: AuthService | undefined;
   try {
-    const config = parseServerConfig(process.env);
+    const config = parseOwnerRecoveryConfig(process.env);
     if (
       !config.AUTH_DATABASE_URL ||
       !config.CRAFTLAYER_BOOTSTRAP_TOKEN ||

@@ -35,7 +35,7 @@ export default function Home() {
         </a>
         <nav aria-label="Main navigation">
           <a href="#system">System</a>
-          <a href="#roadmap">What’s next</a>
+          <a href="/account">Account</a>
           <a
             href="https://github.com/coldbathcode/craftlayer"
             target="_blank"

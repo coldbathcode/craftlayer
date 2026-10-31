@@ -24,7 +24,7 @@ pnpm stack:up
 
 Open **http://127.0.0.1:3000**. The page should show **Core API connected**. `stack:up` builds local production images, starts PostgreSQL/Redis, applies migrations using the dedicated migration role, then waits for API/worker/web health. First build retrieves dependencies/images; subsequent builds reuse layers. Installation requires dependency network access; the running Core API/worker/data network has no external route.
 
-`setup:local` creates `.env` with four independent random passwords and mode 0600. Repeating it keeps existing values. Never copy the blank `.env.example` values into an active deployment. Retain `.env` with its associated volumes: changing passwords in a file does not rotate already-created PostgreSQL roles. No secrets are printed by the setup script.
+`setup:local` creates `.env` with independent database/Redis passwords and bootstrap/recovery/CSRF secrets and mode 0600. Repeating it keeps existing values. Never copy the blank `.env.example` values into an active deployment. Retain `.env` with its associated volumes: changing passwords in a file does not rotate already-created PostgreSQL roles. No secrets are printed by the setup script.
 
 Only web publishes a default host port, bound to `127.0.0.1`. API/worker/PostgreSQL/Redis stay private. Web has a separate ingress network and the internal API network; it receives no DB/Redis/migration credentials. LAN/TLS/remote access is intentionally not enabled by this quickstart.
 
@@ -51,12 +51,13 @@ Do not print `docker compose config` without `--quiet`, dump container environme
 | --- | --- |
 | `pnpm check` | Warning-free lint, dependency boundaries, strict source/test typechecking, unit checks and Markdown structure |
 | `pnpm build` | Topological server packages plus production Next build; injected workspace dependencies are synchronized after package builds |
-| `pnpm test:db` | Fresh disposable PostgreSQL, separate roles, repeat migration, 6 RLS/integrity tests, failed-migration rollback and checksum tamper denial |
+| `pnpm test:db` | Fresh disposable PostgreSQL, separate roles, repeat migration, identity/API/RLS/integrity tests, failed-migration rollback and checksum tamper denial |
 | `pnpm compose:check` | Compose configuration without displaying secrets; requires generated `.env` |
 | `pnpm check:stack` | Five healthy non-root services, private ports, capability/memory limits, web secret separation and same-origin API |
 | `pnpm test:offline` | Builds test image, then runs unit/lifecycle tests as non-root with network disabled and read-only root; temporary caches are isolated |
 | `pnpm exec playwright install chromium` | One-time local browser download |
 | `pnpm test:e2e` | Desktop/mobile connected/error states, no page exceptions or external requests, keyboard skip and no horizontal overflow; stack must be running |
+| `pnpm test:identity-ui` | Full account journeys on an isolated random-port installation; removes its own volumes and preserves your owner setup |
 | `pnpm docs:check` | Chapter/task/link/source-hash integrity only |
 
 `pnpm test:integration` is the lower-level suite and requires `TEST_DATABASE_URL` pointing at a correctly provisioned disposable restricted-role database. Prefer `test:db`, which owns and removes its container/volume. Do not point tests at a real installation.
@@ -92,8 +93,10 @@ pnpm stack:down
 
 This stops/removes this project's containers and networks while retaining database/Redis volumes and `.env`. Restart with `pnpm stack:up`. Avoid deleting volumes unless intentionally discarding this installation's data. Automated backup/restore and production upgrades are Chapter 09 work; do not mistake foundation volume persistence for a backup system.
 
-If port 3000 is occupied, change `CRAFTLAYER_HTTP_PORT` and restart web. If readiness fails, inspect migration status and redacted API/worker logs. A lost Redis connection currently remains unavailable until service restart; later runtime chapters add reconciliation. Never solve a connection problem by switching application DB URLs to the admin role or publishing DB ports publicly.
+If port 3000 is occupied, change `CRAFTLAYER_HTTP_PORT` and the matching `CRAFTLAYER_PUBLIC_URL`, then recreate API and web. If readiness fails, inspect migration status and redacted API/worker logs. A lost Redis connection currently remains unavailable until service restart; later runtime chapters add reconciliation. Never solve a connection problem by switching application DB URLs to the admin role or publishing DB ports publicly.
 
 ## Build-step workflow
 
 Before editing, inspect Git status and current delivery status. At the end of every build step, run relevant checks, record task evidence and the exact next action, commit the task changes, push to `origin main`, then verify remote/local equality. This is the user's standing requirement in [AGENTS.md](../../AGENTS.md). Chapter boundaries still require authorization for the next chapter.
+
+Open `/account` for first-owner setup and account administration. Follow the [identity/recovery runbook](identity-and-recovery.md); implementation tests leave your installation unclaimed.

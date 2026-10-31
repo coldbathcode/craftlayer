@@ -1,4 +1,5 @@
 import { AuthError, type IdentityService } from "@craftlayer/auth";
+import { errorSchema, identityResponseContracts } from "@craftlayer/contracts";
 import { organizationPermissions } from "@craftlayer/core";
 import cookie from "@fastify/cookie";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -17,6 +18,30 @@ export async function registerAuth(
   const origin = new URL(publicUrl).origin,
     secure = origin.startsWith("https:");
   await app.register(cookie);
+  app.addHook("preSerialization", async (_request, _reply, payload) =>
+    JSON.parse(JSON.stringify(payload)),
+  );
+  app.addHook("onRoute", (route) => {
+    const method = Array.isArray(route.method) ? route.method[0] : route.method;
+    const key =
+      `${method} ${route.url}` as keyof typeof identityResponseContracts;
+    const response = identityResponseContracts[key];
+    if (response)
+      route.schema = {
+        ...route.schema,
+        response: {
+          200: response,
+          400: errorSchema,
+          401: errorSchema,
+          403: errorSchema,
+          404: errorSchema,
+          409: errorSchema,
+          429: errorSchema,
+          500: errorSchema,
+          503: errorSchema,
+        },
+      };
+  });
   const api = app.withTypeProvider<ZodTypeProvider>();
   const token = (request: FastifyRequest) =>
     request.cookies[sessionCookie] ?? "";
@@ -412,5 +437,11 @@ export async function registerAuth(
         request.body.password,
       ),
   );
+  api.get("/api/v1/auth/authority", async (request) =>
+    auth.authorityView(token(request), organization(request)),
+  );
+  api.get("/api/v1/audit", async (request) => ({
+    items: await auth.listAudit(token(request), organization(request)),
+  }));
   // CHAPTER_ROUTES
 }
