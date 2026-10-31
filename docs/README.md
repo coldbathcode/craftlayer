@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapter 00 implementation in progress; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapter 00 implemented; review evidence is available and Chapter 01 is next; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -54,3 +54,7 @@
 - [Agent session handoff template](templates/agent-handoff.md).
 
 Read the current status before choosing a task. Specifications are proposed implementation contracts. A chapter's acceptance checkboxes remain unchecked until real evidence exists; neither a detailed plan nor an initial Git commit means the software is implemented.
+
+## Implemented foundation
+
+[Developer quickstart](development/quickstart.md), [compatibility matrix](development/compatibility.md), [chapter review](reviews/00-foundation.md), and [session handoff](delivery/handoffs/00-foundation.md) record the runnable foundation and its exact limits. Every build step updates the plan and is committed/pushed to main.

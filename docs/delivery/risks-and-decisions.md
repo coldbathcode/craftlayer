@@ -7,7 +7,7 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 | ID | Decision | Working default | Resolve by / responsible role | Evidence required |
 | --- | --- | --- | --- | --- |
 | D-01 | Core license | Apache-2.0 candidate; no license file adopted | Before public release / project owner | Explicit license choice and dependency compatibility review |
-| D-02 | Runtime/framework/image versions | Supported compatible pinned releases, no latest tags | 00 / lead engineer | Compatibility matrix, clean build and host checks |
+| D-02 | Runtime/framework/image versions | Resolved for foundation: ADR 0011 and compatibility matrix; release review still required | 00 / lead engineer | Compatibility matrix, clean build and host checks |
 | D-03 | Reference host capacity | Small private host, 2 bots, inference optional/remote | 00 baseline; 06/09 qualification / operator | CPU/RAM/storage/latency results and exact hardware |
 | D-04 | Auth/hash/session libraries | Local passwords, opaque sessions, proposed Argon2id | 01 / security engineer | Maintenance review, secure config and measured hashing |
 | D-05 | Owner recovery/email behavior | Offline local owner recovery; SMTP optional | 01 / auth engineer | Safe reset without token leakage or Cloud |
@@ -17,10 +17,10 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 | D-09 | Minecraft versions and bot login | Private Java server; supported legitimate auth path | 04 / adapter engineer | Connect/reconnect proof, account/license/network prerequisites |
 | D-10 | Minecraft fixture terrain and materials | Seeded flat approved region; prepared supply before survival | 04/06 / adapter engineer | Reproducible world and BOM/verifier |
 | D-11 | Sandbox implementation | Narrow broker; restricted local runner, hosted isolation separately reviewed | 08 / security/runtime engineer | Egress/process/filesystem/isolation tests on supported platform |
-| D-12 | Telemetry and error collection | No phone-home by default; local redacted logs/metrics | 00/09 / operator | Network deny and log-secret tests |
+| D-12 | Telemetry and error collection | Foundation implemented: disabled Next telemetry, local redacted logs and network-disabled tests; full monitoring remains 09 | 00/09 / operator | Network deny and log-secret tests |
 | D-13 | Retention defaults | Events 7d, audit 90d, artifacts 30d; configurable | 01/08/09 / owner/operator | Privacy/resource review and purge/backup behavior |
 | D-14 | First release scope | Full Core 00–09; earlier Minecraft preview labeled separately | Before preview/release / owner | Written scope ADR, feature matrix and evidence |
-| D-15 | GitHub ownership/visibility | User creates empty craftlayer repository | After this handoff / owner | Actual remote URL and explicit push authorization |
+| D-15 | GitHub ownership/visibility | User creates empty craftlayer repository | Resolved: coldbathcode/craftlayer, standing build-step push authorization / owner | Remote and commits verified in Git |
 | D-16 | Domains and trademark | Working name only; availability not verified | Before launch / owner | Registrar/trademark review; no claim from this plan |
 | D-17 | Security disclosure and maintainers | No fabricated email/maintainers | 09 / owner | Monitored channel, response ownership and policy |
 | D-18 | Cloud isolation and identity | Separate tenant service; no shared-process hostile jobs | 10 / Cloud lead | Tenant/runner threat model and reviewed architecture |

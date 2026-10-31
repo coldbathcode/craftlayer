@@ -1,6 +1,6 @@
 # Verification, fault injection and release quality
 
-Status: test plan. No software tests have run because no implementation exists. Documentation validation is recorded separately in the delivery status.
+Status: Chapter 00 tests are implemented and executed; see [foundation review](../reviews/00-foundation.md) and [current status](../delivery/status.md). The remaining chapter suites below are planned and have not run. Original planning-only validation remains separate historical evidence.
 
 ## Test pyramid and environments
 

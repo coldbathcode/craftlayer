@@ -1,6 +1,6 @@
 # GitHub repository and optional Project board setup
 
-Status: the user created [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer). The local repository is connected as `origin`, and the planning commits are published to `main`. A GitHub Project board has not been created.
+Status: the user created [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer). The local repository is connected as `origin`, and planning and foundation commits are published to `main`. A GitHub Project board has not been created.
 
 ## Work with the repository
 

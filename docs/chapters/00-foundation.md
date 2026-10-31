@@ -1,6 +1,6 @@
 # Chapter 00 — Foundation
 
-**Status:** in progress. **Implementation evidence:** [build log](../delivery/build-log.md).
+**Status:** implemented and verified; owner acceptance review pending. **Implementation evidence:** [chapter review](../reviews/00-foundation.md) and [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-001, PR-003, PR-017; NFR-09.
 
@@ -66,15 +66,15 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Compose config validates; services build and reach documented readiness without any Cloud/provider account.
 
-### [ ] CL-00-06 — Automated checks and CI
+### [x] CL-00-06 — Automated checks and CI
 
-**Depends on:** CL-00-05. **Size:** L. **Status:** implemented; local verification passed, hosted CI pending.
+**Depends on:** CL-00-05. **Size:** L. **Status:** verified; hosted CI passed (see chapter review).
 
 **Implementation:** Add meaningful unit/schema/config tests, real DB isolation smoke, dependency boundary checks, docs links and a CI pipeline. Establish the documented command contract and controlled test networking.
 
 **Required evidence:** Clean clone runs lint, typecheck, unit/integration checks and build; CI uses no provider secrets.
 
-### [ ] CL-00-07 — Developer quickstart and foundation review
+### [x] CL-00-07 — Developer quickstart and foundation review
 
 **Depends on:** CL-00-06. **Size:** M. **Status:** verified; see build log.
 
@@ -99,11 +99,11 @@ Use deterministic/fake services first. Any live inference, public deployment, pu
 
 ## Acceptance criteria
 
-- [ ] Clean checkout installs, validates, builds and runs the documented local shells.
-- [ ] Compose syntax and actual readiness are both checked; syntax alone is not runtime evidence.
-- [ ] Tenant foundation tests run with least-privileged roles and CI checks pass.
-- [ ] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
-- [ ] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
+- [x] Clean checkout installs, validates, builds and runs the documented local shells.
+- [x] Compose syntax and actual readiness are both checked; syntax alone is not runtime evidence.
+- [x] Tenant foundation tests run with least-privileged roles and CI checks pass.
+- [x] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
+- [x] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
 
 ## Demonstration and independent verification
 

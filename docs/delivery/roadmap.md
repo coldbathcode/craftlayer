@@ -1,6 +1,6 @@
 # Delivery roadmap and critical path
 
-All chapters are planned and not implemented. There are no promised dates. Size and schedule depend on auth decisions, Minecraft protocol/auth compatibility, sandbox choice and reference hardware measurements.
+Chapter 00 is implemented and verified with review evidence; Chapters 01–11 remain planned and not implemented. There are no promised dates. Size and schedule depend on auth decisions, Minecraft protocol/auth compatibility, sandbox choice and reference hardware measurements.
 
 ## Chapter sequence
 
@@ -51,4 +51,4 @@ flowchart LR
 
 Use a new ADR to change release scope or architecture. Do not silently remove security tests to meet an arbitrary date. A Minecraft-only preview can precede full Core if documented explicitly; coding/research must not be advertised before verified. Keep Cloud implementation out of the Core critical path.
 
-Implementation starts with CL-00-01 only after a build request. The planning task itself initializes documents/Git and does not begin Chapter 00.
+The original planning task was followed by the authorized Chapter 00 build. The next implementation task is CL-01-01 after Chapter 01 authorization. See current delivery status before choosing work.

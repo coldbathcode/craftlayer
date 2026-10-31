@@ -10,7 +10,9 @@ docs/delivery/status.md, docs/README.md and docs/chapters/00-foundation.md.
 Inspect Git status and existing files before editing. Start CL-00-01, pin supported
 compatible versions using primary documentation, and complete the chapter's
 ordered work and required checks. Keep Core independent of Cloud. Do not run
-paid inference, publish, push or deploy publicly. Record exact results, known
+paid inference, publish packages/images or deploy publicly. At every build-step
+endpoint update the plan, commit, push to origin main and verify synchronization.
+Record exact results, known
 limitations and task evidence. Prepare the chapter review and update status.
 Do not start Chapter 01 until authorized.
 ```

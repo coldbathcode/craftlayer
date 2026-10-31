@@ -1,6 +1,6 @@
 # Engineering backlog
 
-**Chapter 00 is in progress; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
+**Chapter 00 is implemented and verified; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
 Each chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
 
@@ -11,8 +11,8 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-00-03](../chapters/00-foundation.md) | Database and organization foundation | CL-00-02 | L | Verified |
 | [CL-00-04](../chapters/00-foundation.md) | Application shells and validated configuration | CL-00-03 | M | Verified |
 | [CL-00-05](../chapters/00-foundation.md) | Private Compose development stack | CL-00-04 | L | Verified |
-| [CL-00-06](../chapters/00-foundation.md) | Automated checks and CI | CL-00-05 | L | Implemented; hosted CI pending |
-| [CL-00-07](../chapters/00-foundation.md) | Developer quickstart and foundation review | CL-00-06 | M | Not started |
+| [CL-00-06](../chapters/00-foundation.md) | Automated checks and CI | CL-00-05 | L | Verified |
+| [CL-00-07](../chapters/00-foundation.md) | Developer quickstart and foundation review | CL-00-06 | M | Verified |
 | [CL-01-01](../chapters/01-identity-and-rbac.md) | Identity schema and role seeds | Chapter 00 gate | L | Not started |
 | [CL-01-02](../chapters/01-identity-and-rbac.md) | Secure bootstrap and password sessions | CL-01-01 | L | Not started |
 | [CL-01-03](../chapters/01-identity-and-rbac.md) | Authorization and resource scopes | CL-01-02 | L | Not started |
