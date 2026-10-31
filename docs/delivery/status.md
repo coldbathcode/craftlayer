@@ -8,10 +8,10 @@ The user authorized Chapter 00 and requires every build step to update the plan,
 
 ## Current checkpoint
 
-- Completed and verified: CL-00-01 through CL-00-03 (3/7 foundation tasks).
-- Next task: CL-00-04.
+- Completed and verified: CL-00-01 through CL-00-04 (4/7 foundation tasks).
+- Next task: CL-00-05.
 - Branch/remote: `main`, `origin` → https://github.com/coldbathcode/craftlayer.git.
-- Latest evidence: Added Drizzle organization/project schema, SQL migration/checksum runner, separate migration/runtime roles, forced RLS, transaction-local tenant context and scoped project reads. `pnpm build`, `pnpm lint`, unit checks and `pnpm test:db` passed; the disposable PostgreSQL 18.6 instance passed 6 real-runtime-role tests covering DDL/role denial, missing context, pooled A/B contexts, forged writes, rollback/timeout cleanup and composite foreign keys. Fresh migration and repeat migration both passed. Resolved a Docker Desktop bind-mounted initialization-script execution failure by baking the nonexecutable init file into a pinned PostgreSQL image; no host database was modified.
+- Latest evidence: Built Fastify health/OpenAPI and sanitized correlated error responses, strict server config and credential-redacting Pino logs, worker health/shutdown shell, CLI help/config validation and an original responsive Next.js foundation dashboard. `pnpm lint`, `pnpm typecheck`, `pnpm test` (8 tests) and production `pnpm build` passed. Process smoke checks against unavailable local dependencies verified API/worker liveness 200, readiness 503, SIGTERM exit 0 in 6ms each, and no credential canary in logs; valid CLI config passed and missing config correctly returned exit 1. Next telemetry is disabled in project scripts; no remote fonts/assets are used. Full browser and Compose connectivity are verified in subsequent tasks, not claimed here.
 - Detailed results and limits: [build log](build-log.md).
 - Chapters 01–11: not started. No provider inference, public app deployment or Cloud implementation.
 

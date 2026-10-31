@@ -9,8 +9,8 @@
     "pnpm": "10.23.0"
   },
   "scripts": {
-    "build": "tsc -b",
-    "typecheck": "tsc -b",
+    "build": "tsc -b && pnpm --filter @craftlayer/web build",
+    "typecheck": "tsc -b && pnpm --filter @craftlayer/web typecheck",
     "lint": "biome check . && node scripts/check-boundaries.mjs",
     "format": "biome format --write .",
     "test": "vitest run",
@@ -18,7 +18,12 @@
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check",
     "db:migrate": "tsx packages/db/src/migrate.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "test:db": "node scripts/test-database.mjs"
+    "test:db": "node scripts/test-database.mjs",
+    "build:server": "tsc -b",
+    "dev:api": "node --env-file=.env --import tsx apps/api/src/main.ts",
+    "dev:worker": "node --env-file=.env --import tsx apps/worker/src/main.ts",
+    "dev:web": "pnpm --filter @craftlayer/web dev",
+    "cli": "tsx apps/cli/src/main.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

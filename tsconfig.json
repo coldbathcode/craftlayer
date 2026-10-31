@@ -9,6 +9,18 @@
     },
     {
       "path": "packages/db"
+    },
+    {
+      "path": "packages/config"
+    },
+    {
+      "path": "apps/api"
+    },
+    {
+      "path": "apps/worker"
+    },
+    {
+      "path": "apps/cli"
     }
   ]
 }

@@ -50,7 +50,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Fresh migration passes; missing/wrong context and cross-org parent references deny using the actual runtime role.
 
-### [ ] CL-00-04 — Application shells and validated configuration
+### [x] CL-00-04 — Application shells and validated configuration
 
 **Depends on:** CL-00-03. **Size:** M. **Status:** verified; see build log.
 
@@ -76,7 +76,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-07 — Developer quickstart and foundation review
 
-**Depends on:** CL-00-06. **Size:** M. **Status:** not started.
+**Depends on:** CL-00-06. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Document prerequisites, exact scripts, local URLs, first migration, reset/cleanup safety, supported host limitations and measured resource footprint. Prepare the chapter review and record remaining decisions.
 

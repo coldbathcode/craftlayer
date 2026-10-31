@@ -13,3 +13,7 @@ Created the pnpm workspace, strict TypeScript project references, core/context a
 ## CL-00-03 — 2026-10-31
 
 Added Drizzle organization/project schema, SQL migration/checksum runner, separate migration/runtime roles, forced RLS, transaction-local tenant context and scoped project reads. `pnpm build`, `pnpm lint`, unit checks and `pnpm test:db` passed; the disposable PostgreSQL 18.6 instance passed 6 real-runtime-role tests covering DDL/role denial, missing context, pooled A/B contexts, forged writes, rollback/timeout cleanup and composite foreign keys. Fresh migration and repeat migration both passed. Resolved a Docker Desktop bind-mounted initialization-script execution failure by baking the nonexecutable init file into a pinned PostgreSQL image; no host database was modified.
+
+## CL-00-04 — 2026-10-31
+
+Built Fastify health/OpenAPI and sanitized correlated error responses, strict server config and credential-redacting Pino logs, worker health/shutdown shell, CLI help/config validation and an original responsive Next.js foundation dashboard. `pnpm lint`, `pnpm typecheck`, `pnpm test` (8 tests) and production `pnpm build` passed. Process smoke checks against unavailable local dependencies verified API/worker liveness 200, readiness 503, SIGTERM exit 0 in 6ms each, and no credential canary in logs; valid CLI config passed and missing config correctly returned exit 1. Next telemetry is disabled in project scripts; no remote fonts/assets are used. Full browser and Compose connectivity are verified in subsequent tasks, not claimed here.

@@ -1,0 +1,16 @@
+{
+  "name": "@craftlayer/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "zod": "4.6.7",
+    "pino": "10.4.0"
+  }
+}
