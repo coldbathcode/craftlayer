@@ -4,7 +4,7 @@ These instructions apply to the whole repository and are shared by Codex and Cla
 
 ## Current state and source of truth
 
-- Chapter 00 foundation is implemented. Read current delivery status and the chapter review before choosing later work; Chapter 01 requires authorization.
+- Chapter 00 is implemented and accepted for advancement. The user authorized Chapter 01; read current status for its exact checkpoint. Chapter 02 still requires authorization.
 - Read `docs/delivery/status.md`, `docs/README.md`, the relevant chapter, and its architecture references before starting work.
 - Product invariants live in `docs/product/requirements.md`; detailed contracts live in `docs/architecture/`; implementation order lives in `docs/delivery/backlog.md`.
 - Preserve `docs/source/CraftLayer_Build_Blueprint.md` as the original input. Amend derived plans and record deviations in an ADR.

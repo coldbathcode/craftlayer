@@ -1,6 +1,6 @@
 # Chapter 01 — Identity and RBAC
 
-**Status:** not started. **Specification:** ready for engineering review. **Implementation evidence:** none.
+**Status:** in progress; authorized by the user after Chapter 00. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-002–004, PR-021; NFR-08.
 
@@ -26,9 +26,9 @@ Architecture references: [security-and-access](../architecture/security-and-acce
 
 Each task is initially unchecked. Dependencies below describe the default conservative order; record an explicit justified dependency change before reordering. Task sizes are relative engineering complexity (M/L), not delivery dates.
 
-### [ ] CL-01-01 — Identity schema and role seeds
+### [x] CL-01-01 — Identity schema and role seeds
 
-**Depends on:** Chapter 00 gate. **Size:** L. **Status:** not started.
+**Depends on:** Chapter 00 gate. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement users, owners, memberships, roles/permissions, grants, invitations, sessions and audit migrations. Seed built-in roles idempotently and enforce composite tenant references.
 

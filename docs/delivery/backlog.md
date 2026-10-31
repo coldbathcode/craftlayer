@@ -13,7 +13,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-00-05](../chapters/00-foundation.md) | Private Compose development stack | CL-00-04 | L | Verified |
 | [CL-00-06](../chapters/00-foundation.md) | Automated checks and CI | CL-00-05 | L | Verified |
 | [CL-00-07](../chapters/00-foundation.md) | Developer quickstart and foundation review | CL-00-06 | M | Verified |
-| [CL-01-01](../chapters/01-identity-and-rbac.md) | Identity schema and role seeds | Chapter 00 gate | L | Not started |
+| [CL-01-01](../chapters/01-identity-and-rbac.md) | Identity schema and role seeds | Chapter 00 gate | L | Verified |
 | [CL-01-02](../chapters/01-identity-and-rbac.md) | Secure bootstrap and password sessions | CL-01-01 | L | Not started |
 | [CL-01-03](../chapters/01-identity-and-rbac.md) | Authorization and resource scopes | CL-01-02 | L | Not started |
 | [CL-01-04](../chapters/01-identity-and-rbac.md) | Invitations and lifecycle management | CL-01-03 | L | Not started |

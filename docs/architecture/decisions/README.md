@@ -18,3 +18,5 @@ These ten records are proposed engineering defaults derived from the blueprint. 
 Version selection, exact auth library, Minecraft authentication compatibility, sandbox runtime and license adoption remain explicit decisions in the risk register. Do not invent those decisions merely to close this index.
 
 [ADR 0011 — Foundation toolchain and image pins](0011-foundation-toolchain.md) is adopted for Chapter 00; the original ten proposals retain their individual status until reviewed.
+
+[ADR 0012 — Identity-service boundary](0012-identity-boundary.md) records Chapter 01's restricted auth role, tenant constraints and upgrade provisioning.

@@ -15,6 +15,43 @@ const schema = z.strictObject({
     .enum(["development", "test", "production"])
     .default("development"),
   DATABASE_URL: runtimeUrl,
+  AUTH_DATABASE_URL: z
+    .url()
+    .refine(
+      (value) =>
+        new URL(value).username === "craftlayer_identity" &&
+        ["postgres:", "postgresql:"].includes(new URL(value).protocol),
+      "requires restricted identity role",
+    )
+    .optional(),
+  CRAFTLAYER_BOOTSTRAP_TOKEN: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  CRAFTLAYER_RECOVERY_TOKEN: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  CRAFTLAYER_CSRF_SECRET: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  CRAFTLAYER_PUBLIC_URL: z
+    .url()
+    .refine((value) => {
+      const u = new URL(value);
+      return (
+        !u.username &&
+        !u.password &&
+        !u.search &&
+        !u.hash &&
+        u.pathname === "/" &&
+        (u.protocol === "https:" ||
+          (u.protocol === "http:" &&
+            ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)))
+      );
+    }, "TLS required except loopback")
+    .default("http://127.0.0.1:3000"),
   REDIS_URL: z
     .url()
     .refine(
@@ -80,6 +117,12 @@ export function createLogger(
         "secret",
         "api_key",
         "DATABASE_URL",
+        "AUTH_DATABASE_URL",
+        "CRAFTLAYER_BOOTSTRAP_TOKEN",
+        "CRAFTLAYER_RECOVERY_TOKEN",
+        "CRAFTLAYER_CSRF_SECRET",
+        "passwordHash",
+        "password_hash",
         "REDIS_URL",
         "req.headers.authorization",
         "req.headers.cookie",

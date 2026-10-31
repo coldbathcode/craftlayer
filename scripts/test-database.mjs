@@ -38,6 +38,8 @@ try {
     `MIGRATOR_PASSWORD=${password}`,
     "-e",
     `RUNTIME_PASSWORD=${password}`,
+    "-e",
+    `IDENTITY_PASSWORD=${password}`,
     "-p",
     "127.0.0.1::5432",
     image,
@@ -69,6 +71,7 @@ try {
   const port = run("docker", ["port", name, "5432/tcp"]).split(":").at(-1);
   env.MIGRATION_DATABASE_URL = `postgres://craftlayer_migrator:${password}@127.0.0.1:${port}/craftlayer`;
   env.TEST_DATABASE_URL = `postgres://craftlayer_runtime:${password}@127.0.0.1:${port}/craftlayer`;
+  env.TEST_IDENTITY_DATABASE_URL = `postgres://craftlayer_identity:${password}@127.0.0.1:${port}/craftlayer`;
   for (let i = 0; i < 2; i++)
     run("pnpm", ["db:migrate"], { env, stdio: "inherit" });
   run(

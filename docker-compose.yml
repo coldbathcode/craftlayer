@@ -23,6 +23,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
       MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?Run pnpm setup:local}
       RUNTIME_PASSWORD: ${RUNTIME_PASSWORD:?Run pnpm setup:local}
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD:?Run pnpm setup:local}
     volumes: [postgres-data:/var/lib/postgresql]
     mem_limit: 512m
     healthcheck:
@@ -55,12 +56,24 @@ services:
       timeout: 3s
       retries: 12
     restart: unless-stopped
+  provision:
+    <<: *hardening
+    build: { context: ., dockerfile: infra/images/Dockerfile, target: migrate }
+    command: [node, dist/provision.js]
+    environment:
+      PROVISION_DATABASE_URL: postgres://craftlayer_admin:${POSTGRES_PASSWORD:?Run pnpm setup:local}@postgres:5432/craftlayer
+      IDENTITY_PASSWORD: ${IDENTITY_PASSWORD:?Run pnpm setup:local}
+    depends_on: { postgres: { condition: service_healthy } }
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 256m
+    restart: "no"
   migrate:
     <<: *hardening
     build: { context: ., dockerfile: infra/images/Dockerfile, target: migrate }
     environment:
       MIGRATION_DATABASE_URL: postgres://craftlayer_migrator:${MIGRATOR_PASSWORD:?Run pnpm setup:local}@postgres:5432/craftlayer
-    depends_on: { postgres: { condition: service_healthy } }
+    depends_on: { provision: { condition: service_completed_successfully } }
     read_only: true
     tmpfs: [/tmp]
     mem_limit: 256m

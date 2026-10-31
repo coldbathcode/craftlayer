@@ -16,3 +16,5 @@ export function organizationContext(
     organizationId: organizationIdSchema.parse(validatedOrganizationId),
   });
 }
+
+export * from "./permissions.js";
