@@ -1,3 +1,4 @@
+import { AuthError, type IdentityService } from "@craftlayer/auth";
 import { newRequestId } from "@craftlayer/config";
 import { healthSchema } from "@craftlayer/contracts";
 import swagger from "@fastify/swagger";
@@ -8,9 +9,12 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { registerAuth } from "./auth-routes.js";
 export async function buildApp(options: {
   readiness: () => Promise<boolean>;
   logger?: FastifyBaseLogger;
+  auth?: IdentityService;
+  publicUrl?: string;
 }) {
   const app = Fastify({
     bodyLimit: 16384,
@@ -42,6 +46,16 @@ export async function buildApp(options: {
       { request_id: request.id, code: "REQUEST_FAILED" },
       "Request failed",
     );
+    if (error instanceof AuthError) {
+      void reply.code(error.status).send({
+        error: {
+          code: error.code,
+          message: error.message,
+          request_id: request.id,
+        },
+      });
+      return;
+    }
     const candidate =
       error && typeof error === "object" && "statusCode" in error
         ? error.statusCode
@@ -88,6 +102,12 @@ export async function buildApp(options: {
       },
     );
   app.get("/api/v1/openapi.json", async () => app.swagger());
+  if (options.auth)
+    await registerAuth(
+      app,
+      options.auth,
+      options.publicUrl ?? "http://127.0.0.1:3000",
+    );
   await app.ready();
   return app;
 }

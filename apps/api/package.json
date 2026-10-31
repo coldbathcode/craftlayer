@@ -13,12 +13,14 @@
     "@craftlayer/config": "workspace:*",
     "@craftlayer/contracts": "workspace:*",
     "@craftlayer/db": "workspace:*",
-    "fastify": "5.12.7",
-    "redis": "6.3.1",
+    "@fastify/cookie": "11.1.5",
     "@fastify/swagger": "9.9.2",
+    "fastify": "5.12.7",
     "fastify-type-provider-zod": "7.0.0",
     "openapi-types": "12.1.3",
-    "zod": "4.6.7"
+    "redis": "6.3.1",
+    "zod": "4.6.7",
+    "@craftlayer/auth": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"

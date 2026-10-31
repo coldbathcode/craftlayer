@@ -34,9 +34,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Role fixtures and migration upgrades preserve deny-by-default permissions and prevent cross-org assignments.
 
-### [ ] CL-01-02 — Secure bootstrap and password sessions
+### [x] CL-01-02 — Secure bootstrap and password sessions
 
-**Depends on:** CL-01-01. **Size:** L. **Status:** not started.
+**Depends on:** CL-01-01. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Build single-use local owner setup, vetted password hashing, login/logout, session rotation/expiry and CSRF/Origin protection. Measure hashing settings and throttle abuse.
 

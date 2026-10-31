@@ -5,7 +5,7 @@ export default defineConfig({
   cacheDir: `${tmpdir()}/craftlayer-vitest`,
   resolve: {
     alias: Object.fromEntries(
-      ["core", "contracts", "config", "db"].map((name) => [
+      ["core", "contracts", "config", "db", "auth"].map((name) => [
         `@craftlayer/${name}`,
         fileURLToPath(
           new URL(`./packages/${name}/src/index.ts`, import.meta.url),

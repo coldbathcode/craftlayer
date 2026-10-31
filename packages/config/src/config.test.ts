@@ -49,3 +49,17 @@ describe("server config", () => {
     expect(output).toContain("[REDACTED]");
   });
 });
+
+it("keeps the restricted identity URL server-side and rejects privileged identity roles", () => {
+  const env = {
+    ...valid,
+    AUTH_DATABASE_URL: "postgres://craftlayer_identity:canary@localhost/test",
+  };
+  expect(parseServerConfig(env).AUTH_DATABASE_URL).toBe(env.AUTH_DATABASE_URL);
+  expect(() =>
+    parseServerConfig({
+      ...env,
+      AUTH_DATABASE_URL: "postgres://admin:canary@localhost/test",
+    }),
+  ).toThrow();
+});

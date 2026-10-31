@@ -93,7 +93,12 @@ export function parseServerConfig(
       ([key, value]) =>
         value !== undefined &&
         (key.startsWith("CRAFTLAYER_") ||
-          ["NODE_ENV", "DATABASE_URL", "REDIS_URL"].includes(key)),
+          [
+            "NODE_ENV",
+            "DATABASE_URL",
+            "REDIS_URL",
+            "AUTH_DATABASE_URL",
+          ].includes(key)),
     ),
   );
   const result = schema.safeParse(values);

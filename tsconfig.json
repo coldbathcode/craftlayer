@@ -21,6 +21,9 @@
     },
     {
       "path": "apps/cli"
+    },
+    {
+      "path": "packages/auth"
     }
   ]
 }

@@ -18,6 +18,11 @@ for (const service of ["api", "worker"])
         env: {
           PATH: process.env.PATH,
           NODE_ENV: "test",
+          AUTH_DATABASE_URL:
+            "postgres://craftlayer_identity:credential-canary@127.0.0.1:1/craftlayer",
+          CRAFTLAYER_BOOTSTRAP_TOKEN: "a".repeat(64),
+          CRAFTLAYER_RECOVERY_TOKEN: "b".repeat(64),
+          CRAFTLAYER_CSRF_SECRET: "c".repeat(64),
           DATABASE_URL:
             "postgres://craftlayer_runtime:credential-canary@127.0.0.1:1/craftlayer",
           REDIS_URL: "redis://127.0.0.1:1",

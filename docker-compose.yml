@@ -81,7 +81,13 @@ services:
   api:
     <<: *hardening
     build: { context: ., dockerfile: infra/images/Dockerfile, target: api }
-    environment: *runtime
+    environment:
+      <<: *runtime
+      AUTH_DATABASE_URL: postgres://craftlayer_identity:${IDENTITY_PASSWORD:?Run pnpm setup:local}@postgres:5432/craftlayer
+      CRAFTLAYER_BOOTSTRAP_TOKEN: ${CRAFTLAYER_BOOTSTRAP_TOKEN:?Run pnpm setup:local}
+      CRAFTLAYER_RECOVERY_TOKEN: ${CRAFTLAYER_RECOVERY_TOKEN:?Run pnpm setup:local}
+      CRAFTLAYER_CSRF_SECRET: ${CRAFTLAYER_CSRF_SECRET:?Run pnpm setup:local}
+      CRAFTLAYER_PUBLIC_URL: ${CRAFTLAYER_PUBLIC_URL:-http://127.0.0.1:3000}
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
