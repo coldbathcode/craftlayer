@@ -54,6 +54,21 @@ describe("runtime-role tenant boundary", () => {
       rolcreaterole: false,
       rolcreatedb: false,
     });
+    const owners = await pool.query(
+      "select tableowner from pg_tables where schemaname='public' and tablename in ('organizations','projects')",
+    );
+    expect(owners.rows).toHaveLength(2);
+    expect(
+      owners.rows.every((row) => row.tableowner === "craftlayer_migrator"),
+    ).toBe(true);
+    const policies = await pool.query(
+      "select relrowsecurity,relforcerowsecurity from pg_class where relname in ('organizations','projects') and relnamespace='public'::regnamespace",
+    );
+    expect(
+      policies.rows.every(
+        (row) => row.relrowsecurity && row.relforcerowsecurity,
+      ),
+    ).toBe(true);
     await expect(
       pool.query("create table forbidden(id integer)"),
     ).rejects.toThrow(/permission denied/);

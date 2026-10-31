@@ -1,3 +1,5 @@
+import { Writable } from "node:stream";
+import { createLogger } from "@craftlayer/config";
 import { describe, expect, it } from "vitest";
 import { buildApp } from "./app.js";
 
@@ -31,4 +33,33 @@ describe("health and public API shell", () => {
       await app.close();
     }
   });
+});
+
+it("does not log raw query/header credentials or trust client request IDs", async () => {
+  let output = "";
+  const sink = new Writable({
+    write(chunk, _encoding, next) {
+      output += chunk.toString();
+      next();
+    },
+  });
+  const app = await buildApp({
+    readiness: async () => true,
+    logger: createLogger("info", sink),
+  });
+  try {
+    const response = await app.inject({
+      url: "/health/live?token=query-canary",
+      headers: {
+        authorization: "Bearer header-canary",
+        "x-request-id": "untrusted-canary",
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    for (const canary of ["query-canary", "header-canary", "untrusted-canary"])
+      expect(output).not.toContain(canary);
+    expect(output).toContain("request_id");
+  } finally {
+    await app.close();
+  }
 });

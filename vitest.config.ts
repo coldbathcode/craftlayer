@@ -1,6 +1,8 @@
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 export default defineConfig({
+  cacheDir: `${tmpdir()}/craftlayer-vitest`,
   resolve: {
     alias: Object.fromEntries(
       ["core", "contracts", "config", "db"].map((name) => [
@@ -12,7 +14,11 @@ export default defineConfig({
     ),
   },
   test: {
-    include: ["packages/**/*.test.ts", "apps/**/*.test.ts"],
+    include: [
+      "packages/**/*.test.ts",
+      "apps/**/*.test.ts",
+      "tests/unit/**/*.test.ts",
+    ],
     exclude: [
       "**/*.integration.test.ts",
       "**/node_modules/**",

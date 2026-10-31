@@ -8,10 +8,10 @@ The user authorized Chapter 00 and requires every build step to update the plan,
 
 ## Current checkpoint
 
-- Completed and verified: CL-00-01 through CL-00-05 (5/7 foundation tasks).
-- Next task: CL-00-06.
+- Completed and verified: CL-00-01 through CL-00-05 (5/7 foundation tasks). CL-00-06 is implemented and locally verified; hosted CI pending.
+- Next task: CL-00-07.
 - Branch/remote: `main`, `origin` → https://github.com/coldbathcode/craftlayer.git.
-- Latest evidence: Built pinned multi-stage production images and the private Compose stack, generated independent random .env credentials (0600, Git-ignored), and added optional loopback-only host-development DB/Redis ports. `docker compose build`, Compose validation, real startup and all five service health checks passed; migration completed as its dedicated role. Browser navigation verified the live dashboard and Core API connected state at http://127.0.0.1:3000. API external egress was denied on the internal network; only web has an ingress network and host port 127.0.0.1:3000. Native frozen-lockfile pnpm deployment required injected workspace dependencies synchronized after topological package builds; replaced legacy deployment rather than allowing re-resolution. Unit/lint/CLI config checks passed. No Minecraft/Ollama/provider service or account is required.
+- Latest evidence: Added SHA-pinned least-privilege GitHub Actions, strict test-source typechecking, package-boundary regression tests, API/worker lifecycle tests, sanitized request-log tests, disposable migration rollback/checksum checks, full-stack hardening checks, and desktop/mobile Playwright journeys. Local `pnpm check` passed (12 unit tests), database integration passed (6 tests plus rollback/tamper checks), browser suite passed (4 tests), and `pnpm test:offline` passed all 12 unit tests as a non-root user with network=none and a read-only filesystem plus scoped temporary caches. Stack checks confirm private ports and no DB/Redis credentials in web. CI is authored but its first hosted run is pending this commit/push; task acceptance remains pending that result.
 - Detailed results and limits: [build log](build-log.md).
 - Chapters 01–11: not started. No provider inference, public app deployment or Cloud implementation.
 

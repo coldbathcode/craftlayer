@@ -1,10 +1,20 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import {
+  appendFileSync,
+  cpSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const image = "craftlayer-postgres-test:local";
 const name = `craftlayer-test-${process.pid}`;
 const password = randomBytes(24).toString("hex");
 const env = { ...process.env };
+const migrationFixture = mkdtempSync(join(tmpdir(), "craftlayer-migrations-"));
 function run(cmd, args, options = {}) {
   const result = spawnSync(cmd, args, { encoding: "utf8", ...options });
   if (result.status !== 0)
@@ -81,9 +91,49 @@ try {
     },
   );
   run("pnpm", ["test:integration"], { env, stdio: "inherit" });
+  cpSync("packages/db/migrations", migrationFixture, { recursive: true });
+  writeFileSync(
+    join(migrationFixture, "9999_failure.sql"),
+    "CREATE TABLE migration_rollback_probe(id integer); SELECT no_such_column;",
+  );
+  const failureEnv = {
+    ...env,
+    CRAFTLAYER_MIGRATIONS_DIRECTORY: migrationFixture,
+  };
+  const failed = spawnSync("pnpm", ["db:migrate"], {
+    env: failureEnv,
+    encoding: "utf8",
+  });
+  if (failed.status !== 1)
+    throw new Error("Broken migration unexpectedly passed");
+  const table = run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-Atc",
+    "select to_regclass('public.migration_rollback_probe') is null",
+  ]);
+  if (table !== "t") throw new Error("Failed migration did not roll back DDL");
+  rmSync(join(migrationFixture, "9999_failure.sql"));
+  appendFileSync(
+    join(migrationFixture, "0001_organizations.sql"),
+    "\n-- forbidden applied-migration edit\n",
+  );
+  const checksum = spawnSync("pnpm", ["db:migrate"], {
+    env: failureEnv,
+    encoding: "utf8",
+  });
+  if (checksum.status !== 1)
+    throw new Error("Changed applied migration unexpectedly passed");
+  console.log("Migration rollback and checksum tamper checks: PASS");
 } catch (error) {
   console.error(error.message.replaceAll(password, "[REDACTED]"));
   process.exitCode = 1;
 } finally {
+  rmSync(migrationFixture, { recursive: true, force: true });
   spawnSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" });
 }

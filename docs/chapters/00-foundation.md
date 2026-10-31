@@ -68,7 +68,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-06 — Automated checks and CI
 
-**Depends on:** CL-00-05. **Size:** L. **Status:** verified; see build log.
+**Depends on:** CL-00-05. **Size:** L. **Status:** implemented; local verification passed, hosted CI pending.
 
 **Implementation:** Add meaningful unit/schema/config tests, real DB isolation smoke, dependency boundary checks, docs links and a CI pipeline. Establish the documented command contract and controlled test networking.
 

@@ -5,8 +5,17 @@ RUN corepack enable && corepack prepare pnpm@10.23.0 --activate
 WORKDIR /workspace
 
 FROM base AS build
-COPY . .
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY apps/api/package.json apps/api/package.json
+COPY apps/web/package.json apps/web/package.json
+COPY apps/worker/package.json apps/worker/package.json
+COPY apps/cli/package.json apps/cli/package.json
+COPY packages/core/package.json packages/core/package.json
+COPY packages/contracts/package.json packages/contracts/package.json
+COPY packages/config/package.json packages/config/package.json
+COPY packages/db/package.json packages/db/package.json
 RUN pnpm install --frozen-lockfile
+COPY . .
 ARG CRAFTLAYER_API_ORIGIN=http://api:4000
 ENV CRAFTLAYER_API_ORIGIN=$CRAFTLAYER_API_ORIGIN
 ENV NEXT_TELEMETRY_DISABLED=1

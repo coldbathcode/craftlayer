@@ -3,7 +3,9 @@ import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 
-const directory = fileURLToPath(new URL("../migrations/", import.meta.url));
+const directory =
+  process.env.CRAFTLAYER_MIGRATIONS_DIRECTORY ??
+  fileURLToPath(new URL("../migrations/", import.meta.url));
 const url = process.env.MIGRATION_DATABASE_URL;
 if (!url)
   throw new Error(
