@@ -23,7 +23,7 @@
     "dev:api": "node --env-file=.env --import tsx apps/api/src/main.ts",
     "dev:worker": "node --env-file=.env --import tsx apps/worker/src/main.ts",
     "dev:web": "pnpm --filter @craftlayer/web dev",
-    "cli": "tsx apps/cli/src/main.ts",
+    "cli": "node --env-file-if-exists=.env --import tsx apps/cli/src/main.ts",
     "setup:local": "node scripts/setup-local.mjs",
     "compose:check": "docker compose config --quiet",
     "stack:up": "docker compose up -d --build --wait",

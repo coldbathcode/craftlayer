@@ -10,7 +10,8 @@
     }
   },
   "dependencies": {
-    "@craftlayer/config": "workspace:*"
+    "@craftlayer/config": "workspace:*",
+    "@craftlayer/auth": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"

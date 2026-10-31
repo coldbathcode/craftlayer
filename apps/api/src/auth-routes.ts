@@ -354,5 +354,63 @@ export async function registerAuth(
       );
     },
   );
+
+  api.post(
+    "/api/v1/auth/password-reset/request",
+    {
+      schema: {
+        body: z.strictObject({ login: z.string().trim().min(1).max(254) }),
+      },
+    },
+    async (request) =>
+      auth.requestPasswordReset(request.body.login, request.ip),
+  );
+  api.post(
+    "/api/v1/auth/password-reset/consume",
+    {
+      schema: {
+        body: z.strictObject({
+          token: z.string().regex(/^[a-f0-9]{64}$/),
+          password: z.string().min(12).max(128),
+        }),
+      },
+    },
+    async (request) =>
+      auth.consumePasswordReset(
+        request.body.token,
+        request.body.password,
+        request.ip,
+      ),
+  );
+  api.post(
+    "/api/v1/children",
+    {
+      schema: {
+        body: z.strictObject({
+          login,
+          password: z.string().min(12).max(128),
+          environmentIds: z.array(id).min(1).max(10),
+        }),
+      },
+    },
+    async (request) =>
+      auth.createChild(token(request), organization(request), request.body),
+  );
+  api.post(
+    "/api/v1/children/:id/password",
+    {
+      schema: {
+        params: z.strictObject({ id }),
+        body: z.strictObject({ password: z.string().min(12).max(128) }),
+      },
+    },
+    async (request) =>
+      auth.resetChildPassword(
+        token(request),
+        organization(request),
+        request.params.id,
+        request.body.password,
+      ),
+  );
   // CHAPTER_ROUTES
 }

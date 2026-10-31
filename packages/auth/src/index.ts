@@ -1,6 +1,9 @@
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createHmac,
+  hkdfSync,
   randomBytes,
   randomUUID,
   timingSafeEqual,
@@ -66,6 +69,9 @@ export interface AuthOptions {
   recoveryToken: string;
   csrfSecret: string;
   clock?: () => Date;
+  deliverReset?:
+    | ((recipient: string, token: string) => Promise<void>)
+    | undefined;
 }
 export interface SessionResult {
   cookieToken: string;
@@ -251,6 +257,7 @@ export class AuthService {
     if (settings.rows[0]?.recovery_hash !== digest(this.#options.recoveryToken))
       throw new Error("Recovery configuration mismatch; values omitted");
     this.#dummyHash = await hash(randomBytes(32), hashPolicy);
+    await this.pruneRecovery();
     this.#ready = true;
   }
   async setupStatus() {
@@ -1617,6 +1624,370 @@ export class AuthService {
     );
   }
 
+  private sealReset(value: { recipient: string; token: string }, id: string) {
+    const nonce = randomBytes(12),
+      key = Buffer.from(
+        hkdfSync(
+          "sha256",
+          Buffer.from(this.#options.csrfSecret, "hex"),
+          Buffer.alloc(0),
+          "craftlayer/recovery-mail/v1",
+          32,
+        ),
+      ),
+      cipher = createCipheriv("aes-256-gcm", key, nonce);
+    cipher.setAAD(Buffer.from(id));
+    const encrypted = Buffer.concat([
+      cipher.update(JSON.stringify(value), "utf8"),
+      cipher.final(),
+    ]);
+    return Buffer.concat([nonce, cipher.getAuthTag(), encrypted]);
+  }
+  private openReset(
+    payload: Buffer,
+    id: string,
+  ): { recipient: string; token: string } {
+    const key = Buffer.from(
+        hkdfSync(
+          "sha256",
+          Buffer.from(this.#options.csrfSecret, "hex"),
+          Buffer.alloc(0),
+          "craftlayer/recovery-mail/v1",
+          32,
+        ),
+      ),
+      decipher = createDecipheriv("aes-256-gcm", key, payload.subarray(0, 12));
+    decipher.setAAD(Buffer.from(id));
+    decipher.setAuthTag(payload.subarray(12, 28));
+    return z
+      .strictObject({
+        recipient: z.email(),
+        token: z.string().regex(/^[a-f0-9]{64}$/),
+      })
+      .parse(
+        JSON.parse(
+          Buffer.concat([
+            decipher.update(payload.subarray(28)),
+            decipher.final(),
+          ]).toString("utf8"),
+        ),
+      );
+  }
+  async requestPasswordReset(login: string, source: string) {
+    this.ensureReady();
+    await this.rate("reset-ip", source, 10);
+    await this.rate("reset-name", login.trim().toLowerCase(), 5, 900000);
+    await this.pruneRecovery();
+    const started = performance.now();
+    if (this.#options.deliverReset)
+      await this.transaction(async (client) => {
+        const user = (
+          await client.query<UserRow>(
+            "select * from users where login=$1 or email=$1 for update",
+            [login.trim().toLowerCase()],
+          )
+        ).rows[0];
+        if (!user?.email || user.disabled_at || user.account_type !== "adult")
+          return;
+        await client.query(
+          "update password_reset_tokens set consumed_at=$2 where user_id=$1 and consumed_at is null",
+          [user.id, this.now()],
+        );
+        const id = randomUUID(),
+          token = randomBytes(32).toString("hex"),
+          expires = new Date(this.now().getTime() + 1800000);
+        await client.query(
+          "insert into password_reset_tokens(id,user_id,token_hash,expires_at) values($1,$2,$3,$4)",
+          [id, user.id, digest(token), expires],
+        );
+        await client.query(
+          "insert into identity_mail_outbox(token_id,payload,next_attempt_at) values($1,$2,$3)",
+          [
+            id,
+            this.sealReset({ recipient: user.email, token }, id),
+            this.now(),
+          ],
+        );
+        await this.audit(client, null, "password_reset.requested", user.id);
+      });
+    await new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, 30 - (performance.now() - started))),
+    );
+    return {
+      accepted: true,
+      message: "If email recovery is available, instructions will be sent.",
+    };
+  }
+  async flushResetMail() {
+    if (!this.#options.deliverReset) return 0;
+    this.ensureReady();
+    await this.pruneRecovery();
+    let delivered = 0;
+    for (let i = 0; i < 5; i++) {
+      const lease = randomUUID();
+      const item = await this.transaction(async (client) => {
+        const row = (
+          await client.query<{ token_id: string; payload: Buffer }>(
+            "select o.token_id,o.payload from identity_mail_outbox o join password_reset_tokens t on t.id=o.token_id where o.delivered_at is null and o.attempts<3 and o.next_attempt_at<=$1 and (o.lease_expires_at is null or o.lease_expires_at<$1) and t.expires_at>$1 and t.consumed_at is null order by o.next_attempt_at for update of o skip locked limit 1",
+            [this.now()],
+          )
+        ).rows[0];
+        if (row)
+          await client.query(
+            "update identity_mail_outbox set attempts=attempts+1,lease_id=$2,lease_expires_at=$3 where token_id=$1",
+            [row.token_id, lease, new Date(this.now().getTime() + 60000)],
+          );
+        return row;
+      });
+      if (!item) break;
+      try {
+        const value = this.openReset(item.payload, item.token_id);
+        await this.#options.deliverReset(value.recipient, value.token);
+        await this.#pool.query(
+          "update identity_mail_outbox set delivered_at=$3,payload=$4,lease_id=null,lease_expires_at=null where token_id=$1 and lease_id=$2",
+          [item.token_id, lease, this.now(), Buffer.alloc(0)],
+        );
+        delivered++;
+      } catch {
+        await this.#pool.query(
+          "update identity_mail_outbox set next_attempt_at=$3,lease_id=null,lease_expires_at=null where token_id=$1 and lease_id=$2",
+          [item.token_id, lease, new Date(this.now().getTime() + 300000)],
+        );
+      }
+    }
+    return delivered;
+  }
+  private async replacePassword(
+    client: pg.PoolClient,
+    userId: string,
+    passwordHash: string,
+  ) {
+    await client.query("select id from users where id=$1 for update", [userId]);
+    await client.query(
+      "update users set password_hash=$2,auth_version=auth_version+1 where id=$1",
+      [userId, passwordHash],
+    );
+    await client.query("update sessions set revoked_at=$2 where user_id=$1", [
+      userId,
+      this.now(),
+    ]);
+    await client.query(
+      "update password_reset_tokens set consumed_at=$2 where user_id=$1 and consumed_at is null",
+      [userId, this.now()],
+    );
+    await client.query(
+      "delete from identity_mail_outbox where token_id in(select id from password_reset_tokens where user_id=$1)",
+      [userId],
+    );
+  }
+  async consumePasswordReset(token: string, password: string, source: string) {
+    this.ensureReady();
+    await this.rate("reset-consume", source, 20);
+    if (!/^[a-f0-9]{64}$/.test(token))
+      throw new AuthError(
+        400,
+        "RESET_INVALID",
+        "Reset token is invalid or expired.",
+      );
+    const passwordHash = await this.hashPassword(password);
+    return this.transaction(async (client) => {
+      const lookup = (
+        await client.query<{ user_id: string }>(
+          "select user_id from password_reset_tokens where token_hash=$1",
+          [digest(token)],
+        )
+      ).rows[0];
+      if (!lookup)
+        throw new AuthError(
+          400,
+          "RESET_INVALID",
+          "Reset token is invalid or expired.",
+        );
+      const user = (
+        await client.query<UserRow>(
+          "select * from users where id=$1 for update",
+          [lookup.user_id],
+        )
+      ).rows[0];
+      const reset = (
+        await client.query(
+          "select id from password_reset_tokens where token_hash=$1 and consumed_at is null and expires_at>$2 for update",
+          [digest(token), this.now()],
+        )
+      ).rows[0];
+      if (!reset || !user || user.disabled_at || user.account_type !== "adult")
+        throw new AuthError(
+          400,
+          "RESET_INVALID",
+          "Reset token is invalid or expired.",
+        );
+      await this.replacePassword(client, user.id, passwordHash);
+      await this.audit(client, user.id, "password_reset.consumed", user.id);
+      return { ok: true };
+    });
+  }
+  async recoverPassword(
+    recoveryToken: string,
+    login: string,
+    password: string,
+  ) {
+    this.ensureReady();
+    const settings = (
+      await this.#pool.query<{ recovery_hash: string }>(
+        "select recovery_hash from installation_settings where id=true and bootstrapped_at is not null",
+      )
+    ).rows[0];
+    if (!settings || !equal(digest(recoveryToken), settings.recovery_hash))
+      throw new AuthError(
+        403,
+        "RECOVERY_DENIED",
+        "Local owner recovery credential is invalid.",
+      );
+    const passwordHash = await this.hashPassword(password);
+    return this.transaction(async (client) => {
+      const user = (
+        await client.query<UserRow>(
+          "select * from users where login=$1 for update",
+          [loginName.parse(login)],
+        )
+      ).rows[0];
+      if (!user) throw new AuthError(404, "NOT_FOUND", "User not found.");
+      await this.replacePassword(client, user.id, passwordHash);
+      await this.audit(client, null, "owner.password_recovered", user.id);
+      return { ok: true };
+    });
+  }
+  async createChild(
+    token: string,
+    org: string,
+    input: { login: string; password: string; environmentIds: string[] },
+  ) {
+    const value = z
+      .strictObject({
+        login: loginName,
+        password: newPassword,
+        environmentIds: z.array(z.uuid()).min(1).max(10),
+      })
+      .parse(input);
+    await this.authorize(token, org, "membership:manage", {
+      kind: "organization",
+      id: org,
+    });
+    const passwordHash = await this.hashPassword(value.password);
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        const worlds = [];
+        for (const id of new Set(value.environmentIds)) {
+          const world = await this.canonicalScope(client, org, {
+            kind: "environment",
+            id,
+          });
+          if (world.environmentType !== "minecraft")
+            throw new AuthError(
+              400,
+              "CHILD_WORLD_REQUIRED",
+              "Child accounts use assigned Minecraft worlds only.",
+            );
+          worlds.push(world);
+        }
+        const id = randomUUID(),
+          memberId = randomUUID();
+        await client.query(
+          "insert into users(id,login,account_type,password_hash) values($1,$2,'child',$3)",
+          [id, value.login, passwordHash],
+        );
+        await client.query(
+          "insert into memberships(id,organization_id,user_id) values($1,$2,$3)",
+          [memberId, org, id],
+        );
+        await client.query(
+          "insert into membership_roles(organization_id,membership_id,role_id) select $1,$2,id from roles where organization_id=$1 and name='child' and built_in=true",
+          [org, memberId],
+        );
+        for (const world of worlds)
+          for (const permission of childPermissions.filter(
+            (p) => p !== "organization:read",
+          ))
+            await client.query(
+              "insert into resource_grants(id,organization_id,membership_id,permission,project_id,environment_id) values($1,$2,$3,$4,$5,$6)",
+              [
+                randomUUID(),
+                org,
+                memberId,
+                permission,
+                world.projectId,
+                world.id,
+              ],
+            );
+        await this.audit(client, p.user.id, "child.created", id, true, org);
+        return {
+          id,
+          login: value.login,
+          membership_id: memberId,
+          account_type: "child" as const,
+        };
+      },
+      true,
+    );
+  }
+  async resetChildPassword(
+    token: string,
+    org: string,
+    memberId: string,
+    password: string,
+  ) {
+    await this.authorize(token, org, "membership:manage", {
+      kind: "organization",
+      id: org,
+    });
+    const passwordHash = await this.hashPassword(password);
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        const child = await this.memberFor(client, org, memberId);
+        if (child.account_type !== "child")
+          throw new AuthError(
+            403,
+            "CHILD_ACCOUNT_REQUIRED",
+            "Adult accounts use email or instance-owner recovery.",
+          );
+        await this.replacePassword(client, child.user_id, passwordHash);
+        await this.audit(
+          client,
+          p.user.id,
+          "child.password_reset",
+          child.user_id,
+          true,
+          org,
+        );
+        return { ok: true };
+      },
+      true,
+    );
+  }
+
+  private async pruneRecovery() {
+    await this.#pool.query(
+      "delete from identity_mail_outbox where token_id in(select o.token_id from identity_mail_outbox o join password_reset_tokens t on t.id=o.token_id where t.expires_at<=$1 or t.consumed_at is not null limit 500)",
+      [this.now()],
+    );
+    await this.#pool.query(
+      "delete from password_reset_tokens where id in(select t.id from password_reset_tokens t where t.expires_at<=$1 and not exists(select 1 from identity_mail_outbox o where o.token_id=t.id) limit 500)",
+      [this.now()],
+    );
+    await this.#pool.query(
+      "delete from auth_rate_limits where bucket in(select bucket from auth_rate_limits where window_started_at<$1 limit 500)",
+      [new Date(this.now().getTime() - 86400000)],
+    );
+  }
+
   // CHAPTER_METHODS
 }
 
@@ -1641,3 +2012,5 @@ export const executionGrantSchema = z.strictObject({
 export type ExecutionGrant = z.infer<typeof executionGrantSchema>;
 
 export type IdentityService = Pick<AuthService, keyof AuthService>;
+
+export { createResetDelivery } from "./mail.js";

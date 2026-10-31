@@ -10,80 +10,95 @@ const runtimeUrl = z.url().refine((value) => {
     !!u.password
   );
 }, "requires the restricted craftlayer_runtime database role");
-const schema = z.strictObject({
-  NODE_ENV: z
-    .enum(["development", "test", "production"])
-    .default("development"),
-  DATABASE_URL: runtimeUrl,
-  AUTH_DATABASE_URL: z
-    .url()
-    .refine(
-      (value) =>
-        new URL(value).username === "craftlayer_identity" &&
-        ["postgres:", "postgresql:"].includes(new URL(value).protocol),
-      "requires restricted identity role",
-    )
-    .optional(),
-  CRAFTLAYER_BOOTSTRAP_TOKEN: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  CRAFTLAYER_RECOVERY_TOKEN: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  CRAFTLAYER_CSRF_SECRET: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  CRAFTLAYER_PUBLIC_URL: z
-    .url()
-    .refine((value) => {
-      const u = new URL(value);
-      return (
-        !u.username &&
-        !u.password &&
-        !u.search &&
-        !u.hash &&
-        u.pathname === "/" &&
-        (u.protocol === "https:" ||
-          (u.protocol === "http:" &&
-            ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)))
-      );
-    }, "TLS required except loopback")
-    .default("http://127.0.0.1:3000"),
-  REDIS_URL: z
-    .url()
-    .refine(
-      (v) => ["redis:", "rediss:"].includes(new URL(v).protocol),
-      "requires Redis URL",
-    ),
-  CRAFTLAYER_BIND_HOST: z
-    .enum(["127.0.0.1", "0.0.0.0", "::1"])
-    .default("127.0.0.1"),
-  CRAFTLAYER_HTTP_PORT: z.coerce
-    .number()
-    .int()
-    .min(1024)
-    .max(65535)
-    .default(3000),
-  CRAFTLAYER_API_PORT: z.coerce
-    .number()
-    .int()
-    .min(1024)
-    .max(65535)
-    .default(4000),
-  CRAFTLAYER_WORKER_PORT: z.coerce
-    .number()
-    .int()
-    .min(1024)
-    .max(65535)
-    .default(4001),
-  CRAFTLAYER_LOG_LEVEL: z
-    .enum(["fatal", "error", "warn", "info", "debug", "silent"])
-    .default("info"),
-  CRAFTLAYER_API_ORIGIN: z.url().default("http://127.0.0.1:4000"),
-});
+const schema = z
+  .strictObject({
+    NODE_ENV: z
+      .enum(["development", "test", "production"])
+      .default("development"),
+    DATABASE_URL: runtimeUrl,
+    CRAFTLAYER_SMTP_URL: z
+      .url()
+      .refine((value) => {
+        const u = new URL(value);
+        return (
+          u.protocol === "smtps:" && !u.search && !u.hash && u.pathname === "/"
+        );
+      }, "TLS SMTP URL required")
+      .optional(),
+    CRAFTLAYER_SMTP_FROM: z.email().optional(),
+    AUTH_DATABASE_URL: z
+      .url()
+      .refine(
+        (value) =>
+          new URL(value).username === "craftlayer_identity" &&
+          ["postgres:", "postgresql:"].includes(new URL(value).protocol),
+        "requires restricted identity role",
+      )
+      .optional(),
+    CRAFTLAYER_BOOTSTRAP_TOKEN: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    CRAFTLAYER_RECOVERY_TOKEN: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    CRAFTLAYER_CSRF_SECRET: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    CRAFTLAYER_PUBLIC_URL: z
+      .url()
+      .refine((value) => {
+        const u = new URL(value);
+        return (
+          !u.username &&
+          !u.password &&
+          !u.search &&
+          !u.hash &&
+          u.pathname === "/" &&
+          (u.protocol === "https:" ||
+            (u.protocol === "http:" &&
+              ["localhost", "127.0.0.1", "[::1]"].includes(u.hostname)))
+        );
+      }, "TLS required except loopback")
+      .default("http://127.0.0.1:3000"),
+    REDIS_URL: z
+      .url()
+      .refine(
+        (v) => ["redis:", "rediss:"].includes(new URL(v).protocol),
+        "requires Redis URL",
+      ),
+    CRAFTLAYER_BIND_HOST: z
+      .enum(["127.0.0.1", "0.0.0.0", "::1"])
+      .default("127.0.0.1"),
+    CRAFTLAYER_HTTP_PORT: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(65535)
+      .default(3000),
+    CRAFTLAYER_API_PORT: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(65535)
+      .default(4000),
+    CRAFTLAYER_WORKER_PORT: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(65535)
+      .default(4001),
+    CRAFTLAYER_LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "silent"])
+      .default("info"),
+    CRAFTLAYER_API_ORIGIN: z.url().default("http://127.0.0.1:4000"),
+  })
+  .refine(
+    (c) => Boolean(c.CRAFTLAYER_SMTP_URL) === Boolean(c.CRAFTLAYER_SMTP_FROM),
+    { message: "Configure both SMTP URL and sender" },
+  );
 export type ServerConfig = z.infer<typeof schema>;
 export function parseServerConfig(
   env: Record<string, string | undefined>,
@@ -98,6 +113,7 @@ export function parseServerConfig(
             "DATABASE_URL",
             "REDIS_URL",
             "AUTH_DATABASE_URL",
+            "CRAFTLAYER_SMTP_URL",
           ].includes(key)),
     ),
   );
@@ -123,6 +139,7 @@ export function createLogger(
         "api_key",
         "DATABASE_URL",
         "AUTH_DATABASE_URL",
+        "CRAFTLAYER_SMTP_URL",
         "CRAFTLAYER_BOOTSTRAP_TOKEN",
         "CRAFTLAYER_RECOVERY_TOKEN",
         "CRAFTLAYER_CSRF_SECRET",

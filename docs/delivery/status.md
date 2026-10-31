@@ -9,9 +9,9 @@ The user authorized Chapter 01 by requesting the next bit after the Chapter 00 r
 ## Current checkpoint
 
 - Chapter 00: implemented/verified; historical evidence in [review](../reviews/00-foundation.md).
-- Chapter 01: CL-01-01 through CL-01-04 verified (4/7 tasks).
-- Next: CL-01-05.
-- Latest evidence: Implemented single-use, expiring/revocable invitations (including existing adult account joins), current-inviter permission checks, scoped member/role administration, bounded custom-role delegation, membership suspension, resource-grant removal and instance-owner-only global disable/restore. Role/scope changes bump membership authority versions; global disable revokes sessions. Last active instance owner and last adult org admin are protected. Added append-only, bounded audit detail columns without changing applied migrations. `pnpm check` passed (156 unit/policy tests); disposable DB suite passed 27 integration tests plus migration rollback/tamper checks, covering invite replay/races/expiry, role escalation, membership-vs-user disable, grant revocation, multi-org joins and last-owner/admin protections.
+- Chapter 01: CL-01-01 through CL-01-05 verified (5/7 tasks).
+- Next: CL-01-06.
+- Latest evidence: Added optional TLS SMTP recovery with generic responses, hashed single-use 30-minute reset tokens and an encrypted/fenced/bounded mail outbox (disabled by default). Added local owner credential recovery via hidden/stdin CLI input, session/version invalidation, adult-created child accounts without email, assigned Minecraft-only access and adult-managed child password reset. `pnpm check` passed (157 unit/policy/config tests); disposable DB suite passed 32 integration tests plus migration rollback/tamper checks, including encrypted-token storage, reset races/replay/expiry, delivery retry limits, CLI stdin recovery, disabled-account preservation, child role/world restrictions and session revocation after password change. No real email was sent; tests use local delivery fakes. Outbox/session secrets remain outside browser, logs and Git.
 - Branch/remote: main → https://github.com/coldbathcode/craftlayer.git; each task is committed/pushed. See Git history and [build log](build-log.md) for exact checkpoints.
 - Chapters 02–11 remain unimplemented; no paid inference, public app deployment or Cloud implementation.
 

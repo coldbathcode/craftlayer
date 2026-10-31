@@ -1,4 +1,4 @@
-import { AuthService } from "@craftlayer/auth";
+import { AuthService, createResetDelivery } from "@craftlayer/auth";
 import {
   createLogger,
   installShutdown,
@@ -22,22 +22,55 @@ try {
     !config.CRAFTLAYER_CSRF_SECRET
   )
     throw new Error("Run pnpm setup:local to configure identity");
+  if (
+    Boolean(config.CRAFTLAYER_SMTP_URL) !== Boolean(config.CRAFTLAYER_SMTP_FROM)
+  )
+    throw new Error("Configure both SMTP URL and sender");
   const auth = new AuthService({
     databaseUrl: config.AUTH_DATABASE_URL,
     bootstrapToken: config.CRAFTLAYER_BOOTSTRAP_TOKEN,
     recoveryToken: config.CRAFTLAYER_RECOVERY_TOKEN,
     csrfSecret: config.CRAFTLAYER_CSRF_SECRET,
+    ...(config.CRAFTLAYER_SMTP_URL && config.CRAFTLAYER_SMTP_FROM
+      ? {
+          deliverReset: createResetDelivery(
+            config.CRAFTLAYER_SMTP_URL,
+            config.CRAFTLAYER_SMTP_FROM,
+            config.CRAFTLAYER_PUBLIC_URL,
+          ),
+        }
+      : {}),
   });
   const authReady = await auth.initialize().then(
     () => true,
     () => false,
   );
+  let mailBusy = false;
+  const mailTimer = config.CRAFTLAYER_SMTP_URL
+    ? setInterval(() => {
+        if (mailBusy) return;
+        mailBusy = true;
+        void auth
+          .flushResetMail()
+          .catch(() =>
+            log.warn(
+              { code: "RECOVERY_MAIL_FAILED" },
+              "Recovery mail processing failed",
+            ),
+          )
+          .finally(() => {
+            mailBusy = false;
+          });
+      }, 5000)
+    : undefined;
+  mailTimer?.unref();
   const redis = createClient({
     url: config.REDIS_URL,
     socket: { connectTimeout: 2000, reconnectStrategy: false },
     commandsQueueMaxLength: 10,
   });
   close = async () => {
+    if (mailTimer) clearInterval(mailTimer);
     if (redis.isOpen) redis.destroy();
     await pool.end();
     await auth.close();
@@ -64,6 +97,7 @@ try {
   });
   close = async () => {
     await app.close();
+    if (mailTimer) clearInterval(mailTimer);
     if (redis.isOpen) redis.destroy();
     await pool.end();
     await auth.close();

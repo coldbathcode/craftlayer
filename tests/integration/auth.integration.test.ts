@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
@@ -10,12 +11,16 @@ const bootstrapToken = randomBytes(32).toString("hex"),
   recoveryToken = randomBytes(32).toString("hex"),
   csrfSecret = randomBytes(32).toString("hex");
 let now = new Date();
+const deliveries: Array<{ recipient: string; token: string }> = [];
 const auth = new AuthService({
   databaseUrl,
   bootstrapToken,
   recoveryToken,
   csrfSecret,
   clock: () => now,
+  deliverReset: async (recipient, token) => {
+    deliveries.push({ recipient, token });
+  },
 });
 const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 });
 const password = "A long fixture password 42!";
@@ -651,6 +656,247 @@ describe("invitations and identity lifecycle", () => {
         "expired-invite",
       ),
     ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+async function emailFixture() {
+  const login = `mail_${randomBytes(6).toString("hex")}`,
+    email = `${login}@example.invalid`,
+    role = (await auth.listRoles(ownerToken, orgId)).find(
+      (r) => r.name === "viewer",
+    ),
+    invite = await auth.createInvitation(ownerToken, orgId, role.id);
+  const user = await auth.consumeInvitation(
+    { token: invite.token, login, email, password },
+    login,
+  );
+  return { ...user, login, email };
+}
+describe("password recovery and child onboarding", () => {
+  it("returns generic reset responses, encrypts queued tokens and consumes once", async () => {
+    const person = await emailFixture();
+    const response = await auth.requestPasswordReset(
+      person.login,
+      "known-reset",
+    );
+    expect(response).toEqual(
+      await auth.requestPasswordReset("not-a-real-account", "unknown-reset"),
+    );
+    expect(JSON.stringify(response)).not.toContain("token");
+    const payload = (
+      await pool.query(
+        "select o.payload from identity_mail_outbox o join password_reset_tokens t on t.id=o.token_id where t.user_id=$1 order by t.expires_at desc limit 1",
+        [person.user.id],
+      )
+    ).rows[0].payload as Buffer;
+    await auth.flushResetMail();
+    const mail = deliveries
+      .slice()
+      .reverse()
+      .find((x) => x.recipient === person.email);
+    expect(mail).toBeTruthy();
+    const token = mail?.token ?? "";
+    expect(payload.includes(Buffer.from(token))).toBe(false);
+    const updated = "Another long fixture password 91!";
+    const results = await Promise.allSettled(
+      [0, 1].map((i) =>
+        auth.consumePasswordReset(token, updated, `consume-${i}`),
+      ),
+    );
+    expect(results.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    await expect(
+      auth.consumePasswordReset(token, updated, "replay-reset"),
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(auth.authenticate(person.cookieToken)).rejects.toMatchObject({
+      status: 401,
+    });
+    await expect(
+      auth.login({ login: person.login, password }, "old-password"),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect(
+      (
+        await auth.login(
+          { login: person.login, password: updated },
+          "new-password",
+        )
+      ).user.id,
+    ).toBe(person.user.id);
+  });
+  it("rejects expired reset tokens and keeps delivery failures bounded", async () => {
+    const person = await emailFixture();
+    await auth.requestPasswordReset(person.login, "expiry-reset");
+    await auth.flushResetMail();
+    const token =
+      deliveries
+        .slice()
+        .reverse()
+        .find((x) => x.recipient === person.email)?.token ?? "";
+    now = new Date(now.getTime() + 1800001);
+    await expect(
+      auth.consumePasswordReset(
+        token,
+        "Expired fixture password 55!",
+        "expired",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    const failing = new AuthService({
+      databaseUrl: databaseUrl as string,
+      bootstrapToken,
+      recoveryToken,
+      csrfSecret,
+      clock: () => now,
+      deliverReset: async () => {
+        throw new Error("synthetic mail outage");
+      },
+    });
+    await failing.initialize();
+    try {
+      await failing.requestPasswordReset(person.login, "failed-mail");
+      for (let i = 0; i < 4; i++) {
+        expect(await failing.flushResetMail()).toBe(0);
+        now = new Date(now.getTime() + 300001);
+      }
+      const r = await pool.query(
+        "select o.attempts from identity_mail_outbox o join password_reset_tokens t on t.id=o.token_id where t.user_id=$1 and t.consumed_at is null order by t.expires_at desc limit 1",
+        [person.user.id],
+      );
+      expect(r.rows[0].attempts).toBe(3);
+    } finally {
+      await failing.close();
+    }
+  });
+  it("requires the local recovery credential and revokes sessions without enabling disabled users", async () => {
+    const person = await fixtureMember("viewer"),
+      updated = "Local recovered fixture password 19!";
+    await expect(
+      auth.recoverPassword("wrong", person.login, updated),
+    ).rejects.toMatchObject({ status: 403 });
+    await auth.recoverPassword(recoveryToken, person.login, updated);
+    await expect(auth.authenticate(person.token)).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(
+      (
+        await auth.login(
+          { login: person.login, password: updated },
+          "recovered",
+        )
+      ).user.id,
+    ).toBe(person.userId);
+    await auth.setUserDisabled(ownerToken, person.userId, true);
+    await auth.recoverPassword(recoveryToken, person.login, password);
+    await expect(
+      auth.login({ login: person.login, password }, "disabled-recovered"),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+  });
+  it("creates child accounts without email, restricts worlds and supports adult-managed reset", async () => {
+    const p = await auth.createProject(ownerToken, orgId, "Child onboarding"),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "Approved metadata world",
+        type: "minecraft",
+      }),
+      other = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "Unassigned world",
+        type: "minecraft",
+      }),
+      code = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "Forbidden code",
+        type: "coding",
+      });
+    const login = `child_${randomBytes(6).toString("hex")}`;
+    await expect(
+      auth.createChild(ownerToken, orgId, {
+        login,
+        password,
+        environmentIds: [code.id],
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    const child = await auth.createChild(ownerToken, orgId, {
+        login,
+        password,
+        environmentIds: [world.id],
+      }),
+      session = await auth.login({ login, password }, "child-login");
+    expect(session.user.email).toBeNull();
+    expect(
+      (await auth.listEnvironments(session.cookieToken, orgId)).map(
+        (x) => x.id,
+      ),
+    ).toEqual([world.id]);
+    await expect(
+      auth.getEnvironment(session.cookieToken, orgId, other.id),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      auth.createChild(session.cookieToken, orgId, {
+        login: "forbidden-child",
+        password,
+        environmentIds: [world.id],
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      auth.addResourceGrant(ownerToken, orgId, {
+        membershipId: child.membership_id,
+        permission: "environment:read",
+        projectId: p.id,
+        environmentId: code.id,
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    const roles = await auth.listRoles(ownerToken, orgId);
+    await expect(
+      auth.setMemberRoles(ownerToken, orgId, child.membership_id, [
+        roles.find((r) => r.name === "org_admin").id,
+      ]),
+    ).rejects.toMatchObject({ status: 400 });
+    const updated = "Adult-managed child password 39!";
+    await auth.resetChildPassword(
+      ownerToken,
+      orgId,
+      child.membership_id,
+      updated,
+    );
+    await expect(auth.authenticate(session.cookieToken)).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(
+      (await auth.login({ login, password: updated }, "child-new-login")).user
+        .account_type,
+    ).toBe("child");
+  });
+  it("runs the owner CLI with stdin secrets and emits no credential values", async () => {
+    const person = await fixtureMember("viewer"),
+      updated = "CLI recovered fixture password 22!";
+    const r = spawnSync(
+      "pnpm",
+      ["cli", "owner", "reset-password", person.login],
+      {
+        encoding: "utf8",
+        input: `${updated}\n`,
+        env: {
+          ...process.env,
+          AUTH_DATABASE_URL: databaseUrl,
+          CRAFTLAYER_BOOTSTRAP_TOKEN: bootstrapToken,
+          CRAFTLAYER_RECOVERY_TOKEN: recoveryToken,
+          CRAFTLAYER_CSRF_SECRET: csrfSecret,
+        },
+      },
+    );
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).not.toContain(updated);
+    expect(r.stdout).not.toContain(recoveryToken);
+    await expect(auth.authenticate(person.token)).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(
+      (
+        await auth.login(
+          { login: person.login, password: updated },
+          "cli-recovered",
+        )
+      ).user.id,
+    ).toBe(person.userId);
   });
 });
 

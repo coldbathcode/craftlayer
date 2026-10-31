@@ -58,9 +58,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Invite reuse, privilege escalation and disabled-user requests/queued grants are denied.
 
-### [ ] CL-01-05 — Password recovery and child accounts
+### [x] CL-01-05 — Password recovery and child accounts
 
-**Depends on:** CL-01-04. **Size:** M. **Status:** not started.
+**Depends on:** CL-01-04. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Implement optional configured email reset and offline owner recovery with no token leakage. Adult creates child identity without requiring child email; restrict login/onboarding and assignments.
 

@@ -63,3 +63,32 @@ it("keeps the restricted identity URL server-side and rejects privileged identit
     }),
   ).toThrow();
 });
+
+it("requires TLS for shared origins and SMTP and rejects URL option overrides", () => {
+  expect(() =>
+    parseServerConfig({
+      ...valid,
+      CRAFTLAYER_PUBLIC_URL: "http://192.168.1.20:3000",
+    }),
+  ).toThrow();
+  expect(
+    parseServerConfig({
+      ...valid,
+      CRAFTLAYER_PUBLIC_URL: "https://craftlayer.example",
+    }).CRAFTLAYER_PUBLIC_URL,
+  ).toBe("https://craftlayer.example");
+  for (const value of [
+    "smtp://mail.example",
+    "smtps://mail.example/?tls.rejectUnauthorized=false",
+  ])
+    expect(() =>
+      parseServerConfig({ ...valid, CRAFTLAYER_SMTP_URL: value }),
+    ).toThrow();
+  expect(
+    parseServerConfig({
+      ...valid,
+      CRAFTLAYER_SMTP_URL: "smtps://mail.example/",
+      CRAFTLAYER_SMTP_FROM: "craftlayer@example.invalid",
+    }).CRAFTLAYER_SMTP_URL,
+  ).toBe("smtps://mail.example/");
+});

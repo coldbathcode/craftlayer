@@ -1,0 +1,9 @@
+# Explicit opt-in only. Configure a TLS SMTP service; base stack has no mail egress.
+services:
+  api:
+    networks: [default, mail]
+    environment:
+      CRAFTLAYER_SMTP_URL: ${CRAFTLAYER_SMTP_URL:?Configure TLS SMTP URL}
+      CRAFTLAYER_SMTP_FROM: ${CRAFTLAYER_SMTP_FROM:?Configure sender address}
+networks:
+  mail: {}
