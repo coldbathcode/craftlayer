@@ -1,6 +1,6 @@
 # Engineering backlog
 
-**Chapter 00 is implemented and verified; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
+**Chapters 00–01 are implemented and verified; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
 Each chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
 
@@ -19,7 +19,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-01-04](../chapters/01-identity-and-rbac.md) | Invitations and lifecycle management | CL-01-03 | L | Verified |
 | [CL-01-05](../chapters/01-identity-and-rbac.md) | Password recovery and child accounts | CL-01-04 | M | Verified |
 | [CL-01-06](../chapters/01-identity-and-rbac.md) | Identity API and audit projection | CL-01-05 | M | Verified |
-| [CL-01-07](../chapters/01-identity-and-rbac.md) | Isolation and revocation review | CL-01-06 | L | Not started |
+| [CL-01-07](../chapters/01-identity-and-rbac.md) | Isolation and revocation review | CL-01-06 | L | Verified |
 | [CL-02-01](../chapters/02-provider-gateway.md) | Provider and pricing contracts | Chapter 01 gate | M | Not started |
 | [CL-02-02](../chapters/02-provider-gateway.md) | Credential and connection management | CL-02-01 | L | Not started |
 | [CL-02-03](../chapters/02-provider-gateway.md) | Ollama adapter | CL-02-02 | M | Not started |

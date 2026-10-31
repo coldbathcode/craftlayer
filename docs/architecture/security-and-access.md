@@ -1,6 +1,6 @@
 # Security, identity and authorization
 
-Status: proposed threat model and control requirements. These controls are part of Core, not paid features.
+Status: Chapter 01 identity controls are implemented as recorded in [ADR 0012](decisions/0012-identity-boundary.md) and the [identity review](../reviews/01-identity-and-rbac.md); remaining runtime/adapter controls are proposed requirements. These controls are part of Core, not paid features.
 
 ## Trust boundaries and assets
 
@@ -10,8 +10,8 @@ Threat actors include unauthenticated clients, malicious org members, child user
 
 ## Authentication
 
-- Local password login uses a vetted password hashing implementation, proposed Argon2id, with parameters measured on the reference host. Never invent cryptography or store plaintext/reversible passwords.
-- Use opaque random server-side sessions with hashed stored tokens, secure/HttpOnly/SameSite cookies, explicit idle/absolute expiry and rotation after login/privilege changes. TLS is required for shared/LAN production use; loopback HTTP is development only.
+- Local password login uses a vetted password hashing implementation, Argon2id (@node-rs/argon2 2.2.2; measured parameters in ADR 0012), with parameters measured on the reference host. Never invent cryptography or store plaintext/reversible passwords.
+- Use opaque random server-side sessions with hashed stored tokens, secure/HttpOnly/SameSite cookies, explicit idle/absolute expiry and rotation after login/invitation acceptance, and immediate authorization-version invalidation after permission changes. TLS is required for shared/LAN production use; loopback HTTP is development only.
 - Add CSRF token and Origin checks for cookie-authenticated writes; restrict CORS and WebSocket origins. Do not put session tokens in URLs or browser local storage.
 - Rate-limit login/reset/invitation consumption and avoid account enumeration in responses. Password reset is single-use/expiring and revokes sessions.
 - Offline self-hosted recovery uses an owner-only local administrative command; email delivery is optional and disabled until configured. Never expose reset tokens in normal logs or a public dev mailbox.
@@ -84,3 +84,7 @@ Audit sensitive changes in the same transaction as the change. Include actor/ser
 ## Release security gate
 
 Complete tenant tests, child escape tests, secret scanning, dependency/image vulnerability triage, sandbox review, restore/key exercise and stop partition tests. Resolve exploitable critical/high issues before public release or record a narrowly scoped exception approved by the project owner. Choose disclosure contact and maintainers before publishing `SECURITY.md`; do not invent a monitored address.
+
+## Chapter 01 audit limits
+
+Identity changes commit actor/action/target/outcome and allowlisted change identifiers atomically. Denials are stored in restricted instance audit without guessed IDs or raw URLs; the organization endpoint exposes recent scoped events only. Request/correlation propagation, instance-audit UI/export and retention jobs are deferred to the event/operations chapters. This is a recorded implementation limit, not a claim that the full future audit contract exists.

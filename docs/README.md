@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapter 00 implemented; review evidence is available and Chapter 01 is next; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–01 implemented; Chapter 01 review evidence is available and Chapter 02 requires authorization; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -58,3 +58,7 @@ Read the current status before choosing a task. Specifications are proposed impl
 ## Implemented foundation
 
 [Developer quickstart](development/quickstart.md), [compatibility matrix](development/compatibility.md), [chapter review](reviews/00-foundation.md), and [session handoff](delivery/handoffs/00-foundation.md) record the runnable foundation and its exact limits. Every build step updates the plan and is committed/pushed to main.
+
+## Implemented local identity
+
+[Account/recovery runbook](development/identity-and-recovery.md), [identity chapter review](reviews/01-identity-and-rbac.md), and [identity handoff](delivery/handoffs/01-identity-and-rbac.md) describe the account console, real database/browser checks, recovery and remaining scope.

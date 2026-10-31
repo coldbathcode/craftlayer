@@ -55,6 +55,20 @@ describe("permission/account/scope matrix", () => {
               "stop:request",
             ].includes(permission));
         expect(canAccess(p, permission, scope)).toBe(expected);
+        expect(canAccess({ ...p, grants: [] }, permission, world)).toBe(
+          role === "org_admin",
+        );
+        expect(
+          canAccess(p, permission, { ...world, id: "unassigned-world" }),
+        ).toBe(role === "org_admin");
+        expect(
+          canAccess(p, permission, { ...world, projectId: "foreign-project" }),
+        ).toBe(role === "org_admin");
+        if (role === "child")
+          for (const environmentType of ["coding", "research"])
+            expect(
+              canAccess(p, permission, { ...world, environmentType }),
+            ).toBe(false);
       });
   it("denies unknown/instance permissions and unassigned scopes", () => {
     expect(canAccess(principal("org_admin"), "instance:manage", project)).toBe(

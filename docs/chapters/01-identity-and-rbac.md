@@ -1,6 +1,6 @@
 # Chapter 01 — Identity and RBAC
 
-**Status:** in progress; authorized by the user after Chapter 00. **Implementation evidence:** [build log](../delivery/build-log.md).
+**Status:** implemented and verified; owner review pending. **Implementation evidence:** [chapter review](../reviews/01-identity-and-rbac.md) and [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-002–004, PR-021; NFR-08.
 
@@ -74,9 +74,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Audit captures successful/denied sensitive operations without secrets; foreign users/counts are not disclosed.
 
-### [ ] CL-01-07 — Isolation and revocation review
+### [x] CL-01-07 — Isolation and revocation review
 
-**Depends on:** CL-01-06. **Size:** L. **Status:** not started.
+**Depends on:** CL-01-06. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Run full cross-org API/RLS tests, pooled context reuse, role/resource matrix and permission-change concurrency cases. Document recovery and administrator workflow.
 
@@ -99,11 +99,11 @@ Use deterministic/fake services first. Any live inference, public deployment, pu
 
 ## Acceptance criteria
 
-- [ ] All role/scope fixtures deny unauthorized operations and permit intended positive journeys.
-- [ ] Disabled/revoked principals lose access, and local recovery works without Cloud/email service.
-- [ ] Provider credentials remain a restricted future resource; no generic secret GET endpoint exists.
-- [ ] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
-- [ ] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
+- [x] All role/scope fixtures deny unauthorized operations and permit intended positive journeys.
+- [x] Disabled/revoked principals lose access, and local recovery works without Cloud/email service.
+- [x] Provider credentials remain a restricted future resource; no generic secret GET endpoint exists.
+- [x] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
+- [x] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
 
 ## Demonstration and independent verification
 
@@ -120,3 +120,5 @@ Update the OpenAPI/SDK or configuration reference when changed, add migrations/c
 Fill the chapter review with implementation summary, task/requirement mapping, checks, security evidence, benchmark results where relevant, known issues and next steps. Update [status](../delivery/status.md), [backlog](../delivery/backlog.md) and [decisions](../delivery/risks-and-decisions.md) together. A chapter is accepted only when its acceptance evidence is reviewed.
 
 Complete the authorized scope before asking for the next chapter. Default chapter-by-chapter authorization follows the blueprint; an explicit user instruction authorizing multiple chapters overrides that default. Use [the handoff template](../templates/agent-handoff.md) so the next session can resume without reconstructing context.
+
+Final checkpoint: all seven tasks are verified; see [identity handoff](../delivery/handoffs/01-identity-and-rbac.md). Chapter 02 requires authorization before CL-02-01.

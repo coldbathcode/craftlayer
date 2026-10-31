@@ -672,7 +672,7 @@ export function IdentityConsole() {
                     </h2>
                     <p>
                       {a.account_type === "child"
-                        ? "An adult manages your account and worlds. Missions arrive in a later chapter."
+                        ? "An adult manages your account and worlds. Missions are not available yet."
                         : "Your permissions are checked by the server for every action."}
                     </p>
                   </article>
@@ -740,8 +740,8 @@ export function IdentityConsole() {
                       }
                     >
                       <p className="account-help">
-                        Connection and bot controls arrive in the adapter
-                        chapters.
+                        This adds environment details. World connections and bot
+                        controls are not available yet.
                       </p>
                       <Field label="Environment name" name="name" />
                       <Field label="Project" name="projectId">
@@ -1172,7 +1172,7 @@ export function IdentityConsole() {
       </main>
       <footer>
         <span className="brand small">▦ CraftLayer</span>
-        <p>Local identity · Chapter 01</p>
+        <p>Local accounts · Private by default</p>
         <a href="https://github.com/coldbathcode/craftlayer/blob/main/docs/delivery/status.md">
           Build status ↗
         </a>

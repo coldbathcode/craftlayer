@@ -1,4 +1,4 @@
-import { AuthError, type IdentityService } from "@craftlayer/auth";
+import { AuthError, type IdentityService, loginName } from "@craftlayer/auth";
 import { errorSchema, identityResponseContracts } from "@craftlayer/contracts";
 import { organizationPermissions } from "@craftlayer/core";
 import cookie from "@fastify/cookie";
@@ -7,7 +7,7 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
 const password = z.string().min(1).max(128),
-  login = z.string().min(3).max(64),
+  login = loginName,
   id = z.uuid();
 export const sessionCookie = "craftlayer_session";
 export async function registerAuth(

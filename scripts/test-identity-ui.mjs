@@ -38,6 +38,11 @@ try {
     env,
   });
   const credentials = parseEnv(await readFile(`${directory}/.env`, "utf8"));
+  // Explicit child environment wins over inherited personal installation settings.
+  Object.assign(env, credentials, {
+    CRAFTLAYER_HTTP_PORT: String(port),
+    CRAFTLAYER_PUBLIC_URL: `http://127.0.0.1:${port}`,
+  });
   await run("docker", [...compose, "up", "-d", "--build", "--wait"], { env });
   await run(
     "pnpm",
@@ -53,9 +58,13 @@ try {
   );
 } finally {
   try {
-    await run("docker", [...compose, "down", "--volumes", "--remove-orphans"], {
-      env,
-    });
+    await run(
+      "docker",
+      [...compose, "down", "--volumes", "--remove-orphans", "--rmi", "local"],
+      {
+        env,
+      },
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

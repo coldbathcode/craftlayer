@@ -9,6 +9,7 @@ test("isolated identity journeys enforce adult, child and revoked access", async
     "Requires disposable identity installation",
   );
   test.setTimeout(90_000);
+  page.setDefaultTimeout(10_000);
   const failures: string[] = [];
   page.on("pageerror", (error) => failures.push(error.message));
   const password = "Browser fixture password 42!";
@@ -114,6 +115,32 @@ test("isolated identity journeys enforce adult, child and revoked access", async
   await page.getByRole("button", { name: "Refresh access" }).click();
   const row = page.getByRole("row").filter({ hasText: "browser-viewer" });
   await expect(row).toBeVisible();
+  const assignment = form("Assign scoped access");
+  await assignment
+    .getByRole("combobox", { name: "Member", exact: true })
+    .selectOption({ label: "browser-viewer" });
+  await assignment
+    .getByRole("combobox", { name: "Permission", exact: true })
+    .selectOption("environment:read");
+  await assignment
+    .getByLabel("World (optional for adults)")
+    .selectOption({ label: "Family world" });
+  await assignment.getByRole("button", { name: "Grant access" }).click();
+  await expect(
+    page.getByText("Scoped access granted.", { exact: true }),
+  ).toBeVisible();
+  await viewer.getByRole("button", { name: "Refresh access" }).click();
+  await expect(viewer.getByText("Family world", { exact: true })).toBeVisible();
+  const scopedGrant = page
+    .getByRole("listitem")
+    .filter({ hasText: "browser-viewer" })
+    .filter({ hasText: "environment:read" });
+  await scopedGrant.getByRole("button", { name: "Revoke grant" }).click();
+  await expect(page.getByText("Grant revoked.", { exact: true })).toBeVisible();
+  await viewer.getByRole("button", { name: "Refresh access" }).click();
+  await expect(
+    viewer.getByText("No environments have been assigned yet."),
+  ).toBeVisible();
   await row.getByRole("button", { name: "Suspend membership" }).click();
   await expect(
     page.getByRole("status").filter({ hasText: "Membership updated." }),
@@ -123,6 +150,16 @@ test("isolated identity journeys enforce adult, child and revoked access", async
     viewer.getByText("You have no active organization membership.", {
       exact: false,
     }),
+  ).toBeVisible();
+
+  await expect(
+    viewer.getByRole("heading", { name: "Your sessions" }),
+  ).toBeVisible();
+  await viewer
+    .getByRole("button", { name: "Revoke session", exact: true })
+    .click();
+  await expect(
+    viewer.getByRole("heading", { name: "Welcome back" }),
   ).toBeVisible();
 
   await form("Reset a child’s password")

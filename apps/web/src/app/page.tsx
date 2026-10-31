@@ -110,8 +110,8 @@ export default function Home() {
             <p className="eyebrow">INSTANCE / 001</p>
             <h2 id="system-heading">Your foundation is here.</h2>
             <p>
-              The local service shell is ready. Accounts and permissions are the
-              next layer.
+              Local accounts and permissions are ready. Open your account to set
+              up the owner and manage access.
             </p>
           </div>
           <div className="system-state">

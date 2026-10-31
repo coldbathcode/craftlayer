@@ -28,11 +28,20 @@ for (const container of containers) {
   if (service === "web")
     assert(
       !container.Config.Env.some((value) =>
-        /^(DATABASE_URL|REDIS_URL|MIGRATION_DATABASE_URL|.*PASSWORD)=/.test(
+        /^(DATABASE_URL|AUTH_DATABASE_URL|REDIS_URL|MIGRATION_DATABASE_URL|PROVISION_DATABASE_URL|CRAFTLAYER_(BOOTSTRAP_TOKEN|RECOVERY_TOKEN|CSRF_SECRET|SMTP_URL)|.*PASSWORD)=/.test(
           value,
         ),
       ),
       "Web must not receive credentials",
+    );
+  if (service === "worker")
+    assert(
+      !container.Config.Env.some((value) =>
+        /^(AUTH_DATABASE_URL|PROVISION_DATABASE_URL|MIGRATION_DATABASE_URL|CRAFTLAYER_(BOOTSTRAP_TOKEN|RECOVERY_TOKEN|CSRF_SECRET|SMTP_URL))=/.test(
+          value,
+        ),
+      ),
+      "Worker must not receive identity or migration credentials",
     );
   assert(
     !container.Mounts.some((mount) => mount.Source.includes("docker.sock")),

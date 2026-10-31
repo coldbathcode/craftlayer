@@ -9,8 +9,8 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 | D-01 | Core license | Apache-2.0 candidate; no license file adopted | Before public release / project owner | Explicit license choice and dependency compatibility review |
 | D-02 | Runtime/framework/image versions | Resolved for foundation: ADR 0011 and compatibility matrix; release review still required | 00 / lead engineer | Compatibility matrix, clean build and host checks |
 | D-03 | Reference host capacity | Small private host, 2 bots, inference optional/remote | 00 baseline; 06/09 qualification / operator | CPU/RAM/storage/latency results and exact hardware |
-| D-04 | Auth/hash/session libraries | Local passwords, opaque sessions, proposed Argon2id | 01 / security engineer | Maintenance review, secure config and measured hashing |
-| D-05 | Owner recovery/email behavior | Offline local owner recovery; SMTP optional | 01 / auth engineer | Safe reset without token leakage or Cloud |
+| D-04 | Auth/hash/session libraries | Resolved for Chapter 01: Argon2id 2.2.2 binding, opaque sessions and versioned authority; ADR 0012/review | 01 / security engineer | Maintenance review, secure config and measured hashing |
+| D-05 | Owner recovery/email behavior | Resolved for Chapter 01: identity-only hidden/stdin local recovery; TLS SMTP optional, tests use fakes | 01 / auth engineer | Safe reset without token leakage or Cloud |
 | D-06 | Credential master-key storage | Local protected key file/secret reference, versioned encryption | 02 / security/operator | Rotation, wrong-org decrypt denial and separate-key restore |
 | D-07 | Strict free-only provider assurance | Ineligible if billing behavior cannot be bounded | 02/07 / provider engineer | Official pricing/feature/endpoint behavior plus negative contracts |
 | D-08 | Model selection and catalog TTL | No permanent free-model list; proposed 5-min hosted TTL | 02 / provider engineer | Freshness/outage tests and explicit metadata limits |
@@ -28,6 +28,7 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 | D-20 | Hybrid private runner scope | Optional outbound-only beta after separate scope decision | 10/11 / runtime/security lead | Enrollment/revocation/partition proof and local policy ceiling |
 | D-21 | Timeline/staffing | No promised dates; M/L sizes are complexity estimates | After 00/04/08 spikes / project owner | Measured throughput and critical-path reassessment |
 | D-22 | Stop/action lease tuning | 5s heartbeat, 15s lease, 20s isolated-action bound target | 03/04/09 / runtime lead | Partition/physical-stop tests on reference hardware |
+| D-23 | Identity snapshot/audit scope | ADR 0012: bounded 100-row lists; correlation, cursor navigation, global audit UI and retention deferred | 03/05/09 / runtime and operations | Preserve authorization and redact projections while extending operability |
 
 ## Engineering risk register
 

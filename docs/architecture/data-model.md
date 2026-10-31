@@ -1,6 +1,6 @@
 # Relational data model and tenant isolation
 
-Status: logical design, not a migration. Drizzle definitions, exact SQL types and migration proofs are Chapter 00–03 deliverables. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
+Status: logical design for the full product. Chapters 00–01 have authoritative SQL migrations for organizations/projects and identity/RBAC/recovery/audit; later runtime entities remain planned. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
 
 ## Conventions
 
@@ -98,3 +98,7 @@ Initial configurable defaults: runtime event payloads 7 days, redacted audit 90 
 ## Migration proof
 
 Every schema chapter tests empty database, upgrade from previous fixture, rollback-on-failure, tenant FKs/RLS, least-privileged runtime permissions and retention behavior. Seed built-in roles idempotently. Test that restore includes encrypted secrets plus the required separately protected key material, without storing keys in the dump.
+
+## Implemented identity boundary
+
+Migrations `0002_identity.sql` through `0004_recovery_outbox.sql` define restricted global identity tables, forced-RLS tenant tables and encrypted mail delivery intent. `craftlayer_identity` is a non-owner without DDL/BYPASSRLS, provided only to the API auth service and local recovery CLI. Runtime cannot read users/sessions/reset data; worker and browser receive no identity credential. Scoped SQL uses transaction-local context; the narrow identity-only membership-discovery policy is keyed by authenticated user ID. See [ADR 0012](decisions/0012-identity-boundary.md).

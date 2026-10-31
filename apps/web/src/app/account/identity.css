@@ -7,6 +7,7 @@
 .account-heading h1 {
   font-size: clamp(42px, 5vw, 64px);
   letter-spacing: -2px;
+  overflow-wrap: anywhere;
   line-height: 1.05;
   margin: 18px 0;
 }

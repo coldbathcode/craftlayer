@@ -28,6 +28,17 @@ it("confines credentialed requests to API paths and rejects redirected/private r
       cache: "no-store",
     }),
   );
+  await identityRequest("/api/v1/auth/sessions/fixture", healthSchema, {
+    method: "DELETE",
+    csrf: "fixture-csrf",
+  });
+  expect(mock).toHaveBeenLastCalledWith(
+    "/api/v1/auth/sessions/fixture",
+    expect.objectContaining({
+      method: "DELETE",
+      headers: { "x-csrf-token": "fixture-csrf" },
+    }),
+  );
   vi.stubGlobal(
     "fetch",
     vi.fn(

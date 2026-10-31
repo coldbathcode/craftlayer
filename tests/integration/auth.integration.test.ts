@@ -960,4 +960,258 @@ it("projects strict public identity DTOs and audits allowed and denied actions w
   expect(doc.json().paths["/api/v1/auth/me"].get.responses["200"]).toBeTruthy();
 });
 
+describe("chapter isolation and revocation review", () => {
+  it("serializes concurrent self-demotions so one active adult org admin remains", async () => {
+    const org = await auth.createOrganization(
+      ownerToken,
+      "Concurrent administrator fixture",
+    );
+    const second = await fixtureMember("org_admin", org.id);
+    const ownMember = (await auth.listMembers(ownerToken, org.id)).find(
+      (m) => m.user_id === ownerId,
+    );
+    const viewerRole = (await auth.listRoles(ownerToken, org.id)).find(
+      (r) => r.name === "viewer",
+    );
+    const results = await Promise.allSettled([
+      auth.setMemberRoles(ownerToken, org.id, ownMember.id, [viewerRole.id]),
+      auth.setMemberRoles(second.token, org.id, second.memberId, [
+        viewerRole.id,
+      ]),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.find((r) => r.status === "rejected")).toMatchObject({
+      reason: { status: 409, code: "LAST_ORG_ADMIN" },
+    });
+    const survivor =
+      results[0].status === "fulfilled" ? second.token : ownerToken;
+    expect(
+      (await auth.listMembers(survivor, org.id)).filter(
+        (m) =>
+          m.roles.includes("org_admin") &&
+          !m.disabled_at &&
+          !m.user_disabled_at,
+      ),
+    ).toHaveLength(1);
+  });
+  it("rejects guessed foreign administration IDs and excludes foreign names and totals", async () => {
+    const foreign = await auth.createOrganization(
+      ownerToken,
+      "Foreign identity review fixture",
+    );
+    const member = await fixtureMember("viewer", foreign.id);
+    const role = (await auth.listRoles(ownerToken, foreign.id)).find(
+      (r) => r.name === "viewer",
+    );
+    const invitation = await auth.createInvitation(
+      ownerToken,
+      foreign.id,
+      role.id,
+    );
+    const project = await auth.createProject(
+      ownerToken,
+      foreign.id,
+      "Foreign secret project title",
+    );
+    const viewer = await fixtureMember("viewer");
+    for (const operation of [
+      () => auth.setMemberRoles(ownerToken, orgId, member.memberId, [role.id]),
+      () => auth.createInvitation(ownerToken, orgId, role.id),
+      () => auth.revokeInvitation(ownerToken, orgId, invitation.id),
+      () =>
+        auth.addResourceGrant(ownerToken, orgId, {
+          membershipId: member.memberId,
+          permission: "project:read",
+          projectId: project.id,
+        }),
+    ])
+      await expect(operation()).rejects.toMatchObject({ status: 404 });
+    for (const url of [
+      "memberships",
+      "roles",
+      "resource-grants",
+      "invitations",
+      "audit",
+      "projects",
+      "environments",
+    ]) {
+      const result = await app.inject({
+        url: `/api/v1/${url}`,
+        headers: {
+          cookie: `craftlayer_session=${ownerToken}`,
+          "x-craftlayer-organization": orgId,
+        },
+      });
+      expect(result.statusCode).toBe(200);
+      expect(Object.keys(result.json())).toEqual(["items"]);
+      expect(result.body).not.toContain(member.login);
+      expect(result.body).not.toContain("Foreign secret project title");
+      const denied = await app.inject({
+        url: `/api/v1/${url}`,
+        headers: {
+          cookie: `craftlayer_session=${viewer.token}`,
+          "x-craftlayer-organization": foreign.id,
+        },
+      });
+      expect(denied.statusCode).toBe(404);
+      expect(denied.body).not.toContain(foreign.name);
+    }
+  });
+  it("invalidates REST and execution authority after suspension and requires new grants after restoration", async () => {
+    const operator = await fixtureMember("operator");
+    const project = await auth.createProject(
+      ownerToken,
+      orgId,
+      "Revocation fixture",
+    );
+    const world = await auth.createEnvironment(ownerToken, orgId, {
+      projectId: project.id,
+      name: "Revoked world",
+      type: "minecraft",
+    });
+    await auth.addResourceGrant(ownerToken, orgId, {
+      membershipId: operator.memberId,
+      permission: "mission:execute",
+      projectId: project.id,
+      environmentId: world.id,
+    });
+    const grant = await auth.issueExecutionGrant(
+      operator.token,
+      orgId,
+      "mission:execute",
+      { kind: "environment", id: world.id },
+    );
+    expect(await auth.revalidateExecutionGrant(grant)).toBe(true);
+    await auth.setMembershipDisabled(
+      ownerToken,
+      orgId,
+      operator.memberId,
+      true,
+    );
+    const response = await app.inject({
+      url: `/api/v1/environments/${world.id}`,
+      headers: {
+        cookie: `craftlayer_session=${operator.token}`,
+        "x-craftlayer-organization": orgId,
+      },
+    });
+    expect(response.statusCode).toBe(404);
+    await expect(auth.revalidateExecutionGrant(grant)).rejects.toMatchObject({
+      status: 404,
+    });
+    await auth.setMembershipDisabled(
+      ownerToken,
+      orgId,
+      operator.memberId,
+      false,
+    );
+    await expect(auth.revalidateExecutionGrant(grant)).rejects.toMatchObject({
+      status: 403,
+    });
+    const fresh = await auth.issueExecutionGrant(
+      operator.token,
+      orgId,
+      "mission:execute",
+      { kind: "environment", id: world.id },
+    );
+    expect(await auth.revalidateExecutionGrant(fresh)).toBe(true);
+    await auth.logout(operator.token);
+    await expect(auth.revalidateExecutionGrant(fresh)).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+  it("clears identity-role tenant context across pooled commits and rollbacks", async () => {
+    const foreign = await auth.createOrganization(
+      ownerToken,
+      "Identity pool fixture",
+    );
+    const client = await pool.connect();
+    try {
+      expect(
+        (await client.query("select current_user as role")).rows[0].role,
+      ).toBe("craftlayer_identity");
+      for (const [org, finish] of [
+        [orgId, "commit"],
+        [foreign.id, "rollback"],
+        [orgId, "commit"],
+      ] as const) {
+        await client.query("begin");
+        await client.query("select set_config('app.organization_id',$1,true)", [
+          org,
+        ]);
+        const rows = (
+          await client.query("select organization_id from memberships")
+        ).rows;
+        expect(rows.length).toBeGreaterThan(0);
+        expect(rows.every((r) => r.organization_id === org)).toBe(true);
+        await client.query(finish);
+        for (const table of [
+          "memberships",
+          "roles",
+          "resource_grants",
+          "invitations",
+          "audit_events",
+        ])
+          expect((await client.query(`select * from ${table}`)).rows).toEqual(
+            [],
+          );
+      }
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+});
+
+it("rejects invalid login syntax at the HTTP schema boundary without invoking setup", async () => {
+  const result = await app.inject({
+    method: "POST",
+    url: "/api/v1/auth/bootstrap",
+    headers: { origin: "http://127.0.0.1:3000" },
+    payload: {
+      token: bootstrapToken,
+      login: "bad login with spaces",
+      password,
+    },
+  });
+  expect(result.statusCode).toBe(400);
+  expect(result.body).not.toContain(bootstrapToken);
+});
+
+it("serializes concurrent owner disables and preserves a recoverable active owner", async () => {
+  const second = await fixtureMember("viewer");
+  await pool.query("insert into instance_owners(user_id) values($1)", [
+    second.userId,
+  ]);
+  const attempts = await Promise.allSettled([
+    auth.setUserDisabled(ownerToken, ownerId, true),
+    auth.setUserDisabled(second.token, second.userId, true),
+  ]);
+  expect(attempts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(attempts.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { status: 409, code: "LAST_OWNER" },
+  });
+  expect(
+    (
+      await pool.query(
+        "select count(*)::int as n from instance_owners o join users u on u.id=o.user_id where u.disabled_at is null",
+      )
+    ).rows[0].n,
+  ).toBe(1);
+  const firstDisabled = attempts[0].status === "fulfilled";
+  await auth.setUserDisabled(
+    firstDisabled ? second.token : ownerToken,
+    firstDisabled ? ownerId : second.userId,
+    false,
+  );
+  expect(
+    (
+      await auth.login(
+        { login: ownerLogin, password },
+        "owner-after-concurrency",
+      )
+    ).user.id,
+  ).toBe(ownerId);
+});
+
 // CHAPTER_TESTS

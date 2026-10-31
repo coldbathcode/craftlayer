@@ -35,7 +35,9 @@ export async function identityRequest<T extends z.ZodType>(
     redirect: "error",
     cache: "no-store",
     headers: {
-      "content-type": "application/json",
+      ...(options.json !== undefined
+        ? { "content-type": "application/json" }
+        : {}),
       ...(options.csrf ? { "x-csrf-token": options.csrf } : {}),
       ...(options.organization
         ? { "x-craftlayer-organization": options.organization }
