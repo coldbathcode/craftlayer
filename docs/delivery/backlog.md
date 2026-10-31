@@ -16,7 +16,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-01-01](../chapters/01-identity-and-rbac.md) | Identity schema and role seeds | Chapter 00 gate | L | Verified |
 | [CL-01-02](../chapters/01-identity-and-rbac.md) | Secure bootstrap and password sessions | CL-01-01 | L | Verified |
 | [CL-01-03](../chapters/01-identity-and-rbac.md) | Authorization and resource scopes | CL-01-02 | L | Verified |
-| [CL-01-04](../chapters/01-identity-and-rbac.md) | Invitations and lifecycle management | CL-01-03 | L | Not started |
+| [CL-01-04](../chapters/01-identity-and-rbac.md) | Invitations and lifecycle management | CL-01-03 | L | Verified |
 | [CL-01-05](../chapters/01-identity-and-rbac.md) | Password recovery and child accounts | CL-01-04 | M | Not started |
 | [CL-01-06](../chapters/01-identity-and-rbac.md) | Identity API and audit projection | CL-01-05 | M | Not started |
 | [CL-01-07](../chapters/01-identity-and-rbac.md) | Isolation and revocation review | CL-01-06 | L | Not started |

@@ -21,6 +21,9 @@
     },
     {
       "path": "../../packages/auth"
+    },
+    {
+      "path": "../../packages/core"
     }
   ]
 }

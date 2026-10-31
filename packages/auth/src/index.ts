@@ -9,6 +9,7 @@ import {
   type AccessScope,
   type Authority,
   canAccess,
+  childPermissions,
   organizationPermissions,
   type Permission,
 } from "@craftlayer/core";
@@ -147,16 +148,44 @@ export class AuthService {
     target: string | null = null,
     allowed = true,
     org?: string,
+    details: Record<string, string | boolean | string[]> = {},
   ) {
+    if (
+      Object.keys(details).some(
+        (key) =>
+          ![
+            "role_ids",
+            "disabled",
+            "project_id",
+            "environment_id",
+            "permission",
+          ].includes(key),
+      ) ||
+      JSON.stringify(details).length > 2048
+    )
+      throw new Error("Unsafe audit detail");
     if (org)
       await client.query(
-        "insert into audit_events(organization_id,actor_id,action,target_id,outcome) values($1,$2,$3,$4,$5)",
-        [org, actor, action, target, allowed ? "allowed" : "denied"],
+        "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,$2,$3,$4,$5,$6::jsonb)",
+        [
+          org,
+          actor,
+          action,
+          target,
+          allowed ? "allowed" : "denied",
+          JSON.stringify(details),
+        ],
       );
     else
       await client.query(
-        "insert into instance_audit_events(actor_id,action,target_id,outcome) values($1,$2,$3,$4)",
-        [actor, action, target, allowed ? "allowed" : "denied"],
+        "insert into instance_audit_events(actor_id,action,target_id,outcome,details) values($1,$2,$3,$4,$5::jsonb)",
+        [
+          actor,
+          action,
+          target,
+          allowed ? "allowed" : "denied",
+          JSON.stringify(details),
+        ],
       );
   }
   private async rate(
@@ -945,6 +974,647 @@ export class AuthService {
         );
       return true;
     });
+  }
+
+  private async roleFor(client: pg.PoolClient, org: string, id: string) {
+    const role = (
+      await client.query<{ id: string; name: string; built_in: boolean }>(
+        "select id,name,built_in from roles where organization_id=$1 and id=$2",
+        [org, id],
+      )
+    ).rows[0];
+    if (!role) throw new AuthError(404, "NOT_FOUND", "Role not found.");
+    const permissions = (
+      await client.query<{ permission: string }>(
+        "select permission from role_permissions where organization_id=$1 and role_id=$2",
+        [org, id],
+      )
+    ).rows.map((x) => x.permission);
+    return { ...role, permissions };
+  }
+  private mayDelegate(a: Authority, permissions: string[]) {
+    if (permissions.some((permission) => !a.permissions.includes(permission)))
+      throw new AuthError(
+        403,
+        "DELEGATION_DENIED",
+        "Cannot grant permissions you do not hold.",
+      );
+  }
+  async listMembers(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client) =>
+        (
+          await client.query(
+            "select m.id,m.user_id,u.login,u.account_type,m.disabled_at,u.disabled_at as user_disabled_at,coalesce(array_agg(r.name) filter(where r.name is not null),'{}') as roles from memberships m join users u on u.id=m.user_id left join membership_roles mr on mr.organization_id=m.organization_id and mr.membership_id=m.id left join roles r on r.organization_id=mr.organization_id and r.id=mr.role_id where m.organization_id=$1 group by m.id,u.id order by m.created_at limit 100",
+            [org],
+          )
+        ).rows,
+    );
+  }
+  async listRoles(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "role:manage",
+      { kind: "organization", id: org },
+      async (client) =>
+        (
+          await client.query(
+            "select r.id,r.name,r.built_in,coalesce(array_agg(rp.permission) filter(where rp.permission is not null),'{}') as permissions from roles r left join role_permissions rp on rp.organization_id=r.organization_id and rp.role_id=r.id where r.organization_id=$1 group by r.id order by r.name limit 100",
+            [org],
+          )
+        ).rows,
+    );
+  }
+  async createRole(
+    token: string,
+    org: string,
+    input: { name: string; permissions: string[] },
+  ) {
+    const value = z
+      .strictObject({
+        name: z.string().trim().min(1).max(80),
+        permissions: z
+          .array(z.enum(organizationPermissions))
+          .min(1)
+          .max(organizationPermissions.length),
+      })
+      .parse(input);
+    return this.orgAction(
+      token,
+      org,
+      "role:manage",
+      { kind: "organization", id: org },
+      async (client, p, a) => {
+        this.mayDelegate(a, value.permissions);
+        const id = randomUUID();
+        await client.query(
+          "insert into roles(id,organization_id,name) values($1,$2,$3)",
+          [id, org, value.name],
+        );
+        for (const permission of new Set(value.permissions))
+          await client.query(
+            "insert into role_permissions(organization_id,role_id,permission) values($1,$2,$3)",
+            [org, id, permission],
+          );
+        await this.audit(client, p.user.id, "role.created", id, true, org);
+        return { id, ...value };
+      },
+      true,
+    );
+  }
+  private async memberFor(client: pg.PoolClient, org: string, id: string) {
+    const row = (
+      await client.query<{
+        id: string;
+        user_id: string;
+        account_type: "adult" | "child";
+        disabled_at: Date | null;
+      }>(
+        "select m.id,m.user_id,m.disabled_at,u.account_type from memberships m join users u on u.id=m.user_id where m.organization_id=$1 and m.id=$2 for update of m",
+        [org, id],
+      )
+    ).rows[0];
+    if (!row) throw new AuthError(404, "NOT_FOUND", "Membership not found.");
+    return row;
+  }
+  private async protectOrgAdmin(
+    client: pg.PoolClient,
+    org: string,
+    id: string,
+    keepsAdmin: boolean,
+  ) {
+    if (keepsAdmin) return;
+    const admins = await client.query<{ id: string }>(
+      "select m.id from memberships m join users u on u.id=m.user_id join membership_roles mr on mr.organization_id=m.organization_id and mr.membership_id=m.id join roles r on r.organization_id=mr.organization_id and r.id=mr.role_id where m.organization_id=$1 and m.disabled_at is null and u.disabled_at is null and u.account_type='adult' and r.name='org_admin' and r.built_in=true",
+      [org],
+    );
+    if (
+      admins.rows.some((m) => m.id === id) &&
+      !admins.rows.some((m) => m.id !== id)
+    )
+      throw new AuthError(
+        409,
+        "LAST_ORG_ADMIN",
+        "Keep at least one active adult organization administrator.",
+      );
+  }
+  async setMemberRoles(
+    token: string,
+    org: string,
+    memberId: string,
+    roleIds: string[],
+  ) {
+    const ids = [...new Set(z.array(z.uuid()).min(1).max(5).parse(roleIds))];
+    return this.orgAction(
+      token,
+      org,
+      "role:manage",
+      { kind: "organization", id: org },
+      async (client, p, a) => {
+        const target = await this.memberFor(client, org, memberId),
+          roles = [];
+        for (const id of ids) {
+          const role = await this.roleFor(client, org, id);
+          this.mayDelegate(a, role.permissions);
+          roles.push(role);
+        }
+        if (
+          target.account_type === "child" &&
+          (!roles.some((r) => r.name === "child" && r.built_in) ||
+            roles.some((r) =>
+              r.permissions.some(
+                (permission) => !childPermissions.includes(permission),
+              ),
+            ))
+        )
+          throw new AuthError(
+            400,
+            "CHILD_ROLE_RESTRICTED",
+            "Child accounts retain the child role and child-safe permissions only.",
+          );
+        await this.protectOrgAdmin(
+          client,
+          org,
+          memberId,
+          roles.some((r) => r.name === "org_admin" && r.built_in),
+        );
+        await client.query(
+          "delete from membership_roles where organization_id=$1 and membership_id=$2",
+          [org, memberId],
+        );
+        for (const role of roles)
+          await client.query(
+            "insert into membership_roles(organization_id,membership_id,role_id) values($1,$2,$3)",
+            [org, memberId, role.id],
+          );
+        await client.query(
+          "update memberships set auth_version=auth_version+1 where organization_id=$1 and id=$2",
+          [org, memberId],
+        );
+        await this.audit(
+          client,
+          p.user.id,
+          "membership.roles_changed",
+          memberId,
+          true,
+          org,
+          { role_ids: ids },
+        );
+        return { ok: true };
+      },
+      true,
+    );
+  }
+  async setMembershipDisabled(
+    token: string,
+    org: string,
+    memberId: string,
+    disabled: boolean,
+  ) {
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        await this.memberFor(client, org, memberId);
+        await this.protectOrgAdmin(client, org, memberId, !disabled);
+        await client.query(
+          "update memberships set disabled_at=$3,auth_version=auth_version+1 where organization_id=$1 and id=$2",
+          [org, memberId, disabled ? this.now() : null],
+        );
+        await this.audit(
+          client,
+          p.user.id,
+          "membership.status_changed",
+          memberId,
+          true,
+          org,
+          { disabled },
+        );
+        return { ok: true };
+      },
+      true,
+    );
+  }
+  async addResourceGrant(
+    token: string,
+    org: string,
+    input: {
+      membershipId: string;
+      permission: string;
+      projectId: string;
+      environmentId?: string | undefined;
+    },
+  ) {
+    const value = z
+      .strictObject({
+        membershipId: z.uuid(),
+        permission: z.enum(organizationPermissions),
+        projectId: z.uuid(),
+        environmentId: z.uuid().optional(),
+      })
+      .parse(input);
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client, p, a) => {
+        const target = await this.memberFor(client, org, value.membershipId);
+        this.mayDelegate(a, [value.permission]);
+        const scope = await this.canonicalScope(
+          client,
+          org,
+          value.environmentId
+            ? { kind: "environment", id: value.environmentId }
+            : { kind: "project", id: value.projectId },
+        );
+        if (scope.kind === "environment" && scope.projectId !== value.projectId)
+          throw new AuthError(404, "NOT_FOUND", "Environment not found.");
+        if (!canAccess(a, value.permission, scope))
+          throw new AuthError(
+            403,
+            "DELEGATION_DENIED",
+            "Cannot delegate beyond your resource scope.",
+          );
+        if (
+          target.account_type === "child" &&
+          (!value.environmentId ||
+            scope.environmentType !== "minecraft" ||
+            !childPermissions.includes(value.permission))
+        )
+          throw new AuthError(
+            400,
+            "CHILD_SCOPE_RESTRICTED",
+            "Child access is limited to assigned Minecraft worlds.",
+          );
+        const id = randomUUID();
+        await client.query(
+          "insert into resource_grants(id,organization_id,membership_id,permission,project_id,environment_id) values($1,$2,$3,$4,$5,$6) on conflict do nothing",
+          [
+            id,
+            org,
+            value.membershipId,
+            value.permission,
+            value.projectId,
+            value.environmentId ?? null,
+          ],
+        );
+        await client.query(
+          "update memberships set auth_version=auth_version+1 where organization_id=$1 and id=$2",
+          [org, value.membershipId],
+        );
+        await this.audit(
+          client,
+          p.user.id,
+          "resource.granted",
+          value.membershipId,
+          true,
+          org,
+          { permission: value.permission, project_id: value.projectId },
+        );
+        return { ok: true };
+      },
+      true,
+    );
+  }
+  async createInvitation(token: string, org: string, roleId: string) {
+    return this.orgAction(
+      token,
+      org,
+      "user:invite",
+      { kind: "organization", id: org },
+      async (client, p, a) => {
+        const role = await this.roleFor(client, org, roleId);
+        this.mayDelegate(a, role.permissions);
+        if (role.name === "child" && role.built_in)
+          throw new AuthError(
+            400,
+            "CHILD_ONBOARDING_REQUIRED",
+            "Create child accounts through adult-managed onboarding.",
+          );
+        const id = randomUUID(),
+          inviteToken = `${org}.${randomBytes(32).toString("hex")}`,
+          expiresAt = new Date(this.now().getTime() + 86400000);
+        await client.query(
+          "insert into invitations(id,organization_id,role_id,token_hash,expires_at,created_by) values($1,$2,$3,$4,$5,$6)",
+          [id, org, roleId, digest(inviteToken), expiresAt, p.user.id],
+        );
+        await this.audit(
+          client,
+          p.user.id,
+          "invitation.created",
+          id,
+          true,
+          org,
+        );
+        return { id, token: inviteToken, expires_at: expiresAt.toISOString() };
+      },
+      true,
+    );
+  }
+  async consumeInvitation(
+    input: {
+      token: string;
+      login?: string | undefined;
+      password?: string | undefined;
+      email?: string | undefined;
+    },
+    source: string,
+    existingSession?: string,
+  ): Promise<SessionResult> {
+    this.ensureReady();
+    await this.rate("invite-consume", source, 20);
+    const parts = input.token.split(".");
+    const org = parts[0] ?? "";
+    if (
+      parts.length !== 2 ||
+      !z.uuid().safeParse(org).success ||
+      !/^[a-f0-9]{64}$/.test(parts[1] ?? "")
+    )
+      throw new AuthError(
+        400,
+        "INVITATION_INVALID",
+        "Invitation is invalid or expired.",
+      );
+    const passwordHash = existingSession
+      ? null
+      : await this.hashPassword(input.password ?? "");
+    try {
+      return await this.transaction(async (client) => {
+        await client.query(
+          "select pg_advisory_xact_lock(hashtextextended($1,74618003))",
+          [org],
+        );
+        await client.query("select set_config('app.organization_id',$1,true)", [
+          org,
+        ]);
+        const invite = (
+          await client.query<{
+            id: string;
+            role_id: string;
+            created_by: string;
+          }>(
+            "select id,role_id,created_by from invitations where organization_id=$1 and token_hash=$2 and consumed_at is null and revoked_at is null and expires_at>$3 for update",
+            [org, digest(input.token), this.now()],
+          )
+        ).rows[0];
+        if (!invite)
+          throw new AuthError(
+            400,
+            "INVITATION_INVALID",
+            "Invitation is invalid or expired.",
+          );
+        const inviter = (
+          await client.query<UserRow>(
+            "select * from users where id=$1 and disabled_at is null for share",
+            [invite.created_by],
+          )
+        ).rows[0];
+        if (!inviter)
+          throw new AuthError(
+            400,
+            "INVITATION_INVALID",
+            "Invitation is unavailable.",
+          );
+        const { a } = await this.authority(
+          client,
+          {
+            user: this.publicUser(inviter),
+            userVersion: inviter.auth_version,
+            sessionId: "",
+          },
+          org,
+        );
+        if (!canAccess(a, "user:invite", { kind: "organization", id: org }))
+          throw new AuthError(
+            400,
+            "INVITATION_INVALID",
+            "Invitation is unavailable.",
+          );
+        const role = await this.roleFor(client, org, invite.role_id);
+        this.mayDelegate(a, role.permissions);
+        let user: UserRow;
+        if (existingSession) {
+          const p = await this.sessionIn(client, existingSession);
+          if (p.user.account_type !== "adult")
+            throw new AuthError(
+              403,
+              "CHILD_INVITE_DENIED",
+              "An adult account is required.",
+            );
+          user = (
+            await client.query<UserRow>("select * from users where id=$1", [
+              p.user.id,
+            ])
+          ).rows[0] as UserRow;
+        } else {
+          const login = loginName.parse(input.login);
+          user = (
+            await client.query<UserRow>(
+              "insert into users(id,login,email,account_type,password_hash) values($1,$2,$3,'adult',$4) returning *",
+              [
+                randomUUID(),
+                login,
+                input.email?.trim().toLowerCase() ?? null,
+                passwordHash,
+              ],
+            )
+          ).rows[0] as UserRow;
+        }
+        const existing = (
+          await client.query<{ id: string; disabled_at: Date | null }>(
+            "select id,disabled_at from memberships where organization_id=$1 and user_id=$2",
+            [org, user.id],
+          )
+        ).rows[0];
+        if (existing?.disabled_at)
+          throw new AuthError(
+            403,
+            "MEMBERSHIP_DISABLED",
+            "Ask an organization administrator to restore access.",
+          );
+        const member = existing?.id ?? randomUUID();
+        if (!existing)
+          await client.query(
+            "insert into memberships(id,organization_id,user_id) values($1,$2,$3)",
+            [member, org, user.id],
+          );
+        await client.query(
+          "insert into membership_roles(organization_id,membership_id,role_id) values($1,$2,$3) on conflict do nothing",
+          [org, member, role.id],
+        );
+        await client.query(
+          "update memberships set auth_version=auth_version+1 where organization_id=$1 and id=$2",
+          [org, member],
+        );
+        await client.query(
+          "update invitations set consumed_at=$2 where id=$1",
+          [invite.id, this.now()],
+        );
+        await this.audit(
+          client,
+          user.id,
+          "invitation.consumed",
+          invite.id,
+          true,
+          org,
+        );
+        return this.newSession(client, user, existingSession);
+      });
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        error.code === "23505"
+      )
+        throw new AuthError(
+          409,
+          "INVITATION_CONFLICT",
+          "Invitation cannot be used with these details.",
+        );
+      throw error;
+    }
+  }
+  async setUserDisabled(token: string, userId: string, disabled: boolean) {
+    return this.transaction(async (client) => {
+      await client.query("select pg_advisory_xact_lock(74618002)");
+      const p = await this.sessionIn(client, token);
+      if (
+        p.user.account_type !== "adult" ||
+        !(
+          await client.query("select 1 from instance_owners where user_id=$1", [
+            p.user.id,
+          ])
+        ).rowCount
+      )
+        throw new AuthError(
+          403,
+          "INSTANCE_PERMISSION_DENIED",
+          "Instance owner permission required.",
+        );
+      if (disabled) {
+        const owners = await client.query<{ user_id: string }>(
+          "select o.user_id from instance_owners o join users u on u.id=o.user_id where u.disabled_at is null",
+        );
+        if (
+          owners.rows.some((x) => x.user_id === userId) &&
+          !owners.rows.some((x) => x.user_id !== userId)
+        )
+          throw new AuthError(
+            409,
+            "LAST_OWNER",
+            "Keep at least one active instance owner.",
+          );
+      }
+      const user = await client.query(
+        "update users set disabled_at=$2,auth_version=auth_version+1 where id=$1 returning id",
+        [userId, disabled ? this.now() : null],
+      );
+      if (!user.rowCount)
+        throw new AuthError(404, "NOT_FOUND", "User not found.");
+      await client.query("update sessions set revoked_at=$2 where user_id=$1", [
+        userId,
+        this.now(),
+      ]);
+      await this.audit(
+        client,
+        p.user.id,
+        "user.status_changed",
+        userId,
+        true,
+        undefined,
+        { disabled },
+      );
+      return { ok: true };
+    });
+  }
+
+  async listResourceGrants(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client) =>
+        (
+          await client.query(
+            "select id,membership_id,permission,project_id,environment_id from resource_grants where organization_id=$1 order by id limit 100",
+            [org],
+          )
+        ).rows,
+    );
+  }
+  async removeResourceGrant(token: string, org: string, id: string) {
+    return this.orgAction(
+      token,
+      org,
+      "membership:manage",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        const result = await client.query<{ membership_id: string }>(
+          "delete from resource_grants where organization_id=$1 and id=$2 returning membership_id",
+          [org, id],
+        );
+        const member = result.rows[0]?.membership_id;
+        if (!member) throw new AuthError(404, "NOT_FOUND", "Grant not found.");
+        await client.query(
+          "update memberships set auth_version=auth_version+1 where organization_id=$1 and id=$2",
+          [org, member],
+        );
+        await this.audit(client, p.user.id, "resource.revoked", id, true, org);
+        return { ok: true };
+      },
+      true,
+    );
+  }
+  async listInvitations(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "user:invite",
+      { kind: "organization", id: org },
+      async (client) =>
+        (
+          await client.query(
+            "select id,role_id,expires_at,consumed_at,revoked_at from invitations where organization_id=$1 order by expires_at desc limit 100",
+            [org],
+          )
+        ).rows,
+    );
+  }
+  async revokeInvitation(token: string, org: string, id: string) {
+    return this.orgAction(
+      token,
+      org,
+      "user:invite",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        const result = await client.query(
+          "update invitations set revoked_at=$3 where organization_id=$1 and id=$2 and consumed_at is null and revoked_at is null",
+          [org, id, this.now()],
+        );
+        if (!result.rowCount)
+          throw new AuthError(404, "NOT_FOUND", "Invitation not found.");
+        await this.audit(
+          client,
+          p.user.id,
+          "invitation.revoked",
+          id,
+          true,
+          org,
+        );
+        return { ok: true };
+      },
+      true,
+    );
   }
 
   // CHAPTER_METHODS

@@ -1,4 +1,5 @@
 import { AuthError, type IdentityService } from "@craftlayer/auth";
+import { organizationPermissions } from "@craftlayer/core";
 import cookie from "@fastify/cookie";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
@@ -182,6 +183,176 @@ export async function registerAuth(
         organization(request),
         request.body,
       ),
+  );
+
+  api.get("/api/v1/memberships", async (request) => ({
+    items: await auth.listMembers(token(request), organization(request)),
+  }));
+  api.get("/api/v1/users", async (request) => ({
+    items: await auth.listMembers(token(request), organization(request)),
+  }));
+  api.get("/api/v1/roles", async (request) => ({
+    items: await auth.listRoles(token(request), organization(request)),
+  }));
+  api.post(
+    "/api/v1/roles",
+    {
+      schema: {
+        body: z.strictObject({
+          name: z.string().trim().min(1).max(80),
+          permissions: z
+            .array(z.enum(organizationPermissions))
+            .min(1)
+            .max(organizationPermissions.length),
+        }),
+      },
+    },
+    async (request) =>
+      auth.createRole(token(request), organization(request), request.body),
+  );
+  api.put(
+    "/api/v1/memberships/:id/roles",
+    {
+      schema: {
+        params: z.strictObject({ id }),
+        body: z.strictObject({ roleIds: z.array(id).min(1).max(5) }),
+      },
+    },
+    async (request) =>
+      auth.setMemberRoles(
+        token(request),
+        organization(request),
+        request.params.id,
+        request.body.roleIds,
+      ),
+  );
+  api.post(
+    "/api/v1/memberships/:id/status",
+    {
+      schema: {
+        params: z.strictObject({ id }),
+        body: z.strictObject({ disabled: z.boolean() }),
+      },
+    },
+    async (request) =>
+      auth.setMembershipDisabled(
+        token(request),
+        organization(request),
+        request.params.id,
+        request.body.disabled,
+      ),
+  );
+  api.post(
+    "/api/v1/users/:id/status",
+    {
+      schema: {
+        params: z.strictObject({ id }),
+        body: z.strictObject({ disabled: z.boolean() }),
+      },
+    },
+    async (request) =>
+      auth.setUserDisabled(
+        token(request),
+        request.params.id,
+        request.body.disabled,
+      ),
+  );
+  api.get("/api/v1/resource-grants", async (request) => ({
+    items: await auth.listResourceGrants(token(request), organization(request)),
+  }));
+  api.post(
+    "/api/v1/resource-grants",
+    {
+      schema: {
+        body: z.strictObject({
+          membershipId: id,
+          permission: z.enum(organizationPermissions),
+          projectId: id,
+          environmentId: id.optional(),
+        }),
+      },
+    },
+    async (request) =>
+      auth.addResourceGrant(
+        token(request),
+        organization(request),
+        request.body,
+      ),
+  );
+  api.delete(
+    "/api/v1/resource-grants/:id",
+    { schema: { params: z.strictObject({ id }) } },
+    async (request) =>
+      auth.removeResourceGrant(
+        token(request),
+        organization(request),
+        request.params.id,
+      ),
+  );
+  api.get("/api/v1/invitations", async (request) => ({
+    items: await auth.listInvitations(token(request), organization(request)),
+  }));
+  api.post(
+    "/api/v1/invitations",
+    { schema: { body: z.strictObject({ roleId: id }) } },
+    async (request) =>
+      auth.createInvitation(
+        token(request),
+        organization(request),
+        request.body.roleId,
+      ),
+  );
+  api.delete(
+    "/api/v1/invitations/:id",
+    { schema: { params: z.strictObject({ id }) } },
+    async (request) =>
+      auth.revokeInvitation(
+        token(request),
+        organization(request),
+        request.params.id,
+      ),
+  );
+  api.post(
+    "/api/v1/invitations/consume",
+    {
+      schema: {
+        body: z.discriminatedUnion("mode", [
+          z.strictObject({
+            mode: z.literal("new"),
+            token: z.string().max(110),
+            login,
+            password: z.string().min(12).max(128),
+            email: z.email().max(254).optional(),
+          }),
+          z.strictObject({
+            mode: z.literal("existing"),
+            token: z.string().max(110),
+          }),
+        ]),
+      },
+    },
+    async (request, reply) => {
+      if (
+        request.body.mode === "existing" &&
+        !auth.verifyCsrf(
+          token(request),
+          String(request.headers["x-csrf-token"] ?? ""),
+        )
+      )
+        throw new AuthError(
+          403,
+          "CSRF_DENIED",
+          "Refresh your session and try again.",
+        );
+      return sendSession(
+        reply,
+        await auth.consumeInvitation(
+          request.body,
+          request.ip,
+          request.body.mode === "existing" ? token(request) : undefined,
+        ),
+      );
+    },
   );
   // CHAPTER_ROUTES
 }

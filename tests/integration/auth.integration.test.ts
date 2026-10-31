@@ -465,4 +465,193 @@ it("enforces org/resource authorization at the HTTP boundary and rejects extra o
     ).statusCode,
   ).toBe(400);
 });
+describe("invitations and identity lifecycle", () => {
+  it("consumes an invitation exactly once and keeps its bearer out of lists", async () => {
+    const role = (await auth.listRoles(ownerToken, orgId)).find(
+      (r) => r.name === "viewer",
+    );
+    const invite = await auth.createInvitation(ownerToken, orgId, role.id);
+    expect(
+      JSON.stringify(await auth.listInvitations(ownerToken, orgId)),
+    ).not.toContain(invite.token);
+    const attempts = await Promise.allSettled(
+      [0, 1].map((i) =>
+        auth.consumeInvitation(
+          { token: invite.token, login: `invite${counter}_${i}`, password },
+          `invite-${i}`,
+        ),
+      ),
+    );
+    expect(attempts.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    await expect(
+      auth.consumeInvitation(
+        { token: invite.token, login: `reused${counter}`, password },
+        "reused",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    const revoked = await auth.createInvitation(ownerToken, orgId, role.id);
+    await auth.revokeInvitation(ownerToken, orgId, revoked.id);
+    await expect(
+      auth.consumeInvitation(
+        { token: revoked.token, login: `revoked${counter}`, password },
+        "revoked",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+  it("allows an authenticated adult to join another org and rotates that session", async () => {
+    const person = await fixtureMember("viewer"),
+      other = await auth.createOrganization(ownerToken, "Invitation org");
+    const role = (await auth.listRoles(ownerToken, other.id)).find(
+      (r) => r.name === "viewer",
+    );
+    const invite = await auth.createInvitation(ownerToken, other.id, role.id);
+    const accepted = await auth.consumeInvitation(
+      { token: invite.token },
+      "existing",
+      person.token,
+    );
+    const me = await auth.me(accepted.cookieToken);
+    expect(me.organizations.map((o) => o.id)).toContain(other.id);
+    await expect(auth.authenticate(person.token)).rejects.toMatchObject({
+      status: 401,
+    });
+  });
+  it("rejects stale-role execution grants and supports world-grant revocation", async () => {
+    const project = await auth.createProject(
+        ownerToken,
+        orgId,
+        "Lifecycle scope",
+      ),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: project.id,
+        name: "World",
+        type: "minecraft",
+      }),
+      operator = await fixtureMember("operator");
+    await auth.addResourceGrant(ownerToken, orgId, {
+      membershipId: operator.memberId,
+      permission: "mission:execute",
+      projectId: project.id,
+      environmentId: world.id,
+    });
+    const grant = await auth.issueExecutionGrant(
+      operator.token,
+      orgId,
+      "mission:execute",
+      { kind: "environment", id: world.id },
+    );
+    const roles = await auth.listRoles(ownerToken, orgId);
+    await auth.setMemberRoles(ownerToken, orgId, operator.memberId, [
+      roles.find((r) => r.name === "viewer").id,
+    ]);
+    await expect(auth.revalidateExecutionGrant(grant)).rejects.toMatchObject({
+      status: 403,
+    });
+    const saved = (await auth.listResourceGrants(ownerToken, orgId)).find(
+      (g) => g.membership_id === operator.memberId,
+    );
+    await auth.removeResourceGrant(ownerToken, orgId, saved.id);
+    await expect(
+      auth.getEnvironment(operator.token, orgId, world.id),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("separates membership suspension from global user disable and revokes sessions", async () => {
+    const person = await fixtureMember("viewer"),
+      other = await auth.createOrganization(ownerToken, "Second membership"),
+      role = (await auth.listRoles(ownerToken, other.id)).find(
+        (r) => r.name === "viewer",
+      ),
+      invite = await auth.createInvitation(ownerToken, other.id, role.id);
+    const session = (
+      await auth.consumeInvitation(
+        { token: invite.token },
+        "join-second",
+        person.token,
+      )
+    ).cookieToken;
+    await auth.setMembershipDisabled(ownerToken, orgId, person.memberId, true);
+    await expect(auth.listProjects(session, orgId)).rejects.toMatchObject({
+      status: 404,
+    });
+    expect(await auth.listProjects(session, other.id)).toEqual([]);
+    const admin = await fixtureMember("org_admin");
+    await expect(
+      auth.setUserDisabled(admin.token, person.userId, true),
+    ).rejects.toMatchObject({ status: 403 });
+    await auth.setUserDisabled(ownerToken, person.userId, true);
+    await expect(auth.authenticate(session)).rejects.toMatchObject({
+      status: 401,
+    });
+    await expect(
+      auth.login({ login: person.login, password }, "disabled-login"),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    await auth.setUserDisabled(ownerToken, person.userId, false);
+    const restored = (
+      await auth.login({ login: person.login, password }, "restored-login")
+    ).cookieToken;
+    expect(await auth.listProjects(restored, other.id)).toEqual([]);
+  });
+  it("protects last owners/admins and prevents role delegation beyond the caller", async () => {
+    await expect(
+      auth.setUserDisabled(ownerToken, ownerId, true),
+    ).rejects.toMatchObject({ status: 409 });
+    const other = await auth.createOrganization(
+        ownerToken,
+        "Only administrator",
+      ),
+      member = (await auth.listMembers(ownerToken, other.id))[0],
+      roles = await auth.listRoles(ownerToken, other.id);
+    await expect(
+      auth.setMembershipDisabled(ownerToken, other.id, member.id, true),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      auth.setMemberRoles(ownerToken, other.id, member.id, [
+        roles.find((r) => r.name === "viewer").id,
+      ]),
+    ).rejects.toMatchObject({ status: 409 });
+    const limitedRole = await auth.createRole(ownerToken, orgId, {
+        name: `Limited ${counter}`,
+        permissions: ["organization:read", "role:manage", "user:invite"],
+      }),
+      person = await fixtureMember("viewer");
+    await auth.setMemberRoles(ownerToken, orgId, person.memberId, [
+      limitedRole.id,
+    ]);
+    await expect(
+      auth.createRole(person.token, orgId, {
+        name: "escalation",
+        permissions: ["provider:manage"],
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    const admin = (await auth.listRoles(ownerToken, orgId)).find(
+      (r) => r.name === "org_admin",
+    );
+    await expect(
+      auth.createInvitation(person.token, orgId, admin.id),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("expires invitations and refuses an invitation after inviter suspension", async () => {
+    const admin = await fixtureMember("org_admin"),
+      role = (await auth.listRoles(ownerToken, orgId)).find(
+        (r) => r.name === "viewer",
+      ),
+      invite = await auth.createInvitation(admin.token, orgId, role.id);
+    await auth.setMembershipDisabled(ownerToken, orgId, admin.memberId, true);
+    await expect(
+      auth.consumeInvitation(
+        { token: invite.token, login: `staleinvite${counter}`, password },
+        "stale-inviter",
+      ),
+    ).rejects.toBeDefined();
+    const expiring = await auth.createInvitation(ownerToken, orgId, role.id);
+    now = new Date(now.getTime() + 86400001);
+    await expect(
+      auth.consumeInvitation(
+        { token: expiring.token, login: `expired${counter}`, password },
+        "expired-invite",
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+});
+
 // CHAPTER_TESTS

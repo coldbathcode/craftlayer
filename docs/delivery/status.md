@@ -9,9 +9,9 @@ The user authorized Chapter 01 by requesting the next bit after the Chapter 00 r
 ## Current checkpoint
 
 - Chapter 00: implemented/verified; historical evidence in [review](../reviews/00-foundation.md).
-- Chapter 01: CL-01-01 through CL-01-03 verified (3/7 tasks).
-- Next: CL-01-04.
-- Latest evidence: Added table-driven permission/account/scope policy, canonical project/world lookup, membership-derived authority, transactional guards, filtered lists and owner-only organization creation. Child ceilings apply even with an extra admin role and reject coding/research worlds; Builder execution needs explicit scoped delegation. Added signed, expiring execution grants bound to user/membership versions, exact resource and originating session; grants are internal primitives, not a running worker engine. `pnpm check` passed (156 unit/policy tests); disposable DB suite passed 21 integration tests including cross-org IDs, filtered reads, admin vs instance owner, tamper/logout grant denial and HTTP permission/body-scope negatives. All queries remain parameterized and tenant-context checked.
+- Chapter 01: CL-01-01 through CL-01-04 verified (4/7 tasks).
+- Next: CL-01-05.
+- Latest evidence: Implemented single-use, expiring/revocable invitations (including existing adult account joins), current-inviter permission checks, scoped member/role administration, bounded custom-role delegation, membership suspension, resource-grant removal and instance-owner-only global disable/restore. Role/scope changes bump membership authority versions; global disable revokes sessions. Last active instance owner and last adult org admin are protected. Added append-only, bounded audit detail columns without changing applied migrations. `pnpm check` passed (156 unit/policy tests); disposable DB suite passed 27 integration tests plus migration rollback/tamper checks, covering invite replay/races/expiry, role escalation, membership-vs-user disable, grant revocation, multi-org joins and last-owner/admin protections.
 - Branch/remote: main → https://github.com/coldbathcode/craftlayer.git; each task is committed/pushed. See Git history and [build log](build-log.md) for exact checkpoints.
 - Chapters 02–11 remain unimplemented; no paid inference, public app deployment or Cloud implementation.
 

@@ -50,9 +50,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Table-driven tests cover every role/action/scope combination, including combined child roles.
 
-### [ ] CL-01-04 — Invitations and lifecycle management
+### [x] CL-01-04 — Invitations and lifecycle management
 
-**Depends on:** CL-01-03. **Size:** L. **Status:** not started.
+**Depends on:** CL-01-03. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add adult-issued expiring single-use invitations, org-scoped membership disable, role changes and session revocation; installation-owner authority is required for global identity disable. Enforce last-owner recovery rules and invalidate cached authorization.
 

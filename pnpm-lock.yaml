@@ -48,6 +48,9 @@ importers:
       '@craftlayer/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@craftlayer/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@craftlayer/db':
         specifier: workspace:*
         version: link:../../packages/db

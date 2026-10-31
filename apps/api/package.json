@@ -20,7 +20,8 @@
     "openapi-types": "12.1.3",
     "redis": "6.3.1",
     "zod": "4.6.7",
-    "@craftlayer/auth": "workspace:*"
+    "@craftlayer/auth": "workspace:*",
+    "@craftlayer/core": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"
