@@ -24,6 +24,12 @@ const schema = z.strictObject({
   CRAFTLAYER_BIND_HOST: z
     .enum(["127.0.0.1", "0.0.0.0", "::1"])
     .default("127.0.0.1"),
+  CRAFTLAYER_HTTP_PORT: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .max(65535)
+    .default(3000),
   CRAFTLAYER_API_PORT: z.coerce
     .number()
     .int()

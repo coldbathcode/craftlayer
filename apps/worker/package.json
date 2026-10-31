@@ -14,5 +14,11 @@
     "@craftlayer/contracts": "workspace:*",
     "@craftlayer/db": "workspace:*",
     "redis": "6.3.1"
-  }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ]
 }

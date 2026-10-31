@@ -58,7 +58,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Invalid/missing required config fails clearly; process shutdown is bounded; health output contains no credentials.
 
-### [ ] CL-00-05 — Private Compose development stack
+### [x] CL-00-05 — Private Compose development stack
 
 **Depends on:** CL-00-04. **Size:** L. **Status:** verified; see build log.
 

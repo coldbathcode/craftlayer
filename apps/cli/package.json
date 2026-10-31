@@ -11,5 +11,11 @@
   },
   "dependencies": {
     "@craftlayer/config": "workspace:*"
-  }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ]
 }

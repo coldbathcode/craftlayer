@@ -12,5 +12,11 @@
   "dependencies": {
     "zod": "4.6.7",
     "pino": "10.4.0"
-  }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ]
 }

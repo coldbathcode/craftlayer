@@ -8,10 +8,10 @@ The user authorized Chapter 00 and requires every build step to update the plan,
 
 ## Current checkpoint
 
-- Completed and verified: CL-00-01 through CL-00-04 (4/7 foundation tasks).
-- Next task: CL-00-05.
+- Completed and verified: CL-00-01 through CL-00-05 (5/7 foundation tasks).
+- Next task: CL-00-06.
 - Branch/remote: `main`, `origin` → https://github.com/coldbathcode/craftlayer.git.
-- Latest evidence: Built Fastify health/OpenAPI and sanitized correlated error responses, strict server config and credential-redacting Pino logs, worker health/shutdown shell, CLI help/config validation and an original responsive Next.js foundation dashboard. `pnpm lint`, `pnpm typecheck`, `pnpm test` (8 tests) and production `pnpm build` passed. Process smoke checks against unavailable local dependencies verified API/worker liveness 200, readiness 503, SIGTERM exit 0 in 6ms each, and no credential canary in logs; valid CLI config passed and missing config correctly returned exit 1. Next telemetry is disabled in project scripts; no remote fonts/assets are used. Full browser and Compose connectivity are verified in subsequent tasks, not claimed here.
+- Latest evidence: Built pinned multi-stage production images and the private Compose stack, generated independent random .env credentials (0600, Git-ignored), and added optional loopback-only host-development DB/Redis ports. `docker compose build`, Compose validation, real startup and all five service health checks passed; migration completed as its dedicated role. Browser navigation verified the live dashboard and Core API connected state at http://127.0.0.1:3000. API external egress was denied on the internal network; only web has an ingress network and host port 127.0.0.1:3000. Native frozen-lockfile pnpm deployment required injected workspace dependencies synchronized after topological package builds; replaced legacy deployment rather than allowing re-resolution. Unit/lint/CLI config checks passed. No Minecraft/Ollama/provider service or account is required.
 - Detailed results and limits: [build log](build-log.md).
 - Chapters 01–11: not started. No provider inference, public app deployment or Cloud implementation.
 

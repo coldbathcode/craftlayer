@@ -16,5 +16,12 @@
   },
   "devDependencies": {
     "@types/pg": "8.23.1"
-  }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ]
 }

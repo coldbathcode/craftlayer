@@ -11,5 +11,11 @@
   },
   "dependencies": {
     "zod": "4.6.7"
-  }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ]
 }
