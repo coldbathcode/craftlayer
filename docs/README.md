@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** planning repository; application implementation not started. Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapter 00 implementation in progress; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 

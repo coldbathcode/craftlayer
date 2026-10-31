@@ -72,8 +72,8 @@ def main() -> int:
                 errors.append(f'{path.name}: unknown task dependency {dependency}')
 
     decisions = list((ROOT / 'docs/architecture/decisions').glob('[0-9]*.md'))
-    if len(decisions) != 10:
-        errors.append(f'Expected 10 baseline ADRs, found {len(decisions)}')
+    if len(decisions) < 10:
+        errors.append(f'Expected at least 10 baseline ADRs, found {len(decisions)}')
     source = ROOT / 'docs/source/CraftLayer_Build_Blueprint.md'
     if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != SOURCE_HASH:
         errors.append('Original blueprint missing or altered')

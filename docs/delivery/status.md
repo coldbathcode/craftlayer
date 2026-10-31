@@ -2,27 +2,19 @@
 
 Last updated: 2026-10-31.
 
-## Repository state
+## Authorized scope and workflow
 
-- Planning package: authored and structurally checked for the initial engineering handoff.
-- Original blueprint: preserved unchanged in `docs/source/`.
-- Application implementation: not started. There is no package manifest, app, database migration, Docker stack or software test suite yet.
-- Chapters 00–11: all not started; 84 engineering tasks not started.
-- ADRs: 10 proposed defaults; implementation adoption/review pending.
-- Git: local repository initialized on `main`; initial planning snapshot committed during this handoff. Check `git log` for its hash.
-- GitHub: user-created [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer) connected as `origin`; planning commits published to `main` under explicit user authorization. No GitHub Project board has been created.
-- Public deployment, paid inference and Cloud implementation: none performed.
+The user authorized Chapter 00 and requires every build step to update the plan, commit and push to `main`. A build step means one numbered task or a documented smaller coherent checkpoint. Do not start Chapter 01 without chapter authorization.
 
-## Validation for this planning handoff
+## Current checkpoint
 
-The handoff checks the unchanged source copy, local Markdown file links, chapter sequence/task IDs, declared dependency targets, expected document inventory, whitespace and absence of application-implementation claims. These are documentation checks, not application/security/performance tests. Results and reproducible commands are recorded in [planning validation](planning-validation.md).
+- Completed and verified: CL-00-01 through CL-00-01 (1/7 foundation tasks).
+- Next task: CL-00-02.
+- Branch/remote: `main`, `origin` → https://github.com/coldbathcode/craftlayer.git.
+- Latest evidence: Pinned local Node/pnpm and selected exact library versions in ADR 0011. Inspected official multi-architecture image indexes and stored immutable digests. `node --version`, `pnpm --version`, package metadata and image manifest checks passed. Application install/build checks belong to CL-00-02 onward; Minecraft authentication and amd64 execution remain unverified. Added the standing plan-update/commit/push requirement to both agent entry points.
+- Detailed results and limits: [build log](build-log.md).
+- Chapters 01–11: not started. No provider inference, public app deployment or Cloud implementation.
 
-Application lint/typecheck/build/test/Compose checks are **not run and not available** until Chapter 00 creates them. Security, model pricing, Minecraft compatibility, sandbox behavior, hardware capacity and restore targets are design requirements awaiting implementation evidence.
+## Source and continuity
 
-## Next authorized build unit
-
-When the user asks to start implementation, begin [Chapter 00](../chapters/00-foundation.md), task **CL-00-01**: toolchain/compatibility research and pinning. Read AGENTS.md and current Git status first. No chapter has been accepted and the planning request does not itself authorize Chapter 00 implementation.
-
-## Active work tracking
-
-When implementation starts, replace this section with: authorized scope; active task; owner/session; branch and base commit; changed files; checks/results; blockers; unresolved decisions; exact next action. Use the [handoff template](../templates/agent-handoff.md). Keep historical chapter reviews rather than overwriting their evidence.
+The original blueprint remains unchanged. [Planning validation](planning-validation.md) is historical planning-only evidence; subsequent implementation evidence lives in the build log and chapter review. Never interpret a checked task as proof of unrun checks. Git history records each checkpoint; verify local HEAD against remote at the end of the build step.

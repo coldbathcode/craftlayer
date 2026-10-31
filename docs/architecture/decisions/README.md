@@ -16,3 +16,5 @@ These ten records are proposed engineering defaults derived from the blueprint. 
 | [0010](./0010-events-and-contracts.md) | Versioned contracts and authorized resumable events |
 
 Version selection, exact auth library, Minecraft authentication compatibility, sandbox runtime and license adoption remain explicit decisions in the risk register. Do not invent those decisions merely to close this index.
+
+[ADR 0011 — Foundation toolchain and image pins](0011-foundation-toolchain.md) is adopted for Chapter 00; the original ten proposals retain their individual status until reviewed.

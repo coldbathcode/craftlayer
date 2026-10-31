@@ -1,12 +1,12 @@
 # Engineering backlog
 
-**All 84 tasks are not started.** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
+**Chapter 00 is in progress; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
 Each chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
 
 | Task | Work item | Dependency | Size | State |
 | --- | --- | --- | --- | --- |
-| [CL-00-01](../chapters/00-foundation.md) | Compatibility and toolchain decision | None | M | Not started |
+| [CL-00-01](../chapters/00-foundation.md) | Compatibility and toolchain decision | None | M | Verified |
 | [CL-00-02](../chapters/00-foundation.md) | Workspace and dependency boundaries | CL-00-01 | M | Not started |
 | [CL-00-03](../chapters/00-foundation.md) | Database and organization foundation | CL-00-02 | L | Not started |
 | [CL-00-04](../chapters/00-foundation.md) | Application shells and validated configuration | CL-00-03 | M | Not started |

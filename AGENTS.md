@@ -4,7 +4,7 @@ These instructions apply to the whole repository and are shared by Codex and Cla
 
 ## Current state and source of truth
 
-- This is a documentation/planning repository. Application code and infrastructure are planned, not implemented.
+- Chapter 00 implementation is authorized. Read the current delivery status for implemented behavior and remaining work.
 - Read `docs/delivery/status.md`, `docs/README.md`, the relevant chapter, and its architecture references before starting work.
 - Product invariants live in `docs/product/requirements.md`; detailed contracts live in `docs/architecture/`; implementation order lives in `docs/delivery/backlog.md`.
 - Preserve `docs/source/CraftLayer_Build_Blueprint.md` as the original input. Amend derived plans and record deviations in an ADR.
@@ -17,7 +17,7 @@ These instructions apply to the whole repository and are shared by Codex and Cla
 - At a chapter boundary, provide the review evidence and request authorization for the next chapter, following the blueprint's chapter checkpoint. Explicit authorization for multiple chapters supersedes this default.
 - Never mark unexecuted checks as passed. Distinguish implemented, verified, deferred, and blocked work.
 - Do not create Cloud implementation in this Core repository. Chapter 11 is separately authorized work in a separate repository.
-- Do not run paid inference, purchase services, deploy publicly, push to GitHub, publish packages, or send messages unless the user has authorized that action. Normal implementation tests use local fakes.
+- Do not run paid inference, purchase services, deploy publicly, publish packages, or send messages unless separately authorized. Normal implementation tests use local fakes. The user has explicitly authorized ongoing commits and pushes to `main` for build steps.
 
 ## Invariants to preserve
 
@@ -42,6 +42,10 @@ These instructions apply to the whole repository and are shared by Codex and Cla
 - Use deterministic clocks, seeded Minecraft fixtures, fake providers, fake adapters, and fault injection where possible.
 - Keep changes focused. Do not refactor unrelated code or add frameworks without an ADR explaining the need.
 - Consult official documentation for the pinned version before implementing provider SDK or framework specifics. Do not invent currently available free models or hardcode prices from this plan.
+
+## Mandatory build-step publication
+
+At the end of **every build step** (a numbered task or a documented smaller coherent checkpoint): run the relevant checks; update chapter/backlog/status and the build log with the exact stopping point, evidence and next action; commit the task-related changes; push to `origin main`; then verify that local HEAD and remote `main` match and the working tree is clean. This is a standing user requirement, not a new permission request. Never force-push or include secrets. A failed check or failed push must be reported honestly and recorded; do not claim an unverified step is complete. Preserve unrelated user changes.
 
 ## Verification and handoff
 

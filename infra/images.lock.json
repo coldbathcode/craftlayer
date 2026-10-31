@@ -1,0 +1,37 @@
+{
+  "node": {
+    "image": "node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9",
+    "platforms": [
+      "amd64",
+      "arm",
+      "arm64",
+      "ppc64le"
+    ]
+  },
+  "postgres": {
+    "image": "postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5",
+    "platforms": [
+      "amd64",
+      "arm",
+      "arm",
+      "arm64",
+      "386",
+      "ppc64le",
+      "riscv64",
+      "s390x"
+    ]
+  },
+  "redis": {
+    "image": "redis:8-alpine@sha256:21090af93f8324db2f0f0f4f38a7c60369d47d917e000c3423d89d2ae2883537",
+    "platforms": [
+      "amd64",
+      "arm",
+      "arm",
+      "arm64",
+      "386",
+      "ppc64le",
+      "riscv64",
+      "s390x"
+    ]
+  }
+}

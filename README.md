@@ -2,7 +2,7 @@
 
 Open-source-first, self-hostable agent orchestration. Minecraft is the first working example; coding and research teams follow.
 
-**Repository status: planning complete for initial engineering handoff; implementation has not started.** There is no runnable application, package manifest, Docker stack, or deployed service yet. All architecture choices are proposed engineering defaults until validated in their chapter.
+**Repository status: Chapter 00 foundation implementation in progress.** See [current status](docs/delivery/status.md) and [build evidence](docs/delivery/build-log.md) for the exact checkpoint. Every build step updates the plan and is committed/pushed to `main`.
 
 CraftLayer Core must work without a CraftLayer Cloud account, subscription, telemetry connection, license server, or proprietary control plane. Cloud is a later, separate project consuming public Core interfaces.
 
@@ -43,7 +43,7 @@ git clone https://github.com/coldbathcode/craftlayer.git
 cd craftlayer
 ```
 
-Application implementation has not started; cloning provides the engineering plan. [GitHub setup](docs/delivery/github-setup.md) describes repository settings and the optional Project board.
+Cloning provides the plan and the implementation recorded in current status. [GitHub setup](docs/delivery/github-setup.md) describes repository settings and the optional Project board.
 
 ## Licensing and unresolved choices
 

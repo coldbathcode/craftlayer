@@ -1,6 +1,6 @@
 # Chapter 00 — Foundation
 
-**Status:** not started. **Specification:** ready for engineering review. **Implementation evidence:** none.
+**Status:** in progress. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-001, PR-003, PR-017; NFR-09.
 
@@ -26,9 +26,9 @@ Architecture references: [system-design](../architecture/system-design.md), [dat
 
 Each task is initially unchecked. Dependencies below describe the default conservative order; record an explicit justified dependency change before reordering. Task sizes are relative engineering complexity (M/L), not delivery dates.
 
-### [ ] CL-00-01 — Compatibility and toolchain decision
+### [x] CL-00-01 — Compatibility and toolchain decision
 
-**Depends on:** None. **Size:** M. **Status:** not started.
+**Depends on:** None. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Research supported runtime/library versions, Java/Mineflayer constraints and image architectures. Pin Node/pnpm, lockfile format, image tags/digests and dependency policy in an ADR; verify on the available host.
 
