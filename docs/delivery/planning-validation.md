@@ -29,7 +29,7 @@ git log -1 --oneline
 git remote -v
 ```
 
-Staged whitespace check: **PASS**. Initial commit is recorded in Git history on `main`. Final tree is clean and no remote is configured. No push or external repository write was performed.
+Staged whitespace check: **PASS**. Initial commit is recorded in Git history on `main`. At the original planning handoff the tree was clean, no remote was configured and no push had been performed. In the subsequent user-authorized publication, `origin` was connected to `coldbathcode/craftlayer` and the planning commits were pushed to `main`; see [current status](status.md).
 
 ## Manual consistency review
 

@@ -34,16 +34,16 @@ The original [blueprint v0.2](docs/source/CraftLayer_Build_Blueprint.md) is pres
 | M5 — Cloud design | 10 | Reviewed commercial architecture; no Cloud dependency in Core |
 | M6 — Optional Cloud | 11 | Separate, explicitly authorized implementation |
 
-## Local Git and GitHub
+## GitHub repository
 
-This repository is intended to use `main`. Create an empty GitHub repository named `craftlayer` without a generated README or license, then attach the actual remote:
+The repository is [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer), with `main` as the default branch. The local checkout uses it as `origin`.
 
 ```bash
-git remote add origin <YOUR_GITHUB_CRAFTLAYER_GIT_URL>
-git push -u origin main
+git clone https://github.com/coldbathcode/craftlayer.git
+cd craftlayer
 ```
 
-Replace the placeholder with the repository URL. No GitHub repository, remote, public deployment, or GitHub Project board is created by this planning task. [GitHub setup](docs/delivery/github-setup.md) explains the optional project board and issue import order.
+Application implementation has not started; cloning provides the engineering plan. [GitHub setup](docs/delivery/github-setup.md) describes repository settings and the optional Project board.
 
 ## Licensing and unresolved choices
 

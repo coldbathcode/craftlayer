@@ -10,7 +10,7 @@ Last updated: 2026-10-31.
 - Chapters 00–11: all not started; 84 engineering tasks not started.
 - ADRs: 10 proposed defaults; implementation adoption/review pending.
 - Git: local repository initialized on `main`; initial planning snapshot committed during this handoff. Check `git log` for its hash.
-- GitHub: no remote configured, no push, repository or Project board created by this task.
+- GitHub: user-created [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer) connected as `origin`; planning commits published to `main` under explicit user authorization. No GitHub Project board has been created.
 - Public deployment, paid inference and Cloud implementation: none performed.
 
 ## Validation for this planning handoff

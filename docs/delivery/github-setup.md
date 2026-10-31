@@ -1,21 +1,26 @@
 # GitHub repository and optional Project board setup
 
-Status: local Git only. The user will create the GitHub repository named `craftlayer`. No remote URL or account owner has been assumed.
+Status: the user created [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer). The local repository is connected as `origin`, and the planning commits are published to `main`. A GitHub Project board has not been created.
 
-## Attach the repository
+## Work with the repository
 
-Create an empty repository without a generated README, .gitignore or license so its initial history does not conflict with this planning commit. Choose visibility deliberately: the license is still a candidate and domain/trademark checks are unresolved. Do not infer permission to publish from local initialization.
+For a new checkout:
 
-From the local `craftlayer` directory, after replacing the placeholder with the real Git URL and authorizing the push:
+```bash
+git clone https://github.com/coldbathcode/craftlayer.git
+cd craftlayer
+```
+
+To inspect and push authorized changes from the existing checkout:
 
 ```bash
 git status --short --branch
+git remote -v
 git log -1 --oneline
-git remote add origin <YOUR_GITHUB_CRAFTLAYER_GIT_URL>
-git push -u origin main
+git push origin main
 ```
 
-If `origin` already exists, inspect `git remote -v` first instead of overwriting it. Do not force-push to reconcile a generated remote commit; inspect and reconcile history explicitly. These are setup instructions, not commands already run.
+Commit the intended changes before pushing. Do not force-push or overwrite a remote without inspecting its history and obtaining authorization for destructive changes. The initial remote was verified empty before the planning history was pushed.
 
 ## Repository settings after code begins
 
@@ -31,6 +36,6 @@ A repository and a GitHub Project board are separate. If a board is desired, sug
 
 Use one chapter epic per chapter and one linked task issue per `CL-xx-yy`. Create Core chapters first; Chapter 11 issues belong in a future separate Cloud repo. Labels: `chapter:00` through `chapter:11`, `area:auth`, `area:runtime`, `area:providers`, `area:minecraft`, `area:web`, `area:sandbox`, `area:ops`, `security`, `decision`, `blocked`, `cloud-optional`.
 
-Import task title, dependencies, implementation text, required evidence, chapter security criteria and acceptance links. Preserve task IDs in issue titles and commits for traceability. Do not mass-create GitHub issues or a board during this handoff; the repository does not yet exist and no external write is authorized here.
+Import task title, dependencies, implementation text, required evidence, chapter security criteria and acceptance links. Preserve task IDs in issue titles and commits for traceability. Issue creation and a Project board are separate optional work; the authorization to commit and push the planning repository does not request creating them.
 
 Use [the task template](../templates/engineering-task.md) and keep checked-in status aligned with the board. Avoid fake target dates before compatibility/sandbox spikes establish effort.
