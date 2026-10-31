@@ -8,10 +8,10 @@ The user authorized Chapter 00 and requires every build step to update the plan,
 
 ## Current checkpoint
 
-- Completed and verified: CL-00-01 through CL-00-02 (2/7 foundation tasks).
-- Next task: CL-00-03.
+- Completed and verified: CL-00-01 through CL-00-03 (3/7 foundation tasks).
+- Next task: CL-00-04.
 - Branch/remote: `main`, `origin` → https://github.com/coldbathcode/craftlayer.git.
-- Latest evidence: Created the pnpm workspace, strict TypeScript project references, core/context and health contracts, Vitest and Biome configuration, and AST-based dependency-boundary checking. `pnpm lint`, `pnpm build`, `pnpm test` (3 tests), and frozen-lockfile install passed. An intentional web-to-db import was rejected. Corrected initial test discovery to exclude dependency sources and excluded Markdown from autoformatting; the original blueprint hash remains unchanged. Vite 8.3.5 is explicitly pinned to satisfy Vitest peer requirements.
+- Latest evidence: Added Drizzle organization/project schema, SQL migration/checksum runner, separate migration/runtime roles, forced RLS, transaction-local tenant context and scoped project reads. `pnpm build`, `pnpm lint`, unit checks and `pnpm test:db` passed; the disposable PostgreSQL 18.6 instance passed 6 real-runtime-role tests covering DDL/role denial, missing context, pooled A/B contexts, forged writes, rollback/timeout cleanup and composite foreign keys. Fresh migration and repeat migration both passed. Resolved a Docker Desktop bind-mounted initialization-script execution failure by baking the nonexecutable init file into a pinned PostgreSQL image; no host database was modified.
 - Detailed results and limits: [build log](build-log.md).
 - Chapters 01–11: not started. No provider inference, public app deployment or Cloud implementation.
 

@@ -42,7 +42,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** A deliberate forbidden server import into web is rejected; a clean install uses the lockfile.
 
-### [ ] CL-00-03 — Database and organization foundation
+### [x] CL-00-03 — Database and organization foundation
 
 **Depends on:** CL-00-02. **Size:** L. **Status:** verified; see build log.
 
@@ -52,7 +52,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-04 — Application shells and validated configuration
 
-**Depends on:** CL-00-03. **Size:** M. **Status:** not started.
+**Depends on:** CL-00-03. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Add Fastify app factory, Next shell, worker startup/shutdown and CLI help/config validation. Define secret/server/public config separation, redacted logs, liveness/readiness and correlated errors.
 
@@ -60,7 +60,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-05 — Private Compose development stack
 
-**Depends on:** CL-00-04. **Size:** L. **Status:** not started.
+**Depends on:** CL-00-04. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Create Dockerfiles/Compose with PostgreSQL, Redis, API, web and worker, named volumes, loopback exposure, health checks, resource/log limits and optional profiles. Keep Minecraft/Ollama disabled until their chapters configure them.
 
@@ -68,7 +68,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-06 — Automated checks and CI
 
-**Depends on:** CL-00-05. **Size:** L. **Status:** not started.
+**Depends on:** CL-00-05. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add meaningful unit/schema/config tests, real DB isolation smoke, dependency boundary checks, docs links and a CI pipeline. Establish the documented command contract and controlled test networking.
 

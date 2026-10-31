@@ -15,7 +15,10 @@
     "format": "biome format --write .",
     "test": "vitest run",
     "docs:check": "python3 scripts/check-docs.py",
-    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check"
+    "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check",
+    "db:migrate": "tsx packages/db/src/migrate.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:db": "node scripts/test-database.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

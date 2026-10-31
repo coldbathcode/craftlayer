@@ -8,7 +8,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | --- | --- | --- | --- | --- |
 | [CL-00-01](../chapters/00-foundation.md) | Compatibility and toolchain decision | None | M | Verified |
 | [CL-00-02](../chapters/00-foundation.md) | Workspace and dependency boundaries | CL-00-01 | M | Verified |
-| [CL-00-03](../chapters/00-foundation.md) | Database and organization foundation | CL-00-02 | L | Not started |
+| [CL-00-03](../chapters/00-foundation.md) | Database and organization foundation | CL-00-02 | L | Verified |
 | [CL-00-04](../chapters/00-foundation.md) | Application shells and validated configuration | CL-00-03 | M | Not started |
 | [CL-00-05](../chapters/00-foundation.md) | Private Compose development stack | CL-00-04 | L | Not started |
 | [CL-00-06](../chapters/00-foundation.md) | Automated checks and CI | CL-00-05 | L | Not started |
