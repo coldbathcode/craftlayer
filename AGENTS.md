@@ -49,7 +49,7 @@ At the end of **every build step** (a numbered task or a documented smaller cohe
 
 ## Verification and handoff
 
-No pnpm commands exist yet. Chapter 00 establishes `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm docs:check`, and Compose validation. Run only commands that actually exist; add required scripts in the foundation.
+Root scripts are introduced incrementally during Chapter 00; inspect package.json for current availability. Chapter 00 establishes `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm docs:check`, and Compose validation. Run only commands that actually exist; add required scripts in the foundation.
 
 For each task: record its ID, implement the smallest coherent slice, run relevant checks, attach evidence, and update the backlog/status. A task may use shared chapter evidence, but must identify which acceptance criteria it covers.
 

@@ -1,0 +1,14 @@
+import { z } from "zod";
+export const healthSchema = z.strictObject({
+  status: z.enum(["ok", "not_ready"]),
+  service: z.enum(["api", "worker", "web"]),
+  version: z.literal("0.0.0"),
+});
+export type Health = z.infer<typeof healthSchema>;
+export const errorSchema = z.strictObject({
+  error: z.strictObject({
+    code: z.string(),
+    message: z.string(),
+    request_id: z.string(),
+  }),
+});

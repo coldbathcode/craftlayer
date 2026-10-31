@@ -34,9 +34,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** A recorded compatibility matrix explains each pinned major and any unsupported host architecture.
 
-### [ ] CL-00-02 — Workspace and dependency boundaries
+### [x] CL-00-02 — Workspace and dependency boundaries
 
-**Depends on:** CL-00-01. **Size:** M. **Status:** not started.
+**Depends on:** CL-00-01. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Create pnpm workspace, strict TS configs, lint/format/build conventions and scripts. Establish pure contracts/core/config and dependency rules; no placeholders masquerading as implemented features.
 
@@ -44,7 +44,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-00-03 — Database and organization foundation
 
-**Depends on:** CL-00-02. **Size:** L. **Status:** not started.
+**Depends on:** CL-00-02. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add Drizzle migration runner, separate migration/runtime roles, organization/project schema seeds and transaction-scoped context. Implement minimal tenant RLS fixtures and composite FK conventions without completing identity.
 
