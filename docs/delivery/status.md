@@ -9,9 +9,9 @@ The user authorized Chapter 01 by requesting the next bit after the Chapter 00 r
 ## Current checkpoint
 
 - Chapter 00: implemented/verified; historical evidence in [review](../reviews/00-foundation.md).
-- Chapter 01: CL-01-01 through CL-01-02 verified (2/7 tasks).
-- Next: CL-01-03.
-- Latest evidence: Implemented restricted-pool auth service, atomic one-time bootstrap, Argon2id password hashing, opaque hashed sessions, login rotation, idle/absolute expiry, logout/session revocation, persistent throttles, exact Origin checks and session-bound CSRF. Cookies are HttpOnly/SameSite=Strict and Secure on HTTPS; HTTP configuration is limited to loopback. `pnpm check` passed (13 unit tests); disposable database suite passed 16 integration tests, including bootstrap race, fixation/rotation, expiry, throttles, Origin/CSRF and HTTPS-cookie cases, plus migration rollback/tamper checks. Local synthetic Argon2id hash/verify each measured 9ms at 19MiB/t=2/p=1. Production Compose upgrade and all service health checks passed; setup remains unclaimed (no test owner created in the real local installation). Future authorization/invitation/recovery workflows are not yet implemented.
+- Chapter 01: CL-01-01 through CL-01-03 verified (3/7 tasks).
+- Next: CL-01-04.
+- Latest evidence: Added table-driven permission/account/scope policy, canonical project/world lookup, membership-derived authority, transactional guards, filtered lists and owner-only organization creation. Child ceilings apply even with an extra admin role and reject coding/research worlds; Builder execution needs explicit scoped delegation. Added signed, expiring execution grants bound to user/membership versions, exact resource and originating session; grants are internal primitives, not a running worker engine. `pnpm check` passed (156 unit/policy tests); disposable DB suite passed 21 integration tests including cross-org IDs, filtered reads, admin vs instance owner, tamper/logout grant denial and HTTP permission/body-scope negatives. All queries remain parameterized and tenant-context checked.
 - Branch/remote: main → https://github.com/coldbathcode/craftlayer.git; each task is committed/pushed. See Git history and [build log](build-log.md) for exact checkpoints.
 - Chapters 02–11 remain unimplemented; no paid inference, public app deployment or Cloud implementation.
 

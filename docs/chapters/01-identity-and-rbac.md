@@ -42,9 +42,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Bootstrap race creates one owner; session fixation, invalid CSRF, expired and revoked tokens fail.
 
-### [ ] CL-01-03 — Authorization and resource scopes
+### [x] CL-01-03 — Authorization and resource scopes
 
-**Depends on:** CL-01-02. **Size:** L. **Status:** not started.
+**Depends on:** CL-01-02. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement permission catalog, membership-derived context, project/world/ownership checks and account restrictions. Require authorization at service boundaries and current versions for later worker grants.
 

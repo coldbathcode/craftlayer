@@ -222,4 +222,247 @@ describe("bootstrap and session security", () => {
     }
   });
 });
+async function fixtureMember(role: string, org = orgId, child = false) {
+  const id = randomBytes(16).toString("hex"),
+    login = `${role}_${id}`,
+    memberId = crypto.randomUUID(),
+    userId = crypto.randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.organization_id',$1,true)", [
+      org,
+    ]);
+    const passwordHash = (
+      await client.query("select password_hash from users where id=$1", [
+        ownerId,
+      ])
+    ).rows[0].password_hash;
+    await client.query(
+      "insert into users(id,login,account_type,password_hash) values($1,$2,$3,$4)",
+      [userId, login, child ? "child" : "adult", passwordHash],
+    );
+    await client.query(
+      "insert into memberships(id,organization_id,user_id) values($1,$2,$3)",
+      [memberId, org, userId],
+    );
+    await client.query(
+      "insert into membership_roles(organization_id,membership_id,role_id) select $1,$2,id from roles where organization_id=$1 and name=$3",
+      [org, memberId, role],
+    );
+    await client.query("commit");
+  } catch (e) {
+    await client.query("rollback");
+    throw e;
+  } finally {
+    client.release();
+  }
+  return {
+    userId,
+    memberId,
+    login,
+    token: (await auth.login({ login, password }, login)).cookieToken,
+  };
+}
+async function grantFixture(
+  memberId: string,
+  permission: string,
+  projectId: string,
+  environmentId: string | null = null,
+  org = orgId,
+) {
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    await client.query("select set_config('app.organization_id',$1,true)", [
+      org,
+    ]);
+    await client.query(
+      "insert into resource_grants(id,organization_id,membership_id,permission,project_id,environment_id) values($1,$2,$3,$4,$5,$6)",
+      [
+        crypto.randomUUID(),
+        org,
+        memberId,
+        permission,
+        projectId,
+        environmentId,
+      ],
+    );
+    await client.query("commit");
+  } catch (e) {
+    await client.query("rollback");
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+describe("organization/resource authorization", () => {
+  it("filters scoped reads and rejects foreign project IDs and org selection", async () => {
+    const first = await auth.createProject(ownerToken, orgId, "Visible"),
+      hidden = await auth.createProject(ownerToken, orgId, "Hidden");
+    const secondOrg = await auth.createOrganization(ownerToken, "Second org"),
+      foreign = await auth.createProject(ownerToken, secondOrg.id, "Foreign");
+    const viewer = await fixtureMember("viewer");
+    await grantFixture(viewer.memberId, "project:read", first.id);
+    expect(
+      (await auth.listProjects(viewer.token, orgId)).map((x) => x.id),
+    ).toEqual([first.id]);
+    expect((await auth.getProject(viewer.token, orgId, first.id)).id).toBe(
+      first.id,
+    );
+    await expect(
+      auth.getProject(viewer.token, orgId, hidden.id),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      auth.getProject(viewer.token, orgId, foreign.id),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      auth.listProjects(viewer.token, secondOrg.id),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      auth.createProject(viewer.token, orgId, "forbidden"),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("keeps instance owner separate from organization admin", async () => {
+    const admin = await fixtureMember("org_admin");
+    await expect(
+      auth.createOrganization(admin.token, "forbidden"),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(
+      (await auth.createProject(admin.token, orgId, "Allowed admin project"))
+        .id,
+    ).toBeTruthy();
+  });
+  it("binds signed execution grants to current authority, session and exact world", async () => {
+    const p = await auth.createProject(ownerToken, orgId, "Operator project"),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "World",
+        type: "minecraft",
+      });
+    const operator = await fixtureMember("operator");
+    await expect(
+      auth.authorize(operator.token, orgId, "mission:execute", {
+        kind: "environment",
+        id: world.id,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await grantFixture(operator.memberId, "mission:execute", p.id, world.id);
+    const grant = await auth.issueExecutionGrant(
+      operator.token,
+      orgId,
+      "mission:execute",
+      { kind: "environment", id: world.id },
+    );
+    expect(await auth.revalidateExecutionGrant(grant)).toBe(true);
+    await expect(
+      auth.revalidateExecutionGrant({
+        ...grant,
+        permission: "provider:manage",
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      auth.authorize(operator.token, orgId, "mission:execute", {
+        kind: "project",
+        id: p.id,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await auth.logout(operator.token);
+    await expect(auth.revalidateExecutionGrant(grant)).rejects.toMatchObject({
+      status: 403,
+    });
+  });
+  it("enforces the child ceiling even with an extra administrator role", async () => {
+    const p = await auth.createProject(ownerToken, orgId, "Child project"),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "Private Minecraft",
+        type: "minecraft",
+      }),
+      code = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: p.id,
+        name: "Code",
+        type: "coding",
+      });
+    const child = await fixtureMember("org_admin", orgId, true);
+    await grantFixture(child.memberId, "environment:read", p.id, world.id);
+    await grantFixture(child.memberId, "environment:read", p.id, code.id);
+    expect((await auth.getEnvironment(child.token, orgId, world.id)).id).toBe(
+      world.id,
+    );
+    await expect(
+      auth.getEnvironment(child.token, orgId, code.id),
+    ).rejects.toMatchObject({ status: 403 });
+    for (const permission of [
+      "provider:manage",
+      "membership:manage",
+      "role:manage",
+      "budget:manage",
+    ] as const)
+      await expect(
+        auth.authorize(child.token, orgId, permission, {
+          kind: "organization",
+          id: orgId,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+  });
+});
+
+it("enforces org/resource authorization at the HTTP boundary and rejects extra org claims", async () => {
+  const project = await auth.createProject(
+      ownerToken,
+      orgId,
+      "API scoped project",
+    ),
+    viewer = await fixtureMember("viewer");
+  await grantFixture(viewer.memberId, "project:read", project.id);
+  const headers = {
+    cookie: `craftlayer_session=${viewer.token}`,
+    "x-craftlayer-organization": orgId,
+  };
+  expect(
+    (await app.inject({ url: `/api/v1/projects/${project.id}`, headers }))
+      .statusCode,
+  ).toBe(200);
+  expect(
+    (
+      await app.inject({
+        url: "/api/v1/projects",
+        headers: {
+          ...headers,
+          "x-craftlayer-organization": crypto.randomUUID(),
+        },
+      })
+    ).statusCode,
+  ).toBe(404);
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/projects",
+        headers: {
+          ...headers,
+          origin: "http://127.0.0.1:3000",
+          "x-csrf-token": auth.csrfToken(viewer.token),
+        },
+        payload: { name: "forbidden" },
+      })
+    ).statusCode,
+  ).toBe(403);
+  expect(
+    (
+      await app.inject({
+        method: "POST",
+        url: "/api/v1/projects",
+        headers: {
+          cookie: `craftlayer_session=${ownerToken}`,
+          "x-craftlayer-organization": orgId,
+          origin: "http://127.0.0.1:3000",
+          "x-csrf-token": auth.csrfToken(ownerToken),
+        },
+        payload: { name: "forged", organization_id: crypto.randomUUID() },
+      })
+    ).statusCode,
+  ).toBe(400);
+});
 // CHAPTER_TESTS

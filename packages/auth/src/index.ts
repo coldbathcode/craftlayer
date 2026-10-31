@@ -5,6 +5,13 @@ import {
   randomUUID,
   timingSafeEqual,
 } from "node:crypto";
+import {
+  type AccessScope,
+  type Authority,
+  canAccess,
+  organizationPermissions,
+  type Permission,
+} from "@craftlayer/core";
 import { hash, verify } from "@node-rs/argon2";
 import pg from "pg";
 import { z } from "zod";
@@ -406,6 +413,7 @@ export class AuthService {
     client: pg.PoolClient,
     token: string,
   ): Promise<Principal> {
+    this.ensureReady();
     if (!/^[A-Za-z0-9_-]{43}$/.test(token))
       throw new AuthError(401, "UNAUTHENTICATED", "Sign in to continue.");
     const now = this.now();
@@ -498,7 +506,468 @@ export class AuthService {
       };
     });
   }
+  private async authority(client: pg.PoolClient, p: Principal, org: string) {
+    await client.query("select set_config('app.organization_id',$1,true)", [
+      org,
+    ]);
+    const member = (
+      await client.query<{ id: string; auth_version: number }>(
+        "select id,auth_version from memberships where organization_id=$1 and user_id=$2 and disabled_at is null for share",
+        [org, p.user.id],
+      )
+    ).rows[0];
+    if (!member)
+      throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+    const roles = await client.query<{ name: string; built_in: boolean }>(
+      "select r.name,r.built_in from membership_roles mr join roles r on r.organization_id=mr.organization_id and r.id=mr.role_id where mr.organization_id=$1 and mr.membership_id=$2",
+      [org, member.id],
+    );
+    const permissions = await client.query<{ permission: string }>(
+      "select distinct rp.permission from membership_roles mr join role_permissions rp on rp.organization_id=mr.organization_id and rp.role_id=mr.role_id where mr.organization_id=$1 and mr.membership_id=$2",
+      [org, member.id],
+    );
+    const grants = await client.query<{
+      permission: string;
+      project_id: string;
+      environment_id: string | null;
+    }>(
+      "select permission,project_id,environment_id from resource_grants where organization_id=$1 and membership_id=$2",
+      [org, member.id],
+    );
+    const a: Authority = {
+      accountType: p.user.account_type,
+      permissions: permissions.rows.map((x) => x.permission),
+      roles: roles.rows.filter((x) => x.built_in).map((x) => x.name),
+      orgAdmin: roles.rows.some((x) => x.built_in && x.name === "org_admin"),
+      grants: grants.rows.map((x) => ({
+        permission: x.permission,
+        projectId: x.project_id,
+        environmentId: x.environment_id,
+      })),
+    };
+    return { member, a };
+  }
+  private async canonicalScope(
+    client: pg.PoolClient,
+    org: string,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+  ): Promise<AccessScope> {
+    if (!z.uuid().safeParse(scope.id).success)
+      throw new AuthError(404, "NOT_FOUND", "Resource not found.");
+    if (scope.kind === "organization") {
+      if (scope.id !== org)
+        throw new AuthError(404, "NOT_FOUND", "Resource not found.");
+      return scope;
+    }
+    if (scope.kind === "project") {
+      if (
+        !(
+          await client.query(
+            "select id from projects where organization_id=$1 and id=$2",
+            [org, scope.id],
+          )
+        ).rowCount
+      )
+        throw new AuthError(404, "NOT_FOUND", "Project not found.");
+      return scope;
+    }
+    const r = (
+      await client.query<{ project_id: string; type: string }>(
+        "select project_id,type from environments where organization_id=$1 and id=$2",
+        [org, scope.id],
+      )
+    ).rows[0];
+    if (!r) throw new AuthError(404, "NOT_FOUND", "Environment not found.");
+    return { ...scope, projectId: r.project_id, environmentType: r.type };
+  }
+  private async orgAction<T>(
+    token: string,
+    org: string,
+    permission: string,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+    operation: (
+      client: pg.PoolClient,
+      p: Principal,
+      a: Authority,
+      member: { id: string; auth_version: number },
+    ) => Promise<T>,
+    write = false,
+  ): Promise<T> {
+    this.ensureReady();
+    if (!z.uuid().safeParse(org).success)
+      throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+    let actor: string | null = null;
+    try {
+      return await this.transaction(async (client) => {
+        if (write)
+          await client.query(
+            "select pg_advisory_xact_lock(hashtextextended($1,74618003))",
+            [org],
+          );
+        const p = await this.sessionIn(client, token);
+        actor = p.user.id;
+        const { member, a } = await this.authority(client, p, org);
+        const canonical = await this.canonicalScope(client, org, scope);
+        if (!canAccess(a, permission, canonical))
+          throw new AuthError(
+            403,
+            "PERMISSION_DENIED",
+            "You do not have permission for this action.",
+          );
+        return operation(client, p, a, member);
+      });
+    } catch (error) {
+      if (error instanceof AuthError && [403, 404].includes(error.status))
+        await this.transaction((client) =>
+          this.audit(client, actor, "access.denied", null, false),
+        );
+      throw error;
+    }
+  }
+  async authorize(
+    token: string,
+    org: string,
+    permission: Permission,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+  ) {
+    return this.orgAction(
+      token,
+      org,
+      permission,
+      scope,
+      async (_c, p, _a, member) => ({
+        userId: p.user.id,
+        organizationId: org,
+        membershipId: member.id,
+        membershipVersion: member.auth_version,
+      }),
+    );
+  }
+  async createOrganization(token: string, name: string) {
+    name = z.string().trim().min(1).max(120).parse(name);
+    return this.transaction(async (client) => {
+      const p = await this.sessionIn(client, token);
+      if (
+        p.user.account_type !== "adult" ||
+        !(
+          await client.query("select 1 from instance_owners where user_id=$1", [
+            p.user.id,
+          ])
+        ).rowCount
+      )
+        throw new AuthError(
+          403,
+          "INSTANCE_PERMISSION_DENIED",
+          "Instance owner permission required.",
+        );
+      const org = randomUUID(),
+        member = randomUUID();
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        org,
+      ]);
+      await client.query("insert into organizations(id,name) values($1,$2)", [
+        org,
+        name,
+      ]);
+      await this.seedRoles(client, org);
+      await client.query(
+        "insert into memberships(id,organization_id,user_id) values($1,$2,$3)",
+        [member, org, p.user.id],
+      );
+      await client.query(
+        "insert into membership_roles(organization_id,membership_id,role_id) select $1,$2,id from roles where organization_id=$1 and name='org_admin' and built_in=true",
+        [org, member],
+      );
+      await this.audit(
+        client,
+        p.user.id,
+        "organization.created",
+        org,
+        true,
+        org,
+      );
+      return { id: org, name };
+    });
+  }
+  async createProject(token: string, org: string, name: string) {
+    name = z.string().trim().min(1).max(120).parse(name);
+    return this.orgAction(
+      token,
+      org,
+      "project:create",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        const id = randomUUID();
+        await client.query(
+          "insert into projects(id,organization_id,name) values($1,$2,$3)",
+          [id, org, name],
+        );
+        await this.audit(client, p.user.id, "project.created", id, true, org);
+        return { id, name };
+      },
+      true,
+    );
+  }
+  async listProjects(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "organization:read",
+      { kind: "organization", id: org },
+      async (client, _p, a) => {
+        const r = await client.query<{ id: string; name: string }>(
+          "select id,name from projects where organization_id=$1 order by created_at limit 100",
+          [org],
+        );
+        return r.rows.filter((x) =>
+          canAccess(a, "project:read", { kind: "project", id: x.id }),
+        );
+      },
+    );
+  }
+  async getProject(token: string, org: string, id: string) {
+    return this.orgAction(
+      token,
+      org,
+      "project:read",
+      { kind: "project", id },
+      async (client) =>
+        (
+          await client.query(
+            "select id,name from projects where organization_id=$1 and id=$2",
+            [org, id],
+          )
+        ).rows[0],
+    );
+  }
+  async createEnvironment(
+    token: string,
+    org: string,
+    input: {
+      projectId: string;
+      name: string;
+      type: "minecraft" | "coding" | "research";
+    },
+  ) {
+    const value = z
+      .strictObject({
+        projectId: z.uuid(),
+        name: z.string().trim().min(1).max(120),
+        type: z.enum(["minecraft", "coding", "research"]),
+      })
+      .parse(input);
+    return this.orgAction(
+      token,
+      org,
+      "environment:admin",
+      { kind: "project", id: value.projectId },
+      async (client, p) => {
+        const id = randomUUID();
+        await client.query(
+          "insert into environments(id,organization_id,project_id,name,type) values($1,$2,$3,$4,$5)",
+          [id, org, value.projectId, value.name, value.type],
+        );
+        await this.audit(
+          client,
+          p.user.id,
+          "environment.created",
+          id,
+          true,
+          org,
+        );
+        return { id, ...value };
+      },
+      true,
+    );
+  }
+  async listEnvironments(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "organization:read",
+      { kind: "organization", id: org },
+      async (client, _p, a) => {
+        const r = await client.query<{
+          id: string;
+          name: string;
+          project_id: string;
+          type: string;
+        }>(
+          "select id,name,project_id,type from environments where organization_id=$1 limit 100",
+          [org],
+        );
+        return r.rows.filter((x) =>
+          canAccess(a, "environment:read", {
+            kind: "environment",
+            id: x.id,
+            projectId: x.project_id,
+            environmentType: x.type,
+          }),
+        );
+      },
+    );
+  }
+  async getEnvironment(token: string, org: string, id: string) {
+    return this.orgAction(
+      token,
+      org,
+      "environment:read",
+      { kind: "environment", id },
+      async (client) =>
+        (
+          await client.query(
+            "select id,name,project_id,type from environments where organization_id=$1 and id=$2",
+            [org, id],
+          )
+        ).rows[0],
+    );
+  }
+  private grantBody(grant: ExecutionGrant) {
+    return JSON.stringify([
+      grant.version,
+      grant.id,
+      grant.userId,
+      grant.organizationId,
+      grant.membershipId,
+      grant.sessionId,
+      grant.userVersion,
+      grant.membershipVersion,
+      grant.permission,
+      grant.resource.kind,
+      grant.resource.id,
+      grant.issuedAt,
+      grant.expiresAt,
+    ]);
+  }
+  private grantSignature(grant: ExecutionGrant) {
+    return createHmac("sha256", this.#options.csrfSecret)
+      .update(`grant/v1/${this.grantBody(grant)}`)
+      .digest("base64url");
+  }
+  async issueExecutionGrant(
+    token: string,
+    org: string,
+    permission: Permission,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+  ): Promise<ExecutionGrant> {
+    return this.orgAction(
+      token,
+      org,
+      permission,
+      scope,
+      async (client, p, _a, member) => {
+        const issuedAt = this.now().getTime();
+        const grant: ExecutionGrant = {
+          version: 1,
+          id: randomUUID(),
+          userId: p.user.id,
+          organizationId: org,
+          membershipId: member.id,
+          sessionId: p.sessionId,
+          userVersion: p.userVersion,
+          membershipVersion: member.auth_version,
+          permission: z.enum(organizationPermissions).parse(permission),
+          resource: scope,
+          issuedAt,
+          expiresAt: issuedAt + 3600000,
+          signature: "",
+        };
+        grant.signature = this.grantSignature(grant);
+        await this.audit(
+          client,
+          p.user.id,
+          "execution.grant_issued",
+          grant.id,
+          true,
+          org,
+        );
+        return grant;
+      },
+    );
+  }
+  async revalidateExecutionGrant(value: ExecutionGrant) {
+    this.ensureReady();
+    const parsed = executionGrantSchema.safeParse(value);
+    if (!parsed.success)
+      throw new AuthError(403, "GRANT_DENIED", "Execution grant is invalid.");
+    const grant = parsed.data;
+    const now = this.now().getTime();
+    if (
+      grant.issuedAt > now ||
+      grant.expiresAt <= now ||
+      grant.expiresAt - grant.issuedAt > 3600000 ||
+      !equal(grant.signature, this.grantSignature(grant))
+    )
+      throw new AuthError(
+        403,
+        "GRANT_DENIED",
+        "Execution grant is invalid or expired.",
+      );
+    return this.transaction(async (client) => {
+      const result = await client.query<UserRow>(
+        "select u.* from users u join sessions s on s.user_id=u.id where u.id=$1 and s.id=$2 and s.revoked_at is null and s.expires_at>$3 and s.idle_expires_at>$3 and s.auth_version=u.auth_version and u.auth_version=$4 and u.disabled_at is null for share of u,s",
+        [grant.userId, grant.sessionId, this.now(), grant.userVersion],
+      );
+      const user = result.rows[0];
+      if (!user)
+        throw new AuthError(
+          403,
+          "GRANT_DENIED",
+          "Execution authority was revoked.",
+        );
+      const p: Principal = {
+        user: this.publicUser(user),
+        sessionId: grant.sessionId,
+        userVersion: user.auth_version,
+      };
+      const { member, a } = await this.authority(
+        client,
+        p,
+        grant.organizationId,
+      );
+      if (
+        member.id !== grant.membershipId ||
+        member.auth_version !== grant.membershipVersion ||
+        !canAccess(
+          a,
+          grant.permission,
+          await this.canonicalScope(
+            client,
+            grant.organizationId,
+            grant.resource,
+          ),
+        )
+      )
+        throw new AuthError(
+          403,
+          "GRANT_DENIED",
+          "Execution authority changed.",
+        );
+      return true;
+    });
+  }
+
   // CHAPTER_METHODS
 }
+
+export const executionGrantSchema = z.strictObject({
+  version: z.literal(1),
+  id: z.uuid(),
+  userId: z.uuid(),
+  organizationId: z.uuid(),
+  membershipId: z.uuid(),
+  sessionId: z.uuid(),
+  userVersion: z.number().int().positive(),
+  membershipVersion: z.number().int().positive(),
+  permission: z.enum(organizationPermissions),
+  resource: z.strictObject({
+    kind: z.enum(["organization", "project", "environment"]),
+    id: z.uuid(),
+  }),
+  issuedAt: z.number().int().nonnegative(),
+  expiresAt: z.number().int().nonnegative(),
+  signature: z.string().max(43),
+});
+export type ExecutionGrant = z.infer<typeof executionGrantSchema>;
 
 export type IdentityService = Pick<AuthService, keyof AuthService>;

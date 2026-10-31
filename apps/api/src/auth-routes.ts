@@ -106,5 +106,82 @@ export async function registerAuth(
       return { ok: true };
     },
   );
+  const organization = (request: FastifyRequest) => {
+    const value = request.headers["x-craftlayer-organization"];
+    if (typeof value !== "string" || !z.uuid().safeParse(value).success)
+      throw new AuthError(
+        400,
+        "ORGANIZATION_REQUIRED",
+        "Select an organization.",
+      );
+    return value;
+  };
+  api.get("/api/v1/organizations", async (request) => ({
+    items: (await auth.me(token(request))).organizations,
+  }));
+  api.post(
+    "/api/v1/organizations",
+    {
+      schema: {
+        body: z.strictObject({ name: z.string().trim().min(1).max(120) }),
+      },
+    },
+    async (request) =>
+      auth.createOrganization(token(request), request.body.name),
+  );
+  api.get("/api/v1/projects", async (request) => ({
+    items: await auth.listProjects(token(request), organization(request)),
+  }));
+  api.post(
+    "/api/v1/projects",
+    {
+      schema: {
+        body: z.strictObject({ name: z.string().trim().min(1).max(120) }),
+      },
+    },
+    async (request) =>
+      auth.createProject(
+        token(request),
+        organization(request),
+        request.body.name,
+      ),
+  );
+  api.get(
+    "/api/v1/projects/:id",
+    { schema: { params: z.strictObject({ id }) } },
+    async (request) =>
+      auth.getProject(token(request), organization(request), request.params.id),
+  );
+  api.get("/api/v1/environments", async (request) => ({
+    items: await auth.listEnvironments(token(request), organization(request)),
+  }));
+  api.get(
+    "/api/v1/environments/:id",
+    { schema: { params: z.strictObject({ id }) } },
+    async (request) =>
+      auth.getEnvironment(
+        token(request),
+        organization(request),
+        request.params.id,
+      ),
+  );
+  api.post(
+    "/api/v1/environments",
+    {
+      schema: {
+        body: z.strictObject({
+          projectId: id,
+          name: z.string().trim().min(1).max(120),
+          type: z.enum(["minecraft", "coding", "research"]),
+        }),
+      },
+    },
+    async (request) =>
+      auth.createEnvironment(
+        token(request),
+        organization(request),
+        request.body,
+      ),
+  );
   // CHAPTER_ROUTES
 }
