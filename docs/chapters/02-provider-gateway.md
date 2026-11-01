@@ -50,9 +50,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Mocked contract suite passes; optional local smoke records exact model and hardware without requiring cloud.
 
-### [ ] CL-02-04 — OpenRouter adapter
+### [x] CL-02-04 — OpenRouter adapter
 
-**Depends on:** CL-02-03. **Size:** L. **Status:** not started.
+**Depends on:** CL-02-03. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement catalog fetch, pricing/capability normalization, configured free entries, explicit routing controls and accounted retries. Never rely on a model suffix alone or send unvetted fallback arrays.
 
