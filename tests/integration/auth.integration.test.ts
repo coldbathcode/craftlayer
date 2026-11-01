@@ -41,6 +41,7 @@ import {
   redisPublisher,
 } from "../../packages/runtime/src/index.js";
 import { startSimulationWorker } from "../../packages/runtime/src/worker.js";
+import { readRuntimeStream } from "../../packages/sdk/src/stream.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -2828,6 +2829,52 @@ describe("scoped runtime command API and CLI", () => {
       expect(get.code).toBe(0);
       expect(JSON.parse(get.output).state).toBe("draft");
       expect(get.output).not.toMatch(/execution_grant|csrf|cookie/);
+      const events = await cli(["events", "list", orgId, f.env.id]);
+      expect(events.code).toBe(0);
+      expect(JSON.parse(events.output).snapshot[0].id).toBe(mission.id);
+      const watched = await new Promise<{
+        code: number | null;
+        output: string;
+      }>((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          [
+            "--import",
+            "tsx",
+            "apps/cli/src/main.ts",
+            "events",
+            "watch",
+            orgId,
+            f.env.id,
+          ],
+          {
+            env: {
+              ...process.env,
+              CRAFTLAYER_CLI_SESSION_FILE: `${directory}/session`,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        let output = "";
+        const timer = setTimeout(() => {
+          child.kill("SIGKILL");
+          reject(new Error("CLI watch did not produce a snapshot"));
+        }, 5000);
+        child.stdout.on("data", (x) => {
+          output += x;
+          if (output.includes('"type":"snapshot"')) child.kill("SIGTERM");
+        });
+        child.stderr.on("data", (x) => {
+          output += x;
+        });
+        child.on("error", reject);
+        child.on("exit", (code) => {
+          clearTimeout(timer);
+          resolve({ code, output });
+        });
+      });
+      expect(watched.code).toBe(0);
+      expect(watched.output).toContain('"type":"snapshot"');
       const execute = await cli([
         "mission",
         "execute",
@@ -4433,4 +4480,219 @@ describe("registered worker authority and fenced effects", () => {
       await runtime.cleanup(f.org);
     }
   });
+  it("replays authorized events with encrypted scope-bound cursors and snapshots expired positions", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    try {
+      const initial = await runtime.eventPage(ownerToken, f.org, f.env.id);
+      expect(initial.items).toHaveLength(0);
+      expect(initial.snapshot?.some((m) => m.id === f.mission)).toBe(true);
+      const c = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!c) throw new Error("Missing claim");
+      await runtime.prepareAction(token, 1, handle(c));
+      await runtime.finish(token, 1, {
+        ...handle(c),
+        outcome: "succeeded",
+        value: "verified",
+      });
+      const page = await runtime.eventPage(
+        ownerToken,
+        f.org,
+        f.env.id,
+        initial.cursor,
+      );
+      expect(page.items.map((e) => e.type)).toEqual([
+        "task.running",
+        "task.succeeded",
+        "mission.succeeded",
+      ]);
+      const replay = await runtime.eventPage(
+        ownerToken,
+        f.org,
+        f.env.id,
+        initial.cursor,
+      );
+      expect(replay.items.map((e) => e.event_id)).toEqual(
+        page.items.map((e) => e.event_id),
+      );
+      expect(
+        (await runtime.eventPage(ownerToken, f.org, f.env.id, page.cursor))
+          .items,
+      ).toHaveLength(0);
+      expect(JSON.stringify(page)).not.toMatch(
+        /execution_grant|signature|prompt|token_hash|request_id/,
+      );
+      const other = await auth.createEnvironment(ownerToken, f.org, {
+        projectId: f.project.id,
+        name: "Other event scope",
+        type: "simulation",
+      });
+      await expect(
+        runtime.eventPage(ownerToken, f.org, other.id, page.cursor),
+      ).rejects.toMatchObject({ status: 403 });
+      const adult = await fixtureMember("org_admin", f.org);
+      await expect(
+        runtime.eventPage(adult.token, f.org, f.env.id, page.cursor),
+      ).rejects.toMatchObject({ status: 403 });
+      const changed =
+        page.cursor.slice(0, 20) +
+        (page.cursor[20] === "a" ? "b" : "a") +
+        page.cursor.slice(21);
+      await expect(
+        runtime.eventPage(ownerToken, f.org, f.env.id, changed),
+      ).rejects.toMatchObject({ status: 403 });
+      now = new Date(now.getTime() + 900001);
+      const expired = await runtime.eventPage(
+        ownerToken,
+        f.org,
+        f.env.id,
+        page.cursor,
+      );
+      expect(expired.resync_required).toBe(true);
+      expect(expired.snapshot?.[0]?.state).toBe("succeeded");
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("streams over real HTTP, enforces connection/origin limits and closes promptly after session revocation", async () => {
+    const f = await fixture(),
+      adult = await fixtureMember("org_admin", f.org),
+      server = await buildApp({ auth, runtime, readiness: async () => true }),
+      abort = new AbortController();
+    const frames: unknown[] = [];
+    let ready!: () => void;
+    const started = new Promise<void>((r) => {
+      ready = r;
+    });
+    const address = await server.listen({ host: "127.0.0.1", port: 0 }),
+      url = `${address}/api/v1/events/stream?environment_id=${f.env.id}`,
+      headers = {
+        origin: "http://127.0.0.1:3000",
+        cookie: `craftlayer_session=${adult.token}`,
+        "x-craftlayer-organization": f.org,
+      };
+    const reads: Promise<unknown>[] = [];
+    try {
+      const first = await fetch(url, { headers, signal: abort.signal });
+      expect(first.status).toBe(200);
+      reads.push(
+        readRuntimeStream(
+          first,
+          (frame) => {
+            frames.push(frame);
+            ready();
+          },
+          abort.signal,
+        ),
+      );
+      await started;
+      const second = await fetch(url, { headers, signal: abort.signal });
+      expect(second.status).toBe(200);
+      reads.push(readRuntimeStream(second, () => {}, abort.signal));
+      const denied = await fetch(url, { headers, signal: abort.signal });
+      expect(denied.status).toBe(429);
+      await denied.arrayBuffer();
+      const foreign = await fetch(url, {
+        headers: { ...headers, origin: "https://evil.invalid" },
+        signal: abort.signal,
+      });
+      expect(foreign.status).toBe(403);
+      await foreign.arrayBuffer();
+      await auth.logout(adult.token);
+      const at = performance.now();
+      await Promise.race([
+        Promise.all(reads),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Revoked streams stayed open")),
+            3000,
+          ),
+        ),
+      ]);
+      expect(performance.now() - at).toBeLessThan(3000);
+      expect(
+        frames.some((f) => (f as { type: string }).type === "snapshot"),
+      ).toBe(true);
+    } finally {
+      abort.abort();
+      await Promise.allSettled(reads);
+      await server.close();
+      await runtime.cleanup(f.org);
+    }
+  }, 15000);
+  it("disconnects on injected socket backpressure and frees its connection slot", async () => {
+    const f = await fixture(),
+      server = await buildApp({ auth, runtime, readiness: async () => true }),
+      { get } = await import("node:http"),
+      address = await server.listen({ host: "127.0.0.1", port: 0 });
+    const headers = {
+      origin: "http://127.0.0.1:3000",
+      cookie: `craftlayer_session=${ownerToken}`,
+      "x-craftlayer-organization": f.org,
+    };
+    let request: ReturnType<typeof get> | undefined,
+      pressureInjected = false;
+    // Deterministic small-buffer transport fault; OS socket window sizes vary by host.
+    server.server.on("request", (_request, response) => {
+      const original = response.write;
+      response.write = ((...args: unknown[]) => {
+        const result = Reflect.apply(original, response, args);
+        if (
+          !pressureInjected &&
+          String(args[0]).includes("event: task.ready")
+        ) {
+          pressureInjected = true;
+          return false;
+        }
+        return result;
+      }) as typeof response.write;
+    });
+    try {
+      const response = await new Promise<import("node:http").IncomingMessage>(
+        (resolve, reject) => {
+          request = get(
+            `${address}/api/v1/events/stream?environment_id=${f.env.id}`,
+            { headers },
+            (r) => {
+              r.pause();
+              resolve(r);
+            },
+          );
+          request.on("error", reject);
+        },
+      );
+      expect(response.statusCode).toBe(200);
+      await runtime.inspect(
+        f.org,
+        "insert into runtime_events(id,organization_id,project_id,environment_id,mission_id,type,payload,aggregate_version) select gen_random_uuid(),organization_id,project_id,environment_id,id,'task.ready',$3,version from runtime_missions cross join generate_series(1,80) where organization_id=$1 and id=$2",
+        [f.org, f.mission, { state: "ready", task_id: f.reference.task_id }],
+      );
+      await new Promise((r) => setTimeout(r, 800));
+      const ended = new Promise<void>((resolve, reject) => {
+        const timer = setTimeout(
+          () => reject(new Error("Slow stream did not close")),
+          3000,
+        );
+        response.once("end", () => {
+          clearTimeout(timer);
+          resolve();
+        });
+        response.once("error", reject);
+      });
+      response.resume();
+      await ended;
+      expect(pressureInjected).toBe(true);
+      const controller = new AbortController(),
+        next = await fetch(
+          `${address}/api/v1/events/stream?environment_id=${f.env.id}`,
+          { headers, signal: controller.signal },
+        );
+      expect(next.status).toBe(200);
+      controller.abort();
+    } finally {
+      request?.destroy();
+      await server.close();
+      await runtime.cleanup(f.org);
+    }
+  }, 15000);
 });

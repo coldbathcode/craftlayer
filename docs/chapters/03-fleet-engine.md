@@ -66,9 +66,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Stop persists through restart; partitioned worker ceases effects by deadline and late results are rejected.
 
-### [ ] CL-03-06 — Authorized event projection and recovery
+### [x] CL-03-06 — Authorized event projection and recovery
 
-**Depends on:** CL-03-05. **Size:** L. **Status:** in progress; expired-attempt/reconciliation checkpoint verified; authorized events remain.
+**Depends on:** CL-03-05. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement cursor events, WebSocket/SSE projection, bounded buffers, revocation and replay/resync. Recover expired tasks, uncertain effects and dispatch after Redis loss.
 

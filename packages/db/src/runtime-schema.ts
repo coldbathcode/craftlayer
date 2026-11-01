@@ -317,6 +317,7 @@ export const runtimeEvents = pgTable(
     projectId: uuid("project_id").notNull(),
     environmentId: uuid("environment_id").notNull(),
     missionId: uuid("mission_id"),
+    aggregateVersion: integer("aggregate_version").notNull().default(1),
     type: varchar("type", { length: 64 }).notNull(),
     payload: jsonb("payload").notNull(),
     createdAt: time("created_at").notNull().defaultNow(),

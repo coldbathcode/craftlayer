@@ -9,6 +9,7 @@ import {
   missionView,
   reconcileAttempt,
   recoveryEvidence,
+  runtimeEventPage,
   stopRequest,
   stopView,
   templateCreate,
@@ -32,6 +33,12 @@ export type RuntimeTransport = <T extends z.ZodType>(
 ) => Promise<z.infer<T>>;
 export function createRuntimeClient(send: RuntimeTransport) {
   return {
+    events: (org: string, env: string, cursor?: string, mission?: string) =>
+      send(
+        `/api/v1/events?environment_id=${encodeURIComponent(env)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}${mission ? `&mission_id=${encodeURIComponent(mission)}` : ""}`,
+        runtimeEventPage,
+        { organization: org },
+      ),
     approvals: (org: string, environment: string) =>
       send(
         `/api/v1/approvals?environment_id=${encodeURIComponent(environment)}`,

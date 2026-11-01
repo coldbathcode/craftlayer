@@ -35,11 +35,14 @@ import type { RuntimeService } from "@craftlayer/runtime";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { registerRuntimeStreams } from "./runtime-streams.js";
 export type RuntimeApi = Pick<RuntimeService, keyof RuntimeService>;
 export async function registerRuntime(
   app: FastifyInstance,
   runtime: RuntimeApi,
+  publicUrl = "http://127.0.0.1:3000",
 ) {
+  await registerRuntimeStreams(app, runtime, publicUrl);
   const api = app.withTypeProvider<ZodTypeProvider>(),
     token = (r: FastifyRequest) => r.cookies.craftlayer_session ?? "";
   const org = (r: FastifyRequest) => {

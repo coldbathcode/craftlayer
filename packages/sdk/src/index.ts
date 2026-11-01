@@ -73,3 +73,4 @@ export async function identityRequest<T extends z.ZodType>(
   return parsed.data;
 }
 export * from "./runtime.js";
+export { type RuntimeStreamFrame, readRuntimeStream } from "./stream.js";

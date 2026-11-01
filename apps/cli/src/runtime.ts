@@ -11,7 +11,11 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { createRuntimeClient, type RuntimeTransport } from "@craftlayer/sdk";
+import {
+  createRuntimeClient,
+  type RuntimeTransport,
+  readRuntimeStream,
+} from "@craftlayer/sdk";
 import { z } from "zod";
 import { readSecret } from "./secret.js";
 
@@ -52,6 +56,7 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
       "worker",
       "approval",
       "stop",
+      "events",
     ].includes(command ?? "")
   )
     return false;
@@ -150,6 +155,62 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     const client = createRuntimeClient(send);
     if (!org) throw new Error("Organization required");
     z.uuid().parse(org);
+    if (command === "events" && sub === "watch" && a) {
+      const environment = z.uuid().parse(a),
+        abort = new AbortController(),
+        stop = () => abort.abort();
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      let cursor = b,
+        failures = 0;
+      try {
+        while (!abort.signal.aborted) {
+          let frames = 0;
+          const response = await fetch(
+            `${base}/api/v1/events/stream?environment_id=${environment}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+            {
+              redirect: "error",
+              signal: abort.signal,
+              headers: {
+                origin: base,
+                cookie: session.cookie,
+                "x-craftlayer-organization": org,
+              },
+            },
+          );
+          cursor =
+            (await readRuntimeStream(
+              response,
+              (frame) => {
+                frames++;
+                cursor = frame.data.cursor;
+                if (process.stdout.writableLength > 65536)
+                  throw new Error("Slow stream output");
+                console.log(JSON.stringify(frame));
+              },
+              abort.signal,
+            )) ?? cursor;
+          failures = frames ? 0 : failures + 1;
+          if (failures >= 5) throw new Error("Stream repeatedly closed");
+          if (!abort.signal.aborted)
+            await new Promise<void>((r) => {
+              const done = () => {
+                clearTimeout(timer);
+                abort.signal.removeEventListener("abort", done);
+                r();
+              };
+              const timer = setTimeout(done, 1000);
+              abort.signal.addEventListener("abort", done, { once: true });
+            });
+        }
+      } catch (error) {
+        if (!abort.signal.aborted) throw error;
+      } finally {
+        process.removeListener("SIGINT", stop);
+        process.removeListener("SIGTERM", stop);
+      }
+      return true;
+    }
     if (command === "worker" && sub === "enroll" && a) {
       const path = resolve(b ?? ".worker-secrets/credential.json");
       if (
@@ -185,7 +246,9 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     }
     let result: unknown;
     const json = async () => JSON.parse(await readFile(a ?? "", "utf8"));
-    if (command === "mission" && sub === "recovery" && a)
+    if (command === "events" && sub === "list" && a)
+      result = await client.events(org, z.uuid().parse(a), b);
+    else if (command === "mission" && sub === "recovery" && a)
       result = await client.recovery(org, z.uuid().parse(a));
     else if (command === "mission" && sub === "reconcile" && a && b)
       result = await client.reconcile(

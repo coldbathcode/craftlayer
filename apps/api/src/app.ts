@@ -145,7 +145,11 @@ export async function buildApp(options: {
   if (options.providers && options.auth)
     await registerProviders(app, options.providers);
   if (options.runtime && options.auth)
-    await registerRuntime(app, options.runtime);
+    await registerRuntime(
+      app,
+      options.runtime,
+      options.publicUrl ?? "http://127.0.0.1:3000",
+    );
   await app.ready();
   return app;
 }

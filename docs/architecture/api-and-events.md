@@ -50,7 +50,7 @@ The following external-execution HTTP conventions are planned for Chapter 03. Ch
 | `POST /missions/:id/pause`, `/resume`, `/cancel` | Versioned state transition, idempotent command | 03 |
 | `POST /emergency-stop`; `GET /stop-operations/:id` | Scoped latch and acknowledgement visibility | 03 |
 | `POST /emergency-stop/:id/clear` | Separate adult/privileged clear; no implicit resume | 03 |
-| `GET /events`; `GET /events/stream` | Cursor replay plus WebSocket upgrade/SSE projection | 03, 05 |
+| `GET /events`; `GET /events/stream` | Cursor replay plus SSE projection (ADR 0014) | 03, 05 |
 | `/approvals`; `POST /approvals/:id/decision` | Exact-action independent adult approval; simulation primitive in 03, coding expansion in 08 | 03, 08 |
 | `GET /artifacts/:id`, `/research-sources/:id` | Scoped safe download, no filesystem path exposure | 08 |
 | `GET /audit` | Redacted admin audit cursor | 01 onward |

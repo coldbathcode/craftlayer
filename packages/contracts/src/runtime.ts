@@ -374,3 +374,62 @@ export const reconcileAttempt = z.strictObject({
   quiescent: z.literal(true),
   reason: z.string().trim().min(1).max(240),
 });
+
+export const runtimeEventType = z.enum([
+  "mission.created",
+  "mission.queued",
+  "mission.succeeded",
+  "mission.failed",
+  "mission.blocked",
+  "mission.approval_resolved",
+  "mission.cancel_requested",
+  "mission.paused",
+  "mission.cancelled",
+  "mission.resumed",
+  "task.ready",
+  "task.running",
+  "task.blocked",
+  "task.succeeded",
+  "task.failed",
+  "task.retry_wait",
+  "task.uncertain",
+  "task.recovered",
+  "task.reconciled",
+  "approval.decided",
+  "approval.invalidated",
+]);
+export const runtimeEventPayload = z.strictObject({
+  task_id: z.uuid().optional(),
+  attempt_id: z.uuid().optional(),
+  approval_id: z.uuid().optional(),
+  operation_id: z.uuid().nullable().optional(),
+  fence: z.number().int().positive().optional(),
+  version: z.number().int().positive().optional(),
+  state: z.enum([...missionState.options, ...taskState.options]).optional(),
+  reason: runtimeReason.optional(),
+  verified: z.boolean().optional(),
+  decision: z.enum(["approve", "reject"]).optional(),
+});
+export const eventCursor = z.string().regex(/^[A-Za-z0-9_-]{64,2048}$/);
+export const runtimeEvent = z.strictObject({
+  schema_version: z.literal(1),
+  event_id: z.uuid(),
+  cursor: eventCursor,
+  type: runtimeEventType,
+  organization_id: z.uuid(),
+  project_id: z.uuid(),
+  environment_id: z.uuid(),
+  mission_id: z.uuid().nullable(),
+  occurred_at: z.iso.datetime(),
+  aggregate_version: z.number().int().positive(),
+  payload: runtimeEventPayload,
+});
+export const missionSummary = missionView.omit({ tasks: true });
+export const runtimeEventPage = z.strictObject({
+  items: z.array(runtimeEvent).max(50),
+  cursor: eventCursor,
+  has_more: z.boolean(),
+  resync_required: z.boolean(),
+  snapshot: z.array(missionSummary).max(20).nullable(),
+  snapshot_truncated: z.boolean(),
+});
