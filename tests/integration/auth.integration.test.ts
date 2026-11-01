@@ -1530,14 +1530,14 @@ describe("provider credential and connection boundary", () => {
       keyPath(),
       JSON.stringify({ active: "two", keys: { one, two } }),
     );
-    const rotated = await providers.changeCredential(
-      ownerToken,
-      orgId,
-      connection.id,
-      1,
-      null,
-      true,
-    );
+    const rewrap = await providerApp.inject({
+      method: "POST",
+      url: `/api/v1/providers/${connection.id}/rewrap`,
+      headers: headers(),
+      payload: { expected_version: 1 },
+    });
+    expect(rewrap.statusCode).toBe(200);
+    const rotated = rewrap.json();
     expect(rotated.key_id).toBe("two");
     await expect(
       providers.setEnabled(ownerToken, orgId, connection.id, 1, false),

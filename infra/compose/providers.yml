@@ -4,10 +4,10 @@ services:
     user: "${CRAFTLAYER_HOST_UID:?Run pnpm setup:providers}:${CRAFTLAYER_HOST_GID:?Run pnpm setup:providers}"
     networks: [default, provider-egress]
     environment:
-      CRAFTLAYER_PROVIDER_KEY_FILE: /run/secrets/provider-keys.json
-      CRAFTLAYER_PROVIDER_POLICY_FILE: /run/secrets/provider-policy.json
+      CRAFTLAYER_PROVIDER_KEY_FILE: /run/secrets/providers/provider-keys.json
+      CRAFTLAYER_PROVIDER_POLICY_FILE: /run/secrets/providers/provider-policy.json
     volumes:
-      - ./.secrets/provider-keys.json:/run/secrets/provider-keys.json:ro
-      - ./.secrets/provider-policy.json:/run/secrets/provider-policy.json:ro
+      # Directory mount permits atomic replacement of protected key/policy files.
+      - ./.secrets:/run/secrets/providers:ro
 networks:
   provider-egress: {}

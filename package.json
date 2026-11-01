@@ -32,7 +32,8 @@
     "test:offline": "node scripts/test-offline.mjs",
     "check:stack": "node --env-file-if-exists=.env scripts/check-stack.mjs",
     "test:identity-ui": "node scripts/test-identity-ui.mjs",
-    "setup:providers": "node scripts/setup-providers.mjs"
+    "setup:providers": "node scripts/setup-providers.mjs",
+    "test:provider-stack": "node scripts/test-provider-stack.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

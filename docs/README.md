@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–01 implemented; Chapter 01 is accepted for advancement and Chapter 02 is authorized/in progress; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 owner review is pending and Chapter 03 requires authorization; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -62,3 +62,7 @@ Read the current status before choosing a task. Specifications are proposed impl
 ## Implemented local identity
 
 [Account/recovery runbook](development/identity-and-recovery.md), [identity chapter review](reviews/01-identity-and-rbac.md), and [identity handoff](delivery/handoffs/01-identity-and-rbac.md) describe the account console, real database/browser checks, recovery and remaining scope.
+
+## Implemented provider gateway
+
+[Provider and budget runbook](development/providers-and-budgets.md), [provider review](reviews/02-provider-gateway.md) and [provider handoff](delivery/handoffs/02-provider-gateway.md) record protected optional configuration, conservative adapters/accounting and current qualification limits. No live inference is implied.

@@ -1,6 +1,6 @@
 # Model routing, budgets and usage accounting
 
-Status: proposed. No provider accounts, paid calls, fixed model availability, or live inference are required to validate this plan.
+Status: Chapter 02 provider slice implemented; runtime/CPU/storage budgets and canonical mission/task policy integration remain Chapter 03 onward. See [operator runbook](../development/providers-and-budgets.md) and [ADR 0013](decisions/0013-provider-gateway-boundary.md). No live inference is required for synthetic acceptance.
 
 ## Normalized contract
 
@@ -26,7 +26,7 @@ Discovery uses provider metadata rather than permanent hardcoded “free model�
 
 ## Pricing freshness and limits of assurance
 
-Proposed hosted-pricing TTL: 5 minutes, configurable downward, with refresh on policy changes or relevant errors. Stale cache denies hosted dispatch. Use decimal parsing with explicit currency/unit conversion; never floating-point monetary arithmetic. Store source hash and observation time with the decision.
+Implemented hosted-pricing maximum TTL: 5 minutes, with refresh on policy changes or relevant errors. Stale cache denies hosted dispatch. Use decimal parsing with explicit currency/unit conversion; never floating-point monetary arithmetic. Store source hash and observation time with the decision.
 
 Checking metadata cannot provide an absolute guarantee against an upstream price change or misleading endpoint. Strict free-only support requires documented provider-side zero-cost enforcement or an endpoint whose billing behavior can be bounded and tested. Otherwise classify that adapter/model path as ineligible for strict hosted free-only. The UI must state this boundary. Local Ollama is a separately classified operator-owned inference path with zero provider invoice estimate; CPU/electricity costs remain.
 
@@ -38,7 +38,7 @@ Instance ceiling → organization → user → project → mission → task. Uni
 
 Acquire all relevant budget windows in a stable order. Reservation plus active counters must fit every remaining limit; otherwise roll back the whole request. Provider concurrency/rate limits are separate from monetary limits. Reserve for worst-case input/output and bounded ancillary charges, not a model's optimistic estimate.
 
-Ledger states: `reserved` → `dispatched` → `settled` or `uncertain`; `released` only if non-dispatch or known actual usage permits it. Retries/fallbacks count separately. An interrupted dispatched call retains a conservative hold until reconciliation. Do not reclaim uncertain spend merely because a worker lease expired. Every settlement uses a unique provider/request identity to prevent double accounting.
+Ledger states: `reserved` → `dispatched` → `settled` or `uncertain`; `released` only if non-dispatch or known actual usage permits it. Retries/fallbacks count separately. An interrupted dispatched call retains a conservative hold until reconciliation. Do not reclaim uncertain spend merely because a worker lease expired. Every settlement uses a durable reservation identity and receipt hash to prevent double accounting.
 
 Enforce immutable ledger entries with compensating adjustments, not silent edits. Reports show observed versus estimated usage and outstanding reservations. A zero-paid-spend policy still has token, request and CPU limits to prevent denial of service.
 

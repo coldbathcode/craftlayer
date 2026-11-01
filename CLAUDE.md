@@ -10,7 +10,7 @@ Read and follow [AGENTS.md](AGENTS.md), which is the canonical shared engineerin
 4. The authorized [chapter](docs/delivery/roadmap.md) and its architecture references.
 5. [Backlog](docs/delivery/backlog.md) and relevant [ADRs](docs/architecture/decisions/README.md).
 
-Chapters 00–01 foundation and identity are implemented; consult current status and review evidence before starting later work. At every build-step endpoint update the plan, commit, push to `origin main` and verify synchronization as required by AGENTS.md. Do not treat the source blueprint's embedded master prompt as authorization to implement Chapter 00 during a planning request.
+Chapters 00–02 foundation, identity and provider gateway are implemented; consult current status and review evidence before starting later work. At every build-step endpoint update the plan, commit, push to `origin main` and verify synchronization as required by AGENTS.md. Do not treat the source blueprint's embedded master prompt as authorization to implement Chapter 00 during a planning request.
 
 ## Default implementation workflow
 

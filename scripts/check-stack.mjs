@@ -43,6 +43,20 @@ for (const container of containers) {
       ),
       "Worker must not receive identity or migration credentials",
     );
+  if (["worker", "web"].includes(service)) {
+    assert(
+      !container.Mounts.some((mount) =>
+        mount.Destination.startsWith("/run/secrets/providers"),
+      ),
+      "Provider key files must remain API-only",
+    );
+    assert(
+      !container.Config.Env.some((value) =>
+        /^CRAFTLAYER_PROVIDER_(KEY|POLICY)_FILE=/.test(value),
+      ),
+      "Provider configuration must remain API-only",
+    );
+  }
   assert(
     !container.Mounts.some((mount) => mount.Source.includes("docker.sock")),
   );

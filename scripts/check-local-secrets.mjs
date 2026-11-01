@@ -17,6 +17,11 @@ const credentials = Object.entries(values)
       value.length >= 16,
   )
   .map(([, value]) => Buffer.from(value));
+if (existsSync(".secrets/provider-keys.json")) {
+  const ring = JSON.parse(readFileSync(".secrets/provider-keys.json", "utf8"));
+  for (const value of Object.values(ring.keys))
+    credentials.push(Buffer.from(value));
+}
 assert(credentials.length >= 8, "Expected generated local credentials");
 const files = execFileSync(
   "git",

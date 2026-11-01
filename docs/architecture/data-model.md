@@ -102,3 +102,7 @@ Every schema chapter tests empty database, upgrade from previous fixture, rollba
 ## Implemented identity boundary
 
 Migrations `0002_identity.sql` through `0004_recovery_outbox.sql` define restricted global identity tables, forced-RLS tenant tables and encrypted mail delivery intent. `craftlayer_identity` is a non-owner without DDL/BYPASSRLS, provided only to the API auth service and local recovery CLI. Runtime cannot read users/sessions/reset data; worker and browser receive no identity credential. Scoped SQL uses transaction-local context; the narrow identity-only membership-discovery policy is keyed by authenticated user ID. See [ADR 0012](decisions/0012-identity-boundary.md).
+
+## Implemented provider boundary
+
+Migrations `0005_provider_connections.sql` through `0007_provider_budget_ledger.sql` introduce encrypted connections, catalog snapshots, policy/stop/cooldown state, hierarchical budget windows, request replay identities, reservations/links and an append-only usage ledger. SQL migrations are authoritative for forced RLS, checks, roles and grants; Drizzle metadata describes the same relationships. Global instance counters require the internal transaction flag and are not exposed in tenant reports. Numeric counters are integer decimal strings at the API. Mission/task labels do not yet reference canonical runtime entities; Chapter 03 must establish that boundary. See ADR 0013 for conservative settlement and the operator runbook for recovery.

@@ -1,6 +1,6 @@
 # Chapter 02 — Provider gateway
 
-**Status:** in progress; user authorized Chapter 02. **Implementation evidence:** [build log](../delivery/build-log.md).
+**Status:** implemented and locally verified; owner review pending. Chapter 03 requires authorization. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M1. **Requirements:** PR-004–007, PR-021; NFR-09.
 
@@ -74,9 +74,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Concurrent reservations stay within caps; repeated settlement and timeout-after-dispatch do not undercount.
 
-### [ ] CL-02-07 — Gateway review and operator docs
+### [x] CL-02-07 — Gateway review and operator docs
 
-**Depends on:** CL-02-06. **Size:** M. **Status:** not started.
+**Depends on:** CL-02-06. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Publish config/policy examples, secret rotation and quota exhaustion guidance. Run all fake-provider failure suites and separately label any authorized live smoke.
 
@@ -99,11 +99,13 @@ Use deterministic/fake services first. Any live inference, public deployment, pu
 
 ## Acceptance criteria
 
-- [ ] Both adapter contracts pass offline; authorized local smoke is recorded separately.
-- [ ] Policy adversaries result in zero paid dispatches and meaningful blocked status.
-- [ ] Usage is auditable, bounded and correctly distinguishes unknown from zero.
-- [ ] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
-- [ ] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
+- [x] Both adapter contracts pass offline; authorized local smoke is recorded separately.
+- [x] Policy adversaries result in zero paid dispatches and meaningful blocked status.
+- [x] Usage is auditable, bounded and correctly distinguishes unknown from zero.
+- [x] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
+- [x] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
+
+Evidence: [chapter review](../reviews/02-provider-gateway.md), [operator runbook](../development/providers-and-budgets.md) and [handoff](../delivery/handoffs/02-provider-gateway.md). All inference evidence is synthetic; no live server/model/hardware qualification was run.
 
 ## Demonstration and independent verification
 

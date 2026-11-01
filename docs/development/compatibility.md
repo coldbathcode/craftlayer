@@ -15,12 +15,13 @@ Recorded 2026-10-31. Exact dependency resolutions live in `pnpm-lock.yaml`; immu
 | Pino | 10.4.0 | Credential canaries and sanitized request logging checks |
 | Argon2 | @node-rs/argon2 2.2.2 | Argon2id 19,456 KiB/t2/p1; native arm64 local/container and amd64 CI qualification tracked in identity review |
 | Optional SMTP | Nodemailer 10.3.1 | Verified TLS and bounded delivery; local fakes exercised, real SMTP unverified |
-| Vitest / Vite | 5.0.5 / 8.3.5 | 159 tests on host and network-disabled read-only non-root container |
+| Vitest / Vite | 5.0.5 / 8.3.5 | 188 tests on host and network-disabled read-only non-root container |
 | Biome | 2.6.4 | Warning-free source formatting/lint; source Markdown excluded from automated rewrites |
 | Playwright | 1.64.1 | Chromium desktop and mobile viewport suites; WebKit/Firefox not claimed |
 | Mineflayer | Metadata inspected at 4.39.0; not installed | Requires Node >=22; actual Java/game/auth/pathfinder selection and testing remain Chapter 04 |
 | BullMQ | Not installed | Queue execution/recovery starts Chapter 03; foundation Redis is connectivity only |
-| Java / Ollama | Not installed or required | Optional environment/inference compatibility deferred to owning chapter |
+| Provider transport | Node 22 native HTTP/TLS, no SDK | Chapter 02 bounded protocol/failure contracts and synthetic database/Compose qualification; real server/model versions unverified |
+| Java / Ollama | Not installed or required | Minecraft remains Chapter 04; Chapter 02 Ollama contracts use fakes, live inference/hardware deferred |
 
 ## Platforms and capacity
 

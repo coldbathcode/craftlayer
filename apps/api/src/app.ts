@@ -50,6 +50,10 @@ export async function buildApp(options: {
       "Request failed",
     );
     if (error instanceof ProviderError) {
+      options.logger?.warn(
+        { request_id: request.id, provider_code: error.code },
+        "Provider operation denied",
+      );
       void reply
         .code(
           error.code === "policy_denied"
