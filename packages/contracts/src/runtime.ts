@@ -337,3 +337,40 @@ export const stopView = z.strictObject({
   created_at: z.iso.datetime(),
   cleared_at: z.iso.datetime().nullable(),
 });
+
+export const recoveryEvidence = z.strictObject({
+  attempt_id: z.uuid(),
+  task_id: z.uuid(),
+  worker_id: z.uuid(),
+  evidence_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  deadline_at: z.iso.datetime(),
+  worker_revoked: z.boolean(),
+  worker_acknowledged: z.boolean(),
+  receipts: z
+    .array(
+      z.strictObject({
+        id: z.uuid(),
+        state: z.enum(["prepared", "confirmed", "uncertain"]),
+      }),
+    )
+    .max(10),
+  model_calls: z
+    .array(
+      z.strictObject({
+        request_id: z.uuid(),
+        state: z.enum([
+          "prepared",
+          "dispatched",
+          "completed",
+          "invalid",
+          "uncertain",
+        ]),
+      }),
+    )
+    .max(3),
+});
+export const reconcileAttempt = z.strictObject({
+  evidence_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  quiescent: z.literal(true),
+  reason: z.string().trim().min(1).max(240),
+});

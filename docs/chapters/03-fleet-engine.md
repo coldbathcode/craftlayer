@@ -68,7 +68,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-03-06 — Authorized event projection and recovery
 
-**Depends on:** CL-03-05. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-05. **Size:** L. **Status:** in progress; expired-attempt/reconciliation checkpoint verified; authorized events remain.
 
 **Implementation:** Implement cursor events, WebSocket/SSE projection, bounded buffers, revocation and replay/resync. Recover expired tasks, uncertain effects and dispatch after Redis loss.
 

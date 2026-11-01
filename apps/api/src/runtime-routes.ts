@@ -17,6 +17,8 @@ import {
   modelDecision,
   okSchema,
   prepareView,
+  reconcileAttempt,
+  recoveryEvidence,
   runtimeLimitsSchema,
   runtimeQuotaView,
   stopRequest,
@@ -266,6 +268,36 @@ export async function registerRuntime(
         r.params.id,
         r.body.expected_epoch,
         r.body.reason,
+      ),
+  );
+  api.get(
+    "/api/v1/missions/:id/recovery",
+    {
+      schema: {
+        params,
+        response: { ...errors, 200: itemsSchema(recoveryEvidence) },
+      },
+    },
+    async (r) => ({
+      items: await runtime.recovery(token(r), org(r), r.params.id),
+    }),
+  );
+  api.post(
+    "/api/v1/missions/:id/recovery/:attempt",
+    {
+      schema: {
+        params: params.extend({ attempt: z.uuid() }),
+        body: reconcileAttempt,
+        response: { ...errors, 200: missionView },
+      },
+    },
+    (r) =>
+      runtime.reconcileRuntime(
+        token(r),
+        org(r),
+        r.params.id,
+        r.params.attempt,
+        r.body,
       ),
   );
   const quotaParams = z.strictObject({

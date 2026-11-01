@@ -4326,4 +4326,111 @@ describe("registered worker authority and fenced effects", () => {
       await runtime.cleanup(f.org);
     }
   });
+  it("recovers a lost pre-effect lease once, fences the old process and never retries prepared effects", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    try {
+      const c = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!c) throw new Error("Missing claim");
+      now = new Date(now.getTime() + 16001);
+      await runtime.schedulerTick(async () => {});
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).tasks[0]
+          ?.state,
+      ).toBe("retry_wait");
+      await expect(
+        runtime.prepareAction(token, 1, handle(c)),
+      ).rejects.toMatchObject({ status: 409 });
+      const h = await reclaim({ org: f.org, token });
+      expect(h.fence).toBeGreaterThan(c.fence);
+      await runtime.prepareAction(token, 1, h);
+      now = new Date(now.getTime() + 16001);
+      await runtime.schedulerTick(async () => {});
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("blocked");
+      expect(await runtime.recovery(ownerToken, f.org, f.mission)).toHaveLength(
+        1,
+      );
+      for (let i = 0; i < 3; i++) await runtime.schedulerTick(async () => {});
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(1);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("requires exact evidence, revoked worker and explicit quiescence before conservatively failing uncertain work", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    try {
+      const c = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!c) throw new Error("Missing claim");
+      await runtime.prepareAction(token, 1, handle(c));
+      await runtime.finish(token, 1, { ...handle(c), outcome: "uncertain" });
+      let evidence = (await runtime.recovery(ownerToken, f.org, f.mission))[0];
+      if (!evidence) throw new Error("Missing evidence");
+      const input = {
+        evidence_hash: evidence.evidence_hash,
+        quiescent: true,
+        reason: "Confirmed worker process stopped; effect outcome unknown",
+      };
+      await expect(
+        runtime.reconcileRuntime(
+          ownerToken,
+          f.org,
+          f.mission,
+          c.attempt_id,
+          input,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await runtime.revokeWorker(
+        ownerToken,
+        f.org,
+        f.enrolled.registration.id,
+        1,
+      );
+      now = new Date(now.getTime() + 16001);
+      await expect(
+        runtime.reconcileRuntime(
+          ownerToken,
+          f.org,
+          f.mission,
+          c.attempt_id,
+          input,
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      evidence = (await runtime.recovery(ownerToken, f.org, f.mission))[0];
+      if (!evidence) throw new Error("Missing fresh evidence");
+      const viewer = await fixtureMember("viewer", f.org),
+        child = await fixtureMember("org_admin", f.org, true);
+      for (const u of [viewer, child])
+        await expect(
+          runtime.recovery(u.token, f.org, f.mission),
+        ).rejects.toMatchObject({ status: 403 });
+      const done = await runtime.reconcileRuntime(
+        ownerToken,
+        f.org,
+        f.mission,
+        c.attempt_id,
+        { ...input, evidence_hash: evidence.evidence_hash },
+      );
+      expect(done.state).toBe("failed");
+      expect(done.tasks[0]?.verified).toBe(false);
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(0);
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_missions,
+      ).toBe(0);
+      expect(await runtime.recovery(ownerToken, f.org, f.mission)).toHaveLength(
+        0,
+      );
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
 });

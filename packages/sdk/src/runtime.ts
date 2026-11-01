@@ -7,6 +7,8 @@ import {
   itemsSchema,
   missionCreate,
   missionView,
+  reconcileAttempt,
+  recoveryEvidence,
   stopRequest,
   stopView,
   templateCreate,
@@ -43,6 +45,27 @@ export function createRuntimeClient(send: RuntimeTransport) {
         {
           method: "POST",
           json: { decision },
+          organization: org,
+        },
+      ),
+    recovery: (org: string, id: string) =>
+      send(
+        `/api/v1/missions/${encodeURIComponent(id)}/recovery`,
+        itemsSchema(recoveryEvidence),
+        { organization: org },
+      ),
+    reconcile: (
+      org: string,
+      id: string,
+      attempt: string,
+      input: z.input<typeof reconcileAttempt>,
+    ) =>
+      send(
+        `/api/v1/missions/${encodeURIComponent(id)}/recovery/${encodeURIComponent(attempt)}`,
+        missionView,
+        {
+          method: "POST",
+          json: reconcileAttempt.parse(input),
           organization: org,
         },
       ),

@@ -100,7 +100,11 @@ try {
   mailTimer?.unref();
   const redis = createClient({
     url: config.REDIS_URL,
-    socket: { connectTimeout: 2000, reconnectStrategy: false },
+    socket: {
+      connectTimeout: 2000,
+      reconnectStrategy: (attempt) =>
+        Math.min(2000, 100 * 2 ** Math.min(attempt, 5)),
+    },
     commandsQueueMaxLength: 10,
   });
   close = async () => {
@@ -115,7 +119,7 @@ try {
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
   );
-  await redis.connect().catch(() => {});
+  await within(redis.connect()).catch(() => {});
   const app = await buildApp({
     logger: log,
     auth,

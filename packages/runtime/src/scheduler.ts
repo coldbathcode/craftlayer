@@ -18,6 +18,7 @@ export type Publisher = (
   environment: string,
 ) => Promise<void>;
 export class RuntimeScheduler extends RuntimeQuotas {
+  protected async recoverExpired(): Promise<void> {}
   protected async resolvePending(_org: string): Promise<void> {}
   protected override async queued(c: pg.PoolClient, row: MissionRow) {
     await this.admit(c, row);
@@ -204,6 +205,7 @@ export class RuntimeScheduler extends RuntimeQuotas {
   }
   /** One tenant turn per call, serialized by a transaction-scoped global leadership lock. */
   async schedulerTick(publish: Publisher): Promise<string | null> {
+    await this.recoverExpired();
     const org = await this.maintenance(async (c) => {
       const next = (
         await c.query<{ organization_id: string }>(

@@ -798,6 +798,10 @@ export class RuntimeWorkers extends RuntimeScheduler {
       parts = this.workerParts(token, protocol);
     return this.tx(parts.org, async (c) => {
       const ctx = await this.attemptContext(c, token, protocol, h, true);
+      await c.query(
+        "update runtime_attempts set worker_stopped_at=coalesce(worker_stopped_at,$3) where organization_id=$1 and id=$2",
+        [parts.org, h.attempt_id, new Date(this.now())],
+      );
       if (
         !["leased", "running", "cancel_requested"].includes(ctx.attempt.state)
       )

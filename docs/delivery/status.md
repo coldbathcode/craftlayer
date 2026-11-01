@@ -16,3 +16,7 @@ The user's next-steps request after Chapter 02 authorizes Chapter 03. Chapters 0
 - Main UI: http://127.0.0.1:3000/account. Preserve ignored credentials/volumes; preserve existing account state. Tests use disposable installations only.
 - Branch/remote: main → https://github.com/coldbathcode/craftlayer.git. See [build log](build-log.md) for exact task evidence.
 - Chapters 04–11 unimplemented; no live/paid inference, public deployment, real mail or Cloud implementation authorized.
+
+## Active recovery checkpoint
+
+CL-03-06 recovery checkpoint: expired/revoked pre-effect attempts retire with bounded fenced retry; prepared effects/dispatched inference remain uncertain with capacity held. Added scoped exact-evidence adult reconciliation requiring revoked worker, expired lease/deadline and explicit quiescence, conservatively failing rather than fabricating success. Provider holds require separate reconciliation. API Redis health now reconnects with bounded backoff/startup probe; actual restart drill remains CL-03-07. pnpm check passed 196 unit tests; pnpm test:db passed 82 database/API tests plus migration proofs, covering old-fence denial, no prepared-effect replay, stale evidence/role/quiescence denials and release after explicit review. Stop checkpoint hosted CI 41318658590 passed. Event replay/SSE remains in progress; CL-03-06 is not complete.

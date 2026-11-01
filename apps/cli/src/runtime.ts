@@ -185,7 +185,16 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     }
     let result: unknown;
     const json = async () => JSON.parse(await readFile(a ?? "", "utf8"));
-    if (command === "stop" && sub === "request")
+    if (command === "mission" && sub === "recovery" && a)
+      result = await client.recovery(org, z.uuid().parse(a));
+    else if (command === "mission" && sub === "reconcile" && a && b)
+      result = await client.reconcile(
+        org,
+        z.uuid().parse(a),
+        z.uuid().parse(b),
+        JSON.parse(await readFile(key ?? "", "utf8")),
+      );
+    else if (command === "stop" && sub === "request")
       result = await client.stop(org, await json());
     else if (command === "stop" && sub === "get" && a)
       result = await client.stopOperation(org, z.uuid().parse(a));

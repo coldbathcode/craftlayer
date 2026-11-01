@@ -261,6 +261,7 @@ export const runtimeAttempts = pgTable(
     deadlineAt: time("deadline_at").notNull(),
     startedAt: time("started_at").notNull(),
     finishedAt: time("finished_at"),
+    workerStoppedAt: time("worker_stopped_at"),
     toolCalls: integer("tool_calls").notNull().default(0),
     runtimeMs: integer("runtime_ms").notNull().default(0),
   },
@@ -657,6 +658,25 @@ export const runtimeStopTargets = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.organizationId, t.operationId, t.attemptId] }),
+    foreignKey({
+      columns: [t.organizationId, t.attemptId],
+      foreignColumns: [runtimeAttempts.organizationId, runtimeAttempts.id],
+    }),
+  ],
+);
+
+export const runtimeReconciliations = pgTable(
+  "runtime_reconciliations",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    actorId: uuid("actor_id").notNull(),
+    evidenceHash: char("evidence_hash", { length: 64 }).notNull(),
+    reason: varchar("reason", { length: 240 }).notNull(),
+    createdAt: time("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.attemptId] }),
     foreignKey({
       columns: [t.organizationId, t.attemptId],
       foreignColumns: [runtimeAttempts.organizationId, runtimeAttempts.id],
