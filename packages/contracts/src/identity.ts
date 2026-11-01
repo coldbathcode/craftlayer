@@ -37,7 +37,7 @@ export const environmentSchema = z.strictObject({
   id,
   name: z.string(),
   project_id: id,
-  type: z.enum(["minecraft", "coding", "research"]),
+  type: z.enum(["minecraft", "coding", "research", "simulation"]),
 });
 export const memberSchema = z.strictObject({
   id,

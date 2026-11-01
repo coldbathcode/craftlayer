@@ -798,14 +798,14 @@ export class AuthService {
     input: {
       projectId: string;
       name: string;
-      type: "minecraft" | "coding" | "research";
+      type: "minecraft" | "coding" | "research" | "simulation";
     },
   ) {
     const value = z
       .strictObject({
         projectId: z.uuid(),
         name: z.string().trim().min(1).max(120),
-        type: z.enum(["minecraft", "coding", "research"]),
+        type: z.enum(["minecraft", "coding", "research", "simulation"]),
       })
       .parse(input);
     return this.orgAction(

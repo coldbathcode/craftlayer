@@ -2383,3 +2383,158 @@ describe("provider credential and connection boundary", () => {
 });
 
 // CHAPTER_TESTS
+
+describe("runtime domain persistence", () => {
+  const runtime = new pg.Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+    max: 1,
+  });
+  afterAll(() => runtime.end());
+  async function scoped<T>(
+    org: string,
+    operation: (client: pg.PoolClient) => Promise<T>,
+  ) {
+    const c = await runtime.connect();
+    try {
+      await c.query("begin");
+      await c.query("select set_config('app.organization_id',$1,true)", [org]);
+      const value = await operation(c);
+      await c.query("commit");
+      return value;
+    } catch (e) {
+      await c.query("rollback");
+      throw e;
+    } finally {
+      c.release();
+    }
+  }
+  it("enforces immutable snapshots, state transitions, tenant and same-mission edges in PostgreSQL", async () => {
+    const project = await auth.createProject(
+      ownerToken,
+      orgId,
+      "Runtime domain fixture",
+    );
+    const environment = await auth.createEnvironment(ownerToken, orgId, {
+      projectId: project.id,
+      name: "Simulation only",
+      type: "simulation",
+    });
+    const agent = crypto.randomUUID(),
+      group = crypto.randomUUID(),
+      template = crypto.randomUUID(),
+      mission = crypto.randomUUID(),
+      otherMission = crypto.randomUUID(),
+      task = crypto.randomUUID(),
+      otherTask = crypto.randomUUID();
+    const graph = {
+      schema_version: 1,
+      nodes: [
+        {
+          key: "echo",
+          required: true,
+          dependencies: [],
+          action: { kind: "fixture.echo", value: "verified" },
+          max_attempts: 3,
+          timeout_ms: 5000,
+        },
+      ],
+    };
+    await scoped(orgId, async (c) => {
+      await c.query(
+        "insert into runtime_agents(id,organization_id,project_id,environment_id,name,adapter) values($1,$2,$3,$4,'Fixture','simulation')",
+        [agent, orgId, project.id, environment.id],
+      );
+      await c.query(
+        "insert into runtime_groups(id,organization_id,project_id,environment_id,name) values($1,$2,$3,$4,'Fixture')",
+        [group, orgId, project.id, environment.id],
+      );
+      await c.query(
+        "insert into runtime_templates(id,organization_id,family_id,version,name,adapter,hash,graph,created_by) values($1,$2,$1,1,'Fixture','simulation',$3,$4,$5)",
+        [template, orgId, "a".repeat(64), graph, ownerId],
+      );
+      for (const id of [mission, otherMission])
+        await c.query(
+          "insert into runtime_missions(id,organization_id,project_id,environment_id,group_id,template_id,name,template_hash,snapshot,created_by) values($1,$2,$3,$4,$5,$6,'Fixture',$7,$8,$9)",
+          [
+            id,
+            orgId,
+            project.id,
+            environment.id,
+            group,
+            template,
+            "a".repeat(64),
+            graph,
+            ownerId,
+          ],
+        );
+      for (const [id, m] of [
+        [task, mission],
+        [otherTask, otherMission],
+      ])
+        await c.query(
+          "insert into runtime_tasks(id,organization_id,mission_id,node_key,definition,required) values($1,$2,$3,'echo',$4,true)",
+          [id, orgId, m, graph.nodes[0]],
+        );
+    });
+    await expect(
+      scoped(orgId, (c) =>
+        c.query(
+          "insert into runtime_dependencies(organization_id,mission_id,task_id,prerequisite_id,required) values($1,$2,$3,$4,true)",
+          [orgId, mission, task, otherTask],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23503" });
+    await expect(
+      scoped(orgId, (c) =>
+        c.query("update runtime_templates set name='Changed' where id=$1", [
+          template,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      scoped(orgId, (c) =>
+        c.query("update runtime_missions set snapshot='{}' where id=$1", [
+          mission,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      scoped(orgId, (c) =>
+        c.query("update runtime_tasks set state='succeeded' where id=$1", [
+          task,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await scoped(orgId, async (c) => {
+      for (const state of ["ready", "leased", "running"])
+        await c.query("update runtime_tasks set state=$2 where id=$1", [
+          task,
+          state,
+        ]);
+      await c.query(
+        "update runtime_tasks set state='succeeded',verified=true,result=$2 where id=$1",
+        [task, { value: "verified" }],
+      );
+      for (const state of ["queued", "running", "succeeded"])
+        await c.query(
+          "update runtime_missions set state=$2,version=version+1 where id=$1",
+          [mission, state],
+        );
+    });
+    await expect(
+      scoped(orgId, (c) =>
+        c.query("update runtime_tasks set state='ready' where id=$1", [task]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect(
+      (
+        await scoped(crypto.randomUUID(), (c) =>
+          c.query("select id from runtime_tasks where id=$1", [task]),
+        )
+      ).rows,
+    ).toHaveLength(0);
+    expect(
+      (await runtime.query("select id from runtime_missions")).rows,
+    ).toHaveLength(0);
+  });
+});

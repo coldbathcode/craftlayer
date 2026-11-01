@@ -27,7 +27,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-02-05](../chapters/02-provider-gateway.md) | Policy and cooldown router | CL-02-04 | L | Verified |
 | [CL-02-06](../chapters/02-provider-gateway.md) | Budget ledger and reconciliation | CL-02-05 | L | Verified |
 | [CL-02-07](../chapters/02-provider-gateway.md) | Gateway review and operator docs | CL-02-06 | M | Verified |
-| [CL-03-01](../chapters/03-fleet-engine.md) | Domain schema and finite state machines | Chapter 02 gate | L | Not started |
+| [CL-03-01](../chapters/03-fleet-engine.md) | Domain schema and finite state machines | Chapter 02 gate | L | Verified |
 | [CL-03-02](../chapters/03-fleet-engine.md) | Mission API, grants and CLI | CL-03-01 | L | Not started |
 | [CL-03-03](../chapters/03-fleet-engine.md) | Outbox and fair scheduler | CL-03-02 | L | Not started |
 | [CL-03-04](../chapters/03-fleet-engine.md) | Worker claims and bounded runtime | CL-03-03 | L | Not started |

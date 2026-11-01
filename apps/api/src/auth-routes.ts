@@ -198,7 +198,7 @@ export async function registerAuth(
         body: z.strictObject({
           projectId: id,
           name: z.string().trim().min(1).max(120),
-          type: z.enum(["minecraft", "coding", "research"]),
+          type: z.enum(["minecraft", "coding", "research", "simulation"]),
         }),
       },
     },

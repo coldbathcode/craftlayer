@@ -22,3 +22,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0012 — Identity-service boundary](0012-identity-boundary.md) records Chapter 01's restricted auth role, tenant constraints and upgrade provisioning.
 
 [ADR 0013 — Provider gateway boundary](0013-provider-gateway-boundary.md) records Chapter 02 provider contracts, strict cost eligibility, operator endpoint trust and durable accounting decisions.
+
+[ADR 0014 — Runtime authority and recovery](0014-runtime-authority-and-recovery.md) records Chapter 03 simulation scope, worker/coordinator trust, leases, truthful cancellation and durable queue/events.

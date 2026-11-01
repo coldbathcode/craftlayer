@@ -32,6 +32,8 @@ Status: maintained through Chapter 02, 2026-11-01. Owners below are proposed res
 
 | D-24 | Provider runtime and operability boundary | ADR 0013: canonical mission/task/lease/outcome plumbing starts 03; reports bounded to 100, retention/restore in 09 | 03/05/09 / runtime/operator | Replay-safe outcomes, canonical scope, complete key inventory, cursor reports and restore drills |
 
+| D-25 | Runtime scope and worker authority | ADR 0014: explicit adult-only simulation, trusted API coordinator, org/environment-bound workers, persisted fence/stop and bounded SSE | 03 / runtime/security | Claim/replay races, current authority, queue tampering, partition watchdog and event isolation |
+
 ## Engineering risk register
 
 | Risk | Impact / likelihood assumption | Mitigation | Trigger / fallback |

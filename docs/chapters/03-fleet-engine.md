@@ -1,6 +1,6 @@
 # Chapter 03 — Fleet engine
 
-**Status:** not started. **Specification:** ready for engineering review. **Implementation evidence:** none.
+**Status:** in progress; user authorized Chapter 03. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M1. **Requirements:** PR-007–009, PR-017, PR-021; NFR-02–05.
 
@@ -10,7 +10,7 @@ Build a recoverable fleet and mission engine with finite DAGs, bounded agent exe
 
 ## Dependencies and entry gate
 
-Chapters 00–02 accepted. Tenant auth, provider routing, ledger and durable DB are available.
+Chapters 00–02 accepted for advancement (implementation review, not independent security certification). Tenant auth, provider routing, ledger and durable DB are available.
 
 Before work: inspect Git status, read AGENTS.md and delivery status, confirm the authorized chapter scope, and inspect the previous review evidence. Do not assume a dependency is complete merely because its specification exists.
 
@@ -26,9 +26,9 @@ Architecture references: [runtime-and-agents](../architecture/runtime-and-agents
 
 Each task is initially unchecked. Dependencies below describe the default conservative order; record an explicit justified dependency change before reordering. Task sizes are relative engineering complexity (M/L), not delivery dates.
 
-### [ ] CL-03-01 — Domain schema and finite state machines
+### [x] CL-03-01 — Domain schema and finite state machines
 
-**Depends on:** Chapter 02 gate. **Size:** L. **Status:** not started.
+**Depends on:** Chapter 02 gate. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement fleet/mission/task tables, versioned template snapshots, transition rules and DAG validation. Define required/optional outcome rules and bounded graph/tool limits.
 
