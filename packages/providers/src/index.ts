@@ -22,11 +22,14 @@ export interface ModelProvider {
     model: ModelDescriptor,
     request: GenerateRequest,
     signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>,
   ): Promise<GenerateResult>;
 }
 export * from "./connections.js";
+export * from "./control.js";
 export * from "./instance.js";
 export * from "./ollama.js";
 export * from "./openrouter.js";
 export * from "./pricing.js";
+export * from "./router.js";
 export * from "./wire.js";

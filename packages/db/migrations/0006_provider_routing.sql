@@ -1,0 +1,14 @@
+ALTER TABLE provider_connections ADD COLUMN catalog_requested_at timestamptz;
+CREATE TABLE provider_routing_state(organization_id uuid PRIMARY KEY REFERENCES organizations(id),version integer NOT NULL DEFAULT 1,stopped boolean NOT NULL DEFAULT false);
+CREATE TABLE provider_scope_policies(organization_id uuid NOT NULL REFERENCES organizations(id),scope_kind text NOT NULL CHECK(scope_kind IN ('organization','user','project')),scope_id uuid NOT NULL,version integer NOT NULL DEFAULT 1,policy jsonb NOT NULL CHECK(pg_column_size(policy)<=16384),PRIMARY KEY(organization_id,scope_kind,scope_id));
+CREATE TABLE provider_cooldowns(organization_id uuid NOT NULL,connection_id uuid NOT NULL,retry_at timestamptz NOT NULL,PRIMARY KEY(organization_id,connection_id),FOREIGN KEY(organization_id,connection_id) REFERENCES provider_connections(organization_id,id));
+ALTER TABLE provider_routing_state ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_routing_state FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_scope ON provider_routing_state USING(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid) WITH CHECK(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid);
+ALTER TABLE provider_scope_policies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_scope_policies FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_scope ON provider_scope_policies USING(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid) WITH CHECK(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid);
+ALTER TABLE provider_cooldowns ENABLE ROW LEVEL SECURITY;
+ALTER TABLE provider_cooldowns FORCE ROW LEVEL SECURITY;
+CREATE POLICY tenant_scope ON provider_cooldowns USING(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid) WITH CHECK(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid);
+GRANT SELECT,INSERT,UPDATE,DELETE ON provider_routing_state,provider_scope_policies,provider_cooldowns TO craftlayer_runtime;

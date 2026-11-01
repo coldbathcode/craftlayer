@@ -14,6 +14,7 @@ const files = {
     {
       version: 1,
       openrouter_enabled: false,
+      openrouter_models: [],
       allow_paid: false,
       max_paid_micro_usd: "0",
       stopped: false,

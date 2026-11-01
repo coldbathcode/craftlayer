@@ -153,6 +153,7 @@ export const providerErrorSchema = z.strictObject({
   retry_after_ms: z.number().int().min(0).max(300000).nullable(),
 });
 export const defaultModelPolicy = {
+  allowed_models: null,
   free_only: true,
   allow_paid_fallback: false,
   max_paid_micro_usd: "0",
@@ -162,6 +163,11 @@ export const defaultModelPolicy = {
   max_attempts: 2,
 } as const;
 export const modelPolicySchema = z.strictObject({
+  allowed_models: z
+    .array(z.string().min(1).max(180))
+    .max(64)
+    .nullable()
+    .default(null),
   free_only: z.boolean(),
   allow_paid_fallback: z.boolean(),
   max_paid_micro_usd: microUsd,

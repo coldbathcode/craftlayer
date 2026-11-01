@@ -17,6 +17,7 @@ export interface WireRequest {
   signal: AbortSignal;
   timeout_ms: number;
   effectful: boolean;
+  before_dispatch?: (() => Promise<void>) | undefined;
 }
 export interface JsonWire {
   json(request: WireRequest): Promise<unknown>;
@@ -149,6 +150,8 @@ export class HttpWire implements JsonWire {
       input.body === undefined ? undefined : JSON.stringify(input.body);
     if (body && Buffer.byteLength(body) > 262144)
       throw new ProviderError("policy_denied", false);
+    if (input.effectful && input.before_dispatch) await input.before_dispatch();
+    if (signal.aborted) throw new ProviderError(abortCode(signal), false);
     return new Promise((resolve, reject) => {
       const transport = url.protocol === "https:" ? https : http;
       let dispatched = false;

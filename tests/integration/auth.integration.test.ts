@@ -9,9 +9,12 @@ import { buildApp } from "../../apps/api/src/app.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import { createLogger } from "../../packages/config/src/index.js";
 import { openCredential } from "../../packages/providers/src/credentials.js";
-import { fixtureModel } from "../../packages/providers/src/fixtures.js";
 import {
-  ConnectionService,
+  FakeProvider,
+  fixtureModel,
+} from "../../packages/providers/src/fixtures.js";
+import {
+  GatewayControl,
   ProviderFiles,
 } from "../../packages/providers/src/index.js";
 
@@ -1227,7 +1230,7 @@ it("serializes concurrent owner disables and preserves a recoverable active owne
 describe("provider credential and connection boundary", () => {
   let providerLogs = "";
   let directory = "",
-    providers: ConnectionService,
+    providers: GatewayControl,
     providerApp: Awaited<ReturnType<typeof buildApp>>;
   const runtime = new pg.Pool({
     connectionString: process.env.TEST_DATABASE_URL,
@@ -1250,6 +1253,7 @@ describe("provider credential and connection boundary", () => {
       JSON.stringify({
         version: 1,
         openrouter_enabled: true,
+        openrouter_models: ["fixture/model:free"],
         allow_paid: false,
         max_paid_micro_usd: "0",
         stopped: false,
@@ -1267,11 +1271,20 @@ describe("provider credential and connection boundary", () => {
       }),
       { mode: 0o600 },
     );
-    providers = new ConnectionService({
+    providers = new GatewayControl({
       databaseUrl: process.env.TEST_DATABASE_URL ?? "",
       auth,
       files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
       clock: () => now.getTime(),
+      providerFactory: (row) =>
+        new FakeProvider([
+          fixtureModel(now.getTime(), {
+            id: row.kind === "ollama" ? "fixture:local" : "fixture/model:free",
+            provider: row.kind,
+            classification: row.kind === "ollama" ? "operator_local" : "hosted",
+            zero_cost_enforced: row.kind === "ollama",
+          }),
+        ]),
     });
     providerApp = await buildApp({
       auth,
@@ -1501,6 +1514,91 @@ describe("provider credential and connection boundary", () => {
       keyPath(),
       JSON.stringify({ active: "one", keys: { one } }),
     );
+  });
+  it("refreshes only fake approved catalogs with bounded retries and redacted projections", async () => {
+    const connection = await providers.createConnection(ownerToken, orgId, {
+      kind: "ollama",
+      endpoint_id: "fixture-local",
+      label: "Catalog fake",
+    });
+    const models = await providers.refreshModels(
+      ownerToken,
+      orgId,
+      connection.id,
+    );
+    expect(models.map((m) => m.id)).toEqual(["fixture:local"]);
+    await expect(
+      providers.refreshModels(ownerToken, orgId, connection.id),
+    ).rejects.toMatchObject({ code: "rate_limited", dispatched: false });
+    const response = await providerApp.inject({
+      url: `/api/v1/providers/${connection.id}/models`,
+      headers: headers(),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toContain(canary);
+    await providers.setEnabled(ownerToken, orgId, connection.id, 1, false);
+    expect(
+      await providers.listModels(ownerToken, orgId, connection.id),
+    ).toEqual([]);
+  });
+  it("versions scope policy and keeps provider stop latched across policy and connection changes", async () => {
+    const previous = await providers.getPolicy(
+      ownerToken,
+      orgId,
+      "organization",
+      orgId,
+    );
+    expect(previous.policy.free_only).toBe(true);
+    const next = await providers.setPolicy(
+      ownerToken,
+      orgId,
+      "organization",
+      orgId,
+      previous.version,
+      previous.policy,
+    );
+    expect(next.version).toBe(previous.version + 1);
+    await expect(
+      providers.setPolicy(
+        ownerToken,
+        orgId,
+        "organization",
+        orgId,
+        previous.version,
+        previous.policy,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      providers.getPolicy(ownerToken, orgId, "project", crypto.randomUUID()),
+    ).rejects.toMatchObject({ status: 404 });
+    await providers.setStopped(ownerToken, orgId, true);
+    await providers.setPolicy(
+      ownerToken,
+      orgId,
+      "organization",
+      orgId,
+      next.version,
+      next.policy,
+    );
+    expect((await providers.stopStatus(ownerToken, orgId)).stopped).toBe(true);
+    const restarted = new GatewayControl({
+      databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+      auth,
+      files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
+    });
+    try {
+      expect((await restarted.stopStatus(ownerToken, orgId)).stopped).toBe(
+        true,
+      );
+    } finally {
+      await restarted.close();
+    }
+    const child = await fixtureMember("org_admin", orgId, true);
+    await expect(
+      providers.setStopped(child.token, orgId, false),
+    ).rejects.toMatchObject({ status: 403 });
+    await providers.setStopped(ownerToken, orgId, false);
+    expect((await providers.stopStatus(ownerToken, orgId)).stopped).toBe(false);
   });
   it("holds current authority across bounded provider SQL mutations and denies after revocation", async () => {
     const admin = await fixtureMember("org_admin");

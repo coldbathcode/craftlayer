@@ -56,7 +56,9 @@ export async function buildApp(options: {
             ? 403
             : error.code === "auth"
               ? 503
-              : 502,
+              : error.code === "rate_limited"
+                ? 429
+                : 502,
         )
         .send({
           error: {

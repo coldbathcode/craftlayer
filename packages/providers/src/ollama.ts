@@ -67,6 +67,7 @@ export class OllamaProvider implements ModelProvider {
     signal: AbortSignal,
     timeout: number,
     effectful = false,
+    beforeDispatch?: () => Promise<void>,
   ) {
     const request: WireRequest = {
       target: {
@@ -80,6 +81,7 @@ export class OllamaProvider implements ModelProvider {
       signal,
       timeout_ms: timeout,
       effectful,
+      before_dispatch: beforeDispatch,
     };
     return this.wire.json(request);
   }
@@ -191,6 +193,7 @@ export class OllamaProvider implements ModelProvider {
     model: ModelDescriptor,
     input: GenerateRequest,
     signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>,
   ) {
     const request = generateRequestSchema.parse(input);
     const deadline = AbortSignal.any([
@@ -248,6 +251,7 @@ export class OllamaProvider implements ModelProvider {
           deadline,
           request.timeout_ms,
           true,
+          beforeDispatch,
         ),
       );
       if (

@@ -3,6 +3,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { expect, it } from "vitest";
 import { FakeClock, fixtureRequest } from "./fixtures.js";
+import { ProviderError } from "./index.js";
 import type { ApprovedLocal } from "./instance.js";
 import { OllamaProvider } from "./ollama.js";
 import {
@@ -93,6 +94,15 @@ it("connects to the validated address pin and rejects changed DNS before connect
       code: "policy_denied",
       dispatched: false,
     });
+    await expect(
+      new HttpWire(good).json({
+        ...request,
+        effectful: true,
+        before_dispatch: async () => {
+          throw new ProviderError("policy_denied", false);
+        },
+      }),
+    ).rejects.toMatchObject({ code: "policy_denied", dispatched: false });
     expect(calls).toBe(1);
   } finally {
     server.closeAllConnections();

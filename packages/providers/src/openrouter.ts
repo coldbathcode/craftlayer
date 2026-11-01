@@ -212,6 +212,7 @@ export class OpenRouterProvider implements ModelProvider {
     model: ModelDescriptor,
     input: GenerateRequest,
     signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>,
   ) {
     const request = generateRequestSchema.parse(input),
       deadline = AbortSignal.any([
@@ -258,6 +259,7 @@ export class OpenRouterProvider implements ModelProvider {
         signal: deadline,
         timeout_ms: request.timeout_ms,
         effectful: true,
+        before_dispatch: beforeDispatch,
         body: {
           model: model.id,
           messages: request.messages,

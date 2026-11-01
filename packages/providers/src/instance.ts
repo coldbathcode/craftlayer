@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isIP } from "node:net";
@@ -59,6 +60,7 @@ export const instancePolicySchema = z
   .strictObject({
     version: z.number().int().positive(),
     openrouter_enabled: z.boolean(),
+    openrouter_models: z.array(z.string().max(180)).max(32).default([]),
     allow_paid: z.boolean(),
     max_paid_micro_usd: microUsd,
     stopped: z.boolean(),
@@ -73,6 +75,7 @@ export type ApprovedLocal = z.infer<typeof approvedLocalSchema>;
 export const disabledInstance: InstancePolicy = {
   version: 1,
   openrouter_enabled: false,
+  openrouter_models: [],
   allow_paid: false,
   max_paid_micro_usd: "0",
   stopped: false,
@@ -87,7 +90,7 @@ const keyRingSchema = z
     ),
   })
   .refine(
-    (r) => r.keys[r.active] !== undefined && Object.keys(r.keys).length <= 16,
+    (r) => Object.hasOwn(r.keys, r.active) && Object.keys(r.keys).length <= 16,
     "Invalid active key",
   );
 export type KeyRing = z.infer<typeof keyRingSchema>;
@@ -118,6 +121,16 @@ export class ProviderFiles {
     } catch {
       throw new ProviderError("policy_denied", false);
     }
+  }
+  async stamp() {
+    return createHash("sha256")
+      .update(
+        JSON.stringify([
+          await this.policy(),
+          this.paths.keys ? await this.keys() : null,
+        ]),
+      )
+      .digest("hex");
   }
   async keys(): Promise<KeyRing> {
     if (!this.paths.keys) throw new ProviderError("policy_denied", false);

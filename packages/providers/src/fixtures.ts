@@ -97,8 +97,10 @@ export class FakeProvider implements ModelProvider {
     model: ModelDescriptor,
     request: GenerateRequest,
     signal: AbortSignal,
+    beforeDispatch?: () => Promise<void>,
   ) {
     signal.throwIfAborted();
+    await beforeDispatch?.();
     this.calls.push({ model: model.id, request_id: request.request_id });
     const outcome = this.outcomes.shift();
     if (outcome instanceof Error) throw outcome;

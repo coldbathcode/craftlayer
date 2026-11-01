@@ -58,9 +58,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Synthetic paid fallback, missing dimensions, upstream 429/auth/timeout and stale catalog cases behave safely.
 
-### [ ] CL-02-05 — Policy and cooldown router
+### [x] CL-02-05 — Policy and cooldown router
 
-**Depends on:** CL-02-04. **Size:** L. **Status:** not started.
+**Depends on:** CL-02-04. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Intersect scope policies and capabilities, validate fresh eligible candidates, reserve before dispatch, add bounded cooldown/backoff and explanatory block reasons. Revalidate before every fallback.
 
