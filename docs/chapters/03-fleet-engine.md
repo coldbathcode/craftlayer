@@ -52,7 +52,7 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 ### [ ] CL-03-04 — Worker claims and bounded runtime
 
-**Depends on:** CL-03-03. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-03. **Size:** L. **Status:** in progress; server worker-authority checkpoint verified, process/model/approval work remains.
 
 **Implementation:** Authenticate org-bound workers, claim tasks atomically, increment fence, heartbeat leases, validate structured tool proposals and enforce deadlines/cancellation. Keep model loops bounded.
 

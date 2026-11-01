@@ -205,3 +205,90 @@ export const runtimeQuotaView = z.strictObject({
   hourly_tool_calls: z.number().int().nonnegative(),
   hourly_runtime_ms: z.number().int().nonnegative(),
 });
+export const workerCreate = z.strictObject({
+  environment_id: z.uuid(),
+  name: z.string().trim().min(1).max(120),
+  protocol: z.literal(1),
+});
+export const workerCredential = z.strictObject({
+  worker_id: z.uuid(),
+  organization_id: z.uuid(),
+  environment_id: z.uuid(),
+  protocol: z.literal(1),
+  token: z
+    .string()
+    .regex(/^v1\.[a-f0-9-]{36}\.[a-f0-9-]{36}\.[A-Za-z0-9_-]{43}$/),
+});
+export const workerView = z.strictObject({
+  id: z.uuid(),
+  environment_id: z.uuid(),
+  name: z.string(),
+  protocol: z.literal(1),
+  version: z.number().int().positive(),
+  active: z.boolean(),
+  expires_at: z.iso.datetime(),
+});
+export const workerEnrollment = z.strictObject({
+  registration: workerView,
+  credential: workerCredential,
+});
+export const attemptHandle = z.strictObject({
+  attempt_id: z.uuid(),
+  task_id: z.uuid(),
+  fence: z.number().int().positive(),
+  generation: z.number().int().positive(),
+});
+export type AttemptHandle = z.infer<typeof attemptHandle>;
+export const workerAction = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("fixture.echo"),
+    value: z.string().max(512),
+  }),
+  z.strictObject({
+    kind: z.literal("fixture.wait"),
+    duration_ms: z.number().int().min(0).max(10000),
+    value: z.string().max(512),
+  }),
+  z.strictObject({
+    kind: z.literal("fixture.fail"),
+    failure: z.enum(["transient", "permanent", "uncertain"]),
+    failures: z.number().int().min(1).max(3),
+  }),
+  z.strictObject({ kind: z.literal("fixture.model") }),
+  z.strictObject({
+    kind: z.literal("fixture.approval"),
+    value: z.string().max(512),
+  }),
+]);
+export const workerClaim = attemptHandle.extend({
+  attempt_number: z.number().int().min(1).max(3),
+  lease_ms: z.number().int().min(1).max(15000),
+  deadline_ms: z.number().int().min(1).max(10000),
+  action: workerAction,
+});
+export type WorkerClaim = z.infer<typeof workerClaim>;
+export const leaseView = z.strictObject({
+  lease_ms: z.number().int().min(1).max(15000),
+  deadline_ms: z.number().int().min(1).max(10000),
+});
+export const actionPermit = z.strictObject({
+  receipt_id: z.uuid(),
+  cached: z.boolean(),
+  value: z.string().max(4096).nullable(),
+  lease_ms: z.number().int().min(1).max(15000),
+  deadline_ms: z.number().int().min(1).max(10000),
+});
+export const finishRequest = attemptHandle.extend({
+  outcome: z.enum([
+    "succeeded",
+    "transient",
+    "failed",
+    "uncertain",
+    "cancelled",
+  ]),
+  value: z.string().max(4096).optional(),
+});
+export const finishView = z.strictObject({
+  ok: z.literal(true),
+  state: z.enum(["succeeded", "retry_wait", "blocked", "failed", "cancelled"]),
+});

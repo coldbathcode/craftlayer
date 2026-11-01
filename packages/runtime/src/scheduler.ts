@@ -148,12 +148,13 @@ export class RuntimeScheduler extends RuntimeQuotas {
       return;
     }
     for (const task of tasks.filter((t) => t.state === "ready"))
-      await this.ensureOutbox(c, row, task.id);
+      await this.ensureOutbox(c, row, task.id, task.next_attempt_at);
   }
   protected async ensureOutbox(
     c: pg.PoolClient,
     row: MissionRow,
     task: string,
+    notBefore: Date,
   ) {
     const count =
       (
@@ -176,12 +177,13 @@ export class RuntimeScheduler extends RuntimeQuotas {
     if (
       (
         await c.query(
-          "select id from runtime_outbox where organization_id=$1 and task_id=$2 and generation=$3 and (published_at is null or published_at>$4) limit 1",
+          "select id from runtime_outbox where organization_id=$1 and task_id=$2 and generation=$3 and created_at>=$5 and (published_at is null or published_at>$4) limit 1",
           [
             row.organization_id,
             task,
             row.generation,
             new Date(this.now() - 5000),
+            notBefore,
           ],
         )
       ).rowCount

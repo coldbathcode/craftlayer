@@ -3211,3 +3211,372 @@ describe("durable fair scheduler and runtime quotas", () => {
     }
   });
 });
+
+describe("registered worker authority and fenced effects", () => {
+  class Harness extends RuntimeService {
+    async cleanup(org: string) {
+      await this.tx(org, async (c) => {
+        const attempts = (
+          await c.query<{ id: string }>(
+            "select id from runtime_attempts where organization_id=$1 and state in ('leased','running','cancel_requested','uncertain')",
+            [org],
+          )
+        ).rows;
+        for (const a of attempts) {
+          await c.query(
+            "update runtime_attempts set state='failed' where organization_id=$1 and id=$2",
+            [org, a.id],
+          );
+          await this.releaseAttempt(c, org, a.id);
+        }
+        await c.query(
+          "update runtime_tasks set state='cancel_requested' where organization_id=$1 and state in ('leased','running')",
+          [org],
+        );
+        await c.query(
+          "update runtime_tasks set state='cancelled' where organization_id=$1 and state in ('pending','ready','retry_wait','blocked','cancel_requested')",
+          [org],
+        );
+        const missions = (
+          await c.query<{ id: string; state: string }>(
+            "select id,state from runtime_missions where organization_id=$1 and state not in ('succeeded','failed','cancelled')",
+            [org],
+          )
+        ).rows;
+        for (const m of missions) {
+          if (m.state === "running")
+            await c.query(
+              "update runtime_missions set state='cancelling',version=version+1 where organization_id=$1 and id=$2",
+              [org, m.id],
+            );
+          await c.query(
+            "update runtime_missions set state='cancelled',version=version+1 where organization_id=$1 and id=$2",
+            [org, m.id],
+          );
+          await this.releaseMission(c, await this.mission(c, org, m.id));
+        }
+      });
+    }
+  }
+  const runtime = new Harness({
+    databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+    auth,
+    cursorSecret: csrfSecret,
+    clock: () => now.getTime(),
+  });
+  let api: Awaited<ReturnType<typeof buildApp>>,
+    logs = "";
+  beforeAll(async () => {
+    api = await buildApp({
+      auth,
+      runtime,
+      readiness: async () => true,
+      logger: createLogger(
+        "info",
+        new Writable({
+          write(chunk, _encoding, done) {
+            logs += chunk.toString();
+            done();
+          },
+        }),
+      ),
+    });
+  });
+  afterAll(async () => {
+    await api.close();
+    await runtime.close();
+  });
+  async function fixture(
+    action: unknown = { kind: "fixture.echo", value: "verified" },
+  ) {
+    const org = (await auth.createOrganization(ownerToken, "Worker fixture"))
+        .id,
+      project = await auth.createProject(ownerToken, org, "Worker project"),
+      env = await auth.createEnvironment(ownerToken, org, {
+        projectId: project.id,
+        name: "Worker simulation",
+        type: "simulation",
+      }),
+      agent = await runtime.createAgent(ownerToken, org, {
+        environment_id: env.id,
+        name: "Worker agent",
+        adapter: "simulation",
+      }),
+      group = await runtime.createGroup(ownerToken, org, {
+        environment_id: env.id,
+        name: "Worker group",
+        agent_ids: [agent.id],
+      }),
+      template = await runtime.createTemplate(ownerToken, org, {
+        environment_id: env.id,
+        name: "Worker task",
+        adapter: "simulation",
+        graph: {
+          schema_version: 1,
+          nodes: [{ key: "work", action, timeout_ms: 10000 }],
+        },
+      }),
+      draft = await runtime.createMission(
+        ownerToken,
+        org,
+        crypto.randomUUID(),
+        {
+          name: "Worker mission",
+          group_id: group.id,
+          template_id: template.id,
+        },
+      );
+    await runtime.executeMission(
+      ownerToken,
+      org,
+      draft.id,
+      crypto.randomUUID(),
+      1,
+    );
+    const enrolled = await runtime.enrollWorker(ownerToken, org, {
+      environment_id: env.id,
+      name: "Worker",
+      protocol: 1,
+    });
+    let reference: DispatchReference | undefined;
+    for (let i = 0; i < 20 && !reference; i++)
+      await runtime.schedulerTick(async (ref) => {
+        if (ref.organization_id === org) reference = ref;
+      });
+    if (!reference) throw new Error("Missing worker reference");
+    return { org, project, env, mission: draft.id, enrolled, reference };
+  }
+  const handle = (c: {
+    attempt_id: string;
+    task_id: string;
+    fence: number;
+    generation: number;
+  }) => ({
+    attempt_id: c.attempt_id,
+    task_id: c.task_id,
+    fence: c.fence,
+    generation: c.generation,
+  });
+  it("allows one claim/result across 100 HTTP replays and rejects stale fences, forged results and cookie-only worker calls", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token,
+      headers = {
+        authorization: `Bearer ${token}`,
+        "x-craftlayer-worker-protocol": "1",
+      };
+    try {
+      const claims = await Promise.all(
+        Array.from({ length: 100 }, () =>
+          api.inject({
+            method: "POST",
+            url: "/api/v1/worker/claim",
+            headers,
+            payload: f.reference,
+          }),
+        ),
+      );
+      expect(claims.every((r) => r.statusCode === 200)).toBe(true);
+      const winners = claims.flatMap((r) =>
+        r.json().claim ? [r.json().claim] : [],
+      );
+      expect(winners).toHaveLength(1);
+      const h = handle(winners[0]);
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(1);
+      expect(
+        (
+          await api.inject({
+            method: "POST",
+            url: "/api/v1/worker/heartbeat",
+            headers: { cookie: `craftlayer_session=${ownerToken}` },
+            payload: h,
+          })
+        ).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await api.inject({
+            method: "POST",
+            url: "/api/v1/worker/prepare",
+            headers,
+            payload: { ...h, fence: h.fence + 1 },
+          })
+        ).statusCode,
+      ).toBe(409);
+      const permit = await api.inject({
+        method: "POST",
+        url: "/api/v1/worker/prepare",
+        headers,
+        payload: h,
+      });
+      expect(permit.statusCode).toBe(200);
+      expect(
+        (
+          await api.inject({
+            method: "POST",
+            url: "/api/v1/worker/finish",
+            headers,
+            payload: { ...h, outcome: "succeeded", value: "forged" },
+          })
+        ).statusCode,
+      ).toBe(403);
+      const done = await api.inject({
+        method: "POST",
+        url: "/api/v1/worker/finish",
+        headers,
+        payload: { ...h, outcome: "succeeded", value: "verified" },
+      });
+      expect(done.statusCode).toBe(200);
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("succeeded");
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(0);
+      expect(claims[0]?.body).not.toMatch(
+        /execution_grant|token_hash|signature|cookieToken/,
+      );
+      expect(logs).not.toContain(token);
+      expect(JSON.stringify(f.reference)).not.toContain(token);
+      expect(
+        JSON.stringify(await runtime.listWorkers(ownerToken, f.org, f.env.id)),
+      ).not.toContain(token);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  }, 30000);
+  it("denies queue tampering, foreign environments, old protocol and revoked worker credentials", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    try {
+      await expect(runtime.claim(token, 0, f.reference)).rejects.toMatchObject({
+        status: 403,
+      });
+      await expect(
+        runtime.claim(token, 1, {
+          ...f.reference,
+          organization_id: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        runtime.claim(token, 1, {
+          ...f.reference,
+          event_id: crypto.randomUUID(),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      const other = await auth.createEnvironment(ownerToken, f.org, {
+          projectId: f.project.id,
+          name: "Wrong worker world",
+          type: "simulation",
+        }),
+        foreignWorker = await runtime.enrollWorker(ownerToken, f.org, {
+          environment_id: other.id,
+          name: "Other worker",
+          protocol: 1,
+        });
+      await expect(
+        runtime.claim(foreignWorker.credential.token, 1, f.reference),
+      ).rejects.toMatchObject({ status: 404 });
+      const claim = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!claim) throw new Error("Missing claim");
+      await runtime.revokeWorker(
+        ownerToken,
+        f.org,
+        f.enrolled.registration.id,
+        1,
+      );
+      await expect(
+        runtime.prepareAction(token, 1, handle(claim)),
+      ).rejects.toMatchObject({ status: 401 });
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("fences retries and retains an expired prepared effect as uncertain until operator reconciliation", async () => {
+    const f = await fixture({
+        kind: "fixture.fail",
+        failure: "transient",
+        failures: 1,
+      }),
+      token = f.enrolled.credential.token;
+    try {
+      const first = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!first) throw new Error("Missing claim");
+      expect(
+        (
+          await runtime.finish(token, 1, {
+            ...handle(first),
+            outcome: "transient",
+          })
+        ).state,
+      ).toBe("retry_wait");
+      now = new Date(now.getTime() + 2000);
+      let reference: DispatchReference | undefined;
+      for (let i = 0; i < 20 && !reference; i++)
+        await runtime.schedulerTick(async (r) => {
+          if (r.organization_id === f.org) reference = r;
+        });
+      if (!reference) throw new Error("Missing retry");
+      const second = (await runtime.claim(token, 1, reference)).claim;
+      if (!second) throw new Error("Missing retry claim");
+      expect(second.fence).toBe(first.fence + 1);
+      await expect(
+        runtime.finish(token, 1, {
+          ...handle(first),
+          outcome: "succeeded",
+          value: "recovered",
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      await runtime.prepareAction(token, 1, handle(second));
+      now = new Date(now.getTime() + 11000);
+      await expect(
+        runtime.finish(token, 1, {
+          ...handle(second),
+          outcome: "succeeded",
+          value: "recovered",
+        }),
+      ).rejects.toMatchObject({ status: 409 });
+      await runtime.acknowledgeStopped(token, 1, handle(second));
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).reason,
+      ).toBe("uncertain");
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(1);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("revalidates the initiating session immediately before tool authorization", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    try {
+      const claimed = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!claimed) throw new Error("Missing claim");
+      await auth.logout(ownerToken);
+      await expect(
+        runtime.prepareAction(token, 1, handle(claimed)),
+      ).rejects.toMatchObject({ status: 403 });
+      await runtime.acknowledgeStopped(token, 1, handle(claimed));
+      const fresh = (
+        await auth.login(
+          { login: ownerLogin, password },
+          "worker-revocation-inspection",
+        )
+      ).cookieToken;
+      expect((await runtime.getMission(fresh, f.org, f.mission)).state).toBe(
+        "blocked",
+      );
+      expect(
+        (await runtime.runtimeBudget(fresh, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(0);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+});

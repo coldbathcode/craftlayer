@@ -30,7 +30,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-03-01](../chapters/03-fleet-engine.md) | Domain schema and finite state machines | Chapter 02 gate | L | Verified |
 | [CL-03-02](../chapters/03-fleet-engine.md) | Mission API, grants and CLI | CL-03-01 | L | Verified |
 | [CL-03-03](../chapters/03-fleet-engine.md) | Outbox and fair scheduler | CL-03-02 | L | Verified |
-| [CL-03-04](../chapters/03-fleet-engine.md) | Worker claims and bounded runtime | CL-03-03 | L | Not started |
+| [CL-03-04](../chapters/03-fleet-engine.md) | Worker claims and bounded runtime | CL-03-03 | L | In progress |
 | [CL-03-05](../chapters/03-fleet-engine.md) | Pause, cancel and emergency stop | CL-03-04 | L | Not started |
 | [CL-03-06](../chapters/03-fleet-engine.md) | Authorized event projection and recovery | CL-03-05 | L | Not started |
 | [CL-03-07](../chapters/03-fleet-engine.md) | Runtime fault suite and review | CL-03-06 | L | Not started |

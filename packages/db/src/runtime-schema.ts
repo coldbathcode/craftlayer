@@ -257,6 +257,7 @@ export const runtimeAttempts = pgTable(
     fence: integer("fence").notNull(),
     state: text("state").notNull(),
     leaseExpiresAt: time("lease_expires_at").notNull(),
+    deadlineAt: time("deadline_at").notNull(),
     startedAt: time("started_at").notNull(),
     finishedAt: time("finished_at"),
     toolCalls: integer("tool_calls").notNull().default(0),
@@ -265,6 +266,15 @@ export const runtimeAttempts = pgTable(
   (t) => [
     unique().on(t.organizationId, t.id),
     unique().on(t.organizationId, t.taskId, t.fence),
+    foreignKey({
+      columns: [t.organizationId, t.projectId, t.environmentId, t.workerId],
+      foreignColumns: [
+        runtimeWorkers.organizationId,
+        runtimeWorkers.projectId,
+        runtimeWorkers.environmentId,
+        runtimeWorkers.id,
+      ],
+    }),
     unique().on(t.organizationId, t.missionId, t.taskId, t.id),
     foreignKey({
       columns: [t.organizationId, t.missionId, t.taskId],
@@ -374,6 +384,7 @@ export const runtimeApprovals = pgTable(
     actionHash: char("action_hash", { length: 64 }).notNull(),
     requesterId: uuid("requester_id").notNull(),
     approverId: uuid("approver_id"),
+    approverGrant: jsonb("approver_grant"),
     generation: integer("generation").notNull(),
     state: text("state").notNull().default("pending"),
     expiresAt: time("expires_at").notNull(),
@@ -548,6 +559,60 @@ export const runtimeOutbox = pgTable(
         runtimeTasks.organizationId,
         runtimeTasks.missionId,
         runtimeTasks.id,
+      ],
+    }),
+  ],
+);
+
+export const runtimeWorkers = pgTable(
+  "runtime_workers",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    environmentId: uuid("environment_id").notNull(),
+    name: varchar("name", { length: 120 }).notNull(),
+    protocol: integer("protocol").notNull(),
+    tokenHash: char("token_hash", { length: 64 }).notNull(),
+    version: integer("version").notNull().default(1),
+    expiresAt: time("expires_at").notNull(),
+    revokedAt: time("revoked_at"),
+    lastSeenAt: time("last_seen_at"),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.id),
+    unique().on(t.organizationId, t.projectId, t.environmentId, t.id),
+    foreignKey({
+      columns: [t.organizationId, t.projectId, t.environmentId],
+      foreignColumns: [
+        environments.organizationId,
+        environments.projectId,
+        environments.id,
+      ],
+    }),
+  ],
+);
+export const runtimeModelCalls = pgTable(
+  "runtime_model_calls",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    missionId: uuid("mission_id").notNull(),
+    taskId: uuid("task_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    step: integer("step").notNull(),
+    requestId: uuid("request_id").notNull().unique(),
+    state: text("state").notNull(),
+    proposal: jsonb("proposal"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.attemptId, t.step] }),
+    foreignKey({
+      columns: [t.organizationId, t.missionId, t.taskId, t.attemptId],
+      foreignColumns: [
+        runtimeAttempts.organizationId,
+        runtimeAttempts.missionId,
+        runtimeAttempts.taskId,
+        runtimeAttempts.id,
       ],
     }),
   ],

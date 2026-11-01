@@ -1,18 +1,29 @@
 import { AuthError } from "@craftlayer/auth";
 import {
+  actionPermit,
   agentCreate,
   agentView,
+  attemptHandle,
+  dispatchReference,
   errorSchema,
+  finishRequest,
+  finishView,
   groupCreate,
   groupView,
   itemsSchema,
+  leaseView,
   missionCreate,
   missionView,
+  okSchema,
   runtimeLimitsSchema,
   runtimeQuotaView,
   templateCreate,
   templateView,
   versionRequest,
+  workerClaim,
+  workerCreate,
+  workerEnrollment,
+  workerView,
 } from "@craftlayer/contracts";
 import type { RuntimeService } from "@craftlayer/runtime";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -216,5 +227,98 @@ export async function registerRuntime(
         r.body.expected_version,
         r.body.limits,
       ),
+  );
+  api.post(
+    "/api/v1/workers",
+    {
+      schema: {
+        body: workerCreate,
+        response: { ...errors, 200: workerEnrollment },
+      },
+    },
+    (r) => runtime.enrollWorker(token(r), org(r), r.body),
+  );
+  api.get(
+    "/api/v1/workers",
+    {
+      schema: {
+        querystring: query,
+        response: { ...errors, 200: itemsSchema(workerView) },
+      },
+    },
+    async (r) => ({
+      items: await runtime.listWorkers(
+        token(r),
+        org(r),
+        r.query.environment_id,
+      ),
+    }),
+  );
+  api.post(
+    "/api/v1/workers/:id/revoke",
+    {
+      schema: {
+        params,
+        body: versionRequest,
+        response: { ...errors, 200: workerView },
+      },
+    },
+    (r) =>
+      runtime.revokeWorker(
+        token(r),
+        org(r),
+        r.params.id,
+        r.body.expected_version,
+      ),
+  );
+  const bearer = (r: FastifyRequest) => {
+    const v = r.headers.authorization;
+    if (!v?.startsWith("Bearer "))
+      throw new AuthError(401, "WORKER_DENIED", "Worker credentials required.");
+    return v.slice(7);
+  };
+  const protocol = (r: FastifyRequest) =>
+    r.headers["x-craftlayer-worker-protocol"] === "1" ? 1 : 0;
+  api.post(
+    "/api/v1/worker/claim",
+    {
+      schema: {
+        body: dispatchReference,
+        response: {
+          ...errors,
+          200: z.strictObject({ claim: workerClaim.nullable() }),
+        },
+      },
+    },
+    (r) => runtime.claim(bearer(r), protocol(r), r.body),
+  );
+  api.post(
+    "/api/v1/worker/heartbeat",
+    {
+      schema: { body: attemptHandle, response: { ...errors, 200: leaseView } },
+    },
+    (r) => runtime.heartbeat(bearer(r), protocol(r), r.body),
+  );
+  api.post(
+    "/api/v1/worker/prepare",
+    {
+      schema: {
+        body: attemptHandle,
+        response: { ...errors, 200: actionPermit },
+      },
+    },
+    (r) => runtime.prepareAction(bearer(r), protocol(r), r.body),
+  );
+  api.post(
+    "/api/v1/worker/finish",
+    {
+      schema: { body: finishRequest, response: { ...errors, 200: finishView } },
+    },
+    (r) => runtime.finish(bearer(r), protocol(r), r.body),
+  );
+  api.post(
+    "/api/v1/worker/stopped",
+    { schema: { body: attemptHandle, response: { ...errors, 200: okSchema } } },
+    (r) => runtime.acknowledgeStopped(bearer(r), protocol(r), r.body),
   );
 }

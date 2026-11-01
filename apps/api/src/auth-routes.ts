@@ -56,6 +56,8 @@ export async function registerAuth(
     if (!request.url.startsWith("/api/v1/")) return;
     reply.header("Cache-Control", "no-store");
     if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
+    // Worker RPC accepts only registered bearer identity; cookie sessions never authorize it.
+    if (request.routeOptions.url?.startsWith("/api/v1/worker/")) return;
     if (request.headers.origin !== origin)
       throw new AuthError(
         403,
