@@ -8,6 +8,9 @@ import {
   missionView,
   templateCreate,
   templateView,
+  workerCreate,
+  workerEnrollment,
+  workerView,
 } from "@craftlayer/contracts";
 import type { z } from "zod";
 export interface RuntimeRequestOptions {
@@ -24,6 +27,24 @@ export type RuntimeTransport = <T extends z.ZodType>(
 ) => Promise<z.infer<T>>;
 export function createRuntimeClient(send: RuntimeTransport) {
   return {
+    enrollWorker: (org: string, input: z.input<typeof workerCreate>) =>
+      send("/api/v1/workers", workerEnrollment, {
+        method: "POST",
+        json: workerCreate.parse(input),
+        organization: org,
+      }),
+    workers: (org: string, env: string) =>
+      send(
+        `/api/v1/workers?environment_id=${encodeURIComponent(env)}`,
+        itemsSchema(workerView),
+        { organization: org },
+      ),
+    revokeWorker: (org: string, id: string, version: number) =>
+      send(`/api/v1/workers/${encodeURIComponent(id)}/revoke`, workerView, {
+        method: "POST",
+        json: { expected_version: version },
+        organization: org,
+      }),
     createAgent: (org: string, input: z.input<typeof agentCreate>) =>
       send("/api/v1/agents", agentView, {
         method: "POST",

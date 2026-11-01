@@ -1,5 +1,6 @@
 import { constants } from "node:fs";
 import {
+  lstat,
   mkdir,
   open,
   readFile,
@@ -9,7 +10,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { createRuntimeClient, type RuntimeTransport } from "@craftlayer/sdk";
 import { z } from "zod";
 import { readSecret } from "./secret.js";
@@ -42,7 +43,9 @@ function origin(input: string) {
 export async function runtimeCli(args: string[]): Promise<boolean> {
   const [command, sub, org, a, b, key] = args;
   if (
-    !["login", "logout", "fleet", "template", "mission"].includes(command ?? "")
+    !["login", "logout", "fleet", "template", "mission", "worker"].includes(
+      command ?? "",
+    )
   )
     return false;
   try {
@@ -140,9 +143,50 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     const client = createRuntimeClient(send);
     if (!org) throw new Error("Organization required");
     z.uuid().parse(org);
+    if (command === "worker" && sub === "enroll" && a) {
+      const path = resolve(b ?? ".worker-secrets/credential.json");
+      if (
+        await lstat(path).then(
+          () => true,
+          () => false,
+        )
+      )
+        throw new Error("Credential file already exists");
+      await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+      const directory = await stat(dirname(path));
+      if (
+        (directory.mode & 0o077) !== 0 ||
+        directory.uid !== process.getuid?.()
+      )
+        throw new Error("Unsafe credential directory");
+      const enrolled = await client.enrollWorker(org, {
+        environment_id: z.uuid().parse(a),
+        name: "Local simulation worker",
+        protocol: 1,
+      });
+      await writeFile(path, JSON.stringify(enrolled.credential), {
+        flag: "wx",
+        mode: 0o600,
+      });
+      console.log(
+        JSON.stringify({
+          worker_id: enrolled.registration.id,
+          credential_file: path,
+        }),
+      );
+      return true;
+    }
     let result: unknown;
     const json = async () => JSON.parse(await readFile(a ?? "", "utf8"));
-    if (command === "fleet" && sub === "agents" && a)
+    if (command === "worker" && sub === "list" && a)
+      result = await client.workers(org, z.uuid().parse(a));
+    else if (command === "worker" && sub === "revoke" && a)
+      result = await client.revokeWorker(
+        org,
+        z.uuid().parse(a),
+        z.coerce.number().int().positive().parse(b),
+      );
+    else if (command === "fleet" && sub === "agents" && a)
       result = await client.agents(org, z.uuid().parse(a));
     else if (command === "fleet" && sub === "groups" && a)
       result = await client.groups(org, z.uuid().parse(a));

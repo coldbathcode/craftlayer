@@ -22,6 +22,18 @@ if (existsSync(".secrets/provider-keys.json")) {
   for (const value of Object.values(ring.keys))
     credentials.push(Buffer.from(value));
 }
+if (existsSync(".worker-secrets/credential.json")) {
+  let credential;
+  try {
+    credential = JSON.parse(
+      readFileSync(".worker-secrets/credential.json", "utf8"),
+    );
+  } catch {
+    throw new Error("Worker credential JSON invalid; values omitted");
+  }
+  if (typeof credential.token === "string")
+    credentials.push(Buffer.from(credential.token));
+}
 assert(credentials.length >= 8, "Expected generated local credentials");
 const files = execFileSync(
   "git",

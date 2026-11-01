@@ -150,6 +150,7 @@ export const templateView = z.strictObject({
   graph: graphSchema,
 });
 export const taskView = z.strictObject({
+  agent_id: z.uuid().nullable(),
   id: z.uuid(),
   key: nodeKey,
   state: taskState,
@@ -292,3 +293,16 @@ export const finishView = z.strictObject({
   ok: z.literal(true),
   state: z.enum(["succeeded", "retry_wait", "blocked", "failed", "cancelled"]),
 });
+export const runtimeBlocked = z.strictObject({
+  blocked: z.literal(true),
+  reason: runtimeReason,
+});
+export const prepareView = z.union([actionPermit, runtimeBlocked]);
+export const modelDecision = z.union([
+  z.strictObject({
+    proposal: fixtureTool,
+    lease_ms: z.number().int().min(1).max(15000),
+    deadline_ms: z.number().int().min(1).max(10000),
+  }),
+  runtimeBlocked,
+]);

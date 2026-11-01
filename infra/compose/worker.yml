@@ -1,0 +1,8 @@
+# Optional registered worker. Its directory contains transport credentials only, never provider keys.
+services:
+  worker:
+    user: "${CRAFTLAYER_HOST_UID:?Run pnpm setup:worker}:${CRAFTLAYER_HOST_GID:?Run pnpm setup:worker}"
+    environment:
+      CRAFTLAYER_WORKER_CREDENTIAL_FILE: /run/secrets/worker/credential.json
+    volumes:
+      - ./.worker-secrets:/run/secrets/worker:ro

@@ -36,6 +36,7 @@ jobs:
         env:
           CRAFTLAYER_BOOTSTRAP_TOKEN: fixture-must-be-overridden-by-isolated-harness
       - run: pnpm test:provider-stack
+      - run: pnpm test:runtime-stack
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: failure()
         with:
@@ -45,4 +46,4 @@ jobs:
             test-results
           retention-days: 7
       - run: docker compose down
-        if: always()
+        if: always() && hashFiles('.env') != ''

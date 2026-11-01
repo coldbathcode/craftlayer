@@ -2,27 +2,57 @@ import { createServer } from "node:http";
 import {
   createLogger,
   installShutdown,
-  parseServerConfig,
+  parseWorkerConfig,
   within,
 } from "@craftlayer/config";
 import { healthSchema } from "@craftlayer/contracts";
-import { createDatabase } from "@craftlayer/db";
+import {
+  readWorkerCredential,
+  startSimulationWorker,
+  workerOrigin,
+} from "@craftlayer/runtime/worker";
 import { createClient } from "redis";
 
 const logger = createLogger();
 try {
-  const config = parseServerConfig(process.env);
-  const log = createLogger(config.CRAFTLAYER_LOG_LEVEL);
-  const { pool } = createDatabase(config.DATABASE_URL);
-  const redis = createClient({
-    url: config.REDIS_URL,
-    socket: { connectTimeout: 2000, reconnectStrategy: false },
-    commandsQueueMaxLength: 10,
-  });
+  const config = parseWorkerConfig(process.env),
+    log = createLogger(config.CRAFTLAYER_LOG_LEVEL),
+    origin = workerOrigin(config.CRAFTLAYER_WORKER_API_ORIGIN),
+    redis = createClient({
+      url: config.REDIS_URL,
+      socket: {
+        connectTimeout: 2000,
+        reconnectStrategy: (attempt) => Math.min(5000, 250 * (attempt + 1)),
+      },
+      commandsQueueMaxLength: 10,
+    });
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
   );
-  await redis.connect().catch(() => {});
+  await within(redis.connect()).catch(() => {});
+  let consumer: ReturnType<typeof startSimulationWorker> | undefined,
+    consumerReady = !config.CRAFTLAYER_WORKER_CREDENTIAL_FILE;
+  if (config.CRAFTLAYER_WORKER_CREDENTIAL_FILE) {
+    const credential = await readWorkerCredential(
+      config.CRAFTLAYER_WORKER_CREDENTIAL_FILE,
+    );
+    consumer = startSimulationWorker({
+      redisUrl: config.REDIS_URL,
+      apiOrigin: origin,
+      credential,
+      onStatus: (state) =>
+        log.info(
+          { code: "WORKER_TASK_STATE", state },
+          "Simulation worker state",
+        ),
+    });
+    void consumer
+      .ready()
+      .then(() => {
+        consumerReady = true;
+      })
+      .catch(() => {});
+  }
   const server = createServer(async (req, res) => {
     if (
       !["/health/live", "/health/ready"].includes(req.url ?? "") ||
@@ -35,15 +65,16 @@ try {
     let ready = req.url === "/health/live";
     if (!ready)
       try {
-        const [db, pong] = await within(
+        const [status, pong] = await within(
           Promise.all([
-            pool.query(
-              "select to_regclass('public.organizations') is not null as migrated",
-            ),
+            fetch(`${origin}/health/ready`, {
+              redirect: "error",
+              signal: AbortSignal.timeout(2000),
+            }),
             redis.isReady ? redis.ping() : Promise.resolve(null),
           ]),
         );
-        ready = db.rows[0]?.migrated === true && pong === "PONG";
+        ready = status.ok && pong === "PONG" && consumerReady;
       } catch {}
     res.writeHead(ready ? 200 : 503, { "content-type": "application/json" });
     res.end(
@@ -59,32 +90,34 @@ try {
   server.requestTimeout = 5000;
   server.headersTimeout = 5000;
   installShutdown(async () => {
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => (error ? reject(error) : resolve()));
+    await new Promise<void>((accept, reject) => {
+      server.close((error) => (error ? reject(error) : accept()));
       server.closeAllConnections();
     });
+    if (consumer) await within(consumer.close(), 3000).catch(() => {});
     if (redis.isOpen) redis.destroy();
-    await pool.end();
   }, log);
   server.listen(
     config.CRAFTLAYER_WORKER_PORT,
     config.CRAFTLAYER_BIND_HOST,
     () =>
       log.info(
-        { code: "WORKER_READY" },
-        "Worker shell listening; mission execution arrives in Chapter 03",
+        { code: "WORKER_READY", configured: Boolean(consumer) },
+        consumer
+          ? "Registered simulation worker listening"
+          : "Worker healthy; enrollment required for simulation work",
       ),
   );
   server.on("error", () => {
     log.error({ code: "WORKER_LISTEN_FAILED" }, "Worker cannot bind");
     if (redis.isOpen) redis.destroy();
-    void pool.end();
+    void consumer?.close();
     process.exitCode = 1;
   });
 } catch {
   logger.error(
     { code: "STARTUP_FAILED" },
-    "Worker startup failed; validate configuration and local dependencies. Values omitted.",
+    "Worker startup failed; validate protected transport configuration. Values omitted.",
   );
   process.exitCode = 1;
 }

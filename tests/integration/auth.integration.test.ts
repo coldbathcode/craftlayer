@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
+import { performance } from "node:perf_hooks";
 import { Writable } from "node:stream";
 import { Queue } from "bullmq";
 import pg from "pg";
@@ -38,6 +39,7 @@ import {
   redisConnection,
   redisPublisher,
 } from "../../packages/runtime/src/index.js";
+import { startSimulationWorker } from "../../packages/runtime/src/worker.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -2835,6 +2837,32 @@ describe("scoped runtime command API and CLI", () => {
       ]);
       expect(execute.code).toBe(0);
       expect(JSON.parse(execute.output).state).toBe("queued");
+      const enrolled = await cli([
+        "worker",
+        "enroll",
+        orgId,
+        f.env.id,
+        `${directory}/worker.json`,
+      ]);
+      expect(enrolled.code).toBe(0);
+      const workerCredential = JSON.parse(
+        await readFile(`${directory}/worker.json`, "utf8"),
+      );
+      expect(enrolled.output).not.toContain(workerCredential.token);
+      const workers = await cli(["worker", "list", orgId, f.env.id]);
+      expect(workers.code).toBe(0);
+      expect(workers.output).not.toContain(workerCredential.token);
+      expect(
+        (
+          await cli([
+            "worker",
+            "revoke",
+            orgId,
+            workerCredential.worker_id,
+            "1",
+          ])
+        ).code,
+      ).toBe(0);
       expect((await cli(["logout"])).code).toBe(0);
       const client = new pg.Client({
         connectionString: process.env.TEST_DATABASE_URL,
@@ -3576,6 +3604,44 @@ describe("registered worker authority and fenced effects", () => {
           .active_agents,
       ).toBe(0);
     } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("runs a real BullMQ consumer through bearer-only HTTP without database or provider credentials", async () => {
+    const f = await fixture();
+    if (!process.env.TEST_REDIS_URL)
+      throw new Error("Disposable Redis required");
+    if (!api.server.listening) await api.listen({ host: "127.0.0.1", port: 0 });
+    const address = api.server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing HTTP address");
+    const loop = startSimulationWorker({
+      redisUrl: process.env.TEST_REDIS_URL,
+      apiOrigin: `http://127.0.0.1:${address.port}`,
+      credential: f.enrolled.credential,
+    });
+    const queue = new Queue(queueName(f.org, f.env.id), {
+      connection: redisConnection(process.env.TEST_REDIS_URL),
+    });
+    queue.on("error", () => {});
+    try {
+      await loop.ready();
+      const started = performance.now();
+      await redisPublisher(process.env.TEST_REDIS_URL)(f.reference, f.env.id);
+      let view = await runtime.getMission(ownerToken, f.org, f.mission);
+      for (let i = 0; i < 100 && view.state !== "succeeded"; i++) {
+        await new Promise((accept) => setTimeout(accept, 50));
+        view = await runtime.getMission(ownerToken, f.org, f.mission);
+      }
+      expect(view.state).toBe("succeeded");
+      expect(performance.now() - started).toBeLessThan(10000);
+      expect(logs).not.toContain(f.enrolled.credential.token);
+      const job = await queue.getJob(f.reference.event_id);
+      expect(JSON.stringify(job?.returnvalue)).not.toContain("verified");
+    } finally {
+      await loop.close();
+      await queue.obliterate({ force: true }).catch(() => {});
+      await queue.disconnect();
       await runtime.cleanup(f.org);
     }
   });

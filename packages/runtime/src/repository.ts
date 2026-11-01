@@ -67,6 +67,7 @@ export interface MissionRow {
   name: string;
 }
 export interface TaskRow {
+  agent_id?: string | null;
   id: string;
   organization_id: string;
   mission_id: string;
@@ -224,7 +225,7 @@ export class RuntimeRepository {
   protected async view(c: pg.PoolClient, row: MissionRow) {
     const tasks = (
       await c.query<TaskRow>(
-        "select * from runtime_tasks where organization_id=$1 and mission_id=$2 order by node_key,id limit 50",
+        "select t.*,(select a.agent_id from runtime_attempts a where a.organization_id=t.organization_id and a.task_id=t.id order by a.fence desc limit 1) as agent_id from runtime_tasks t where t.organization_id=$1 and t.mission_id=$2 order by t.node_key,t.id limit 50",
         [row.organization_id, row.id],
       )
     ).rows;
@@ -242,6 +243,7 @@ export class RuntimeRepository {
       created_at: row.created_at.toISOString(),
       tasks: tasks.map((t) => ({
         id: t.id,
+        agent_id: t.agent_id ?? null,
         key: t.node_key,
         state: t.state,
         reason: t.reason,

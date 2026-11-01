@@ -37,7 +37,7 @@ for (const container of containers) {
   if (service === "worker")
     assert(
       !container.Config.Env.some((value) =>
-        /^(AUTH_DATABASE_URL|PROVISION_DATABASE_URL|MIGRATION_DATABASE_URL|CRAFTLAYER_(BOOTSTRAP_TOKEN|RECOVERY_TOKEN|CSRF_SECRET|SMTP_URL))=/.test(
+        /^(DATABASE_URL|AUTH_DATABASE_URL|PROVISION_DATABASE_URL|MIGRATION_DATABASE_URL|CRAFTLAYER_(BOOTSTRAP_TOKEN|RECOVERY_TOKEN|CSRF_SECRET|SMTP_URL))=/.test(
           value,
         ),
       ),

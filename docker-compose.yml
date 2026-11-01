@@ -110,10 +110,15 @@ services:
   worker:
     <<: *hardening
     build: { context: ., dockerfile: infra/images/Dockerfile, target: worker }
-    environment: *runtime
+    environment:
+      NODE_ENV: production
+      CRAFTLAYER_BIND_HOST: 0.0.0.0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Run pnpm setup:local}@redis:6379
+      CRAFTLAYER_WORKER_API_ORIGIN: http://api:4000
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }
+      api: { condition: service_healthy }
     read_only: true
     tmpfs: [/tmp]
     mem_limit: 256m

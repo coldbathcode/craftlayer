@@ -92,3 +92,18 @@ it("requires TLS for shared origins and SMTP and rejects URL option overrides", 
     }).CRAFTLAYER_SMTP_URL,
   ).toBe("smtps://mail.example/");
 });
+
+it("worker configuration rejects database, identity and provider authority", async () => {
+  const { parseWorkerConfig } = await import("./index.js");
+  const base = { REDIS_URL: "redis://127.0.0.1:6379" };
+  expect(parseWorkerConfig(base).CRAFTLAYER_WORKER_PORT).toBe(4001);
+  for (const key of [
+    "DATABASE_URL",
+    "AUTH_DATABASE_URL",
+    "CRAFTLAYER_PROVIDER_KEY_FILE",
+    "CRAFTLAYER_CSRF_SECRET",
+  ])
+    expect(() =>
+      parseWorkerConfig({ ...base, [key]: "fixture-must-be-rejected" }),
+    ).toThrow("separation");
+});

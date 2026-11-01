@@ -17,7 +17,7 @@
       "path": "../../packages/contracts"
     },
     {
-      "path": "../../packages/db"
+      "path": "../../packages/runtime"
     }
   ]
 }

@@ -21,7 +21,7 @@
     "test:db": "node scripts/test-database.mjs",
     "build:server": "pnpm -r --filter '!@craftlayer/web' run build",
     "dev:api": "node --env-file=.env --import tsx apps/api/src/main.ts",
-    "dev:worker": "node --env-file=.env --import tsx apps/worker/src/main.ts",
+    "dev:worker": "node --env-file=.worker-secrets/host.env --import tsx apps/worker/src/main.ts",
     "dev:web": "pnpm --filter @craftlayer/web dev",
     "cli": "node --env-file-if-exists=.env --import tsx apps/cli/src/main.ts",
     "setup:local": "node scripts/setup-local.mjs",
@@ -33,7 +33,9 @@
     "check:stack": "node --env-file-if-exists=.env scripts/check-stack.mjs",
     "test:identity-ui": "node scripts/test-identity-ui.mjs",
     "setup:providers": "node scripts/setup-providers.mjs",
-    "test:provider-stack": "node scripts/test-provider-stack.mjs"
+    "test:provider-stack": "node scripts/test-provider-stack.mjs",
+    "setup:worker": "node scripts/setup-worker.mjs",
+    "test:runtime-stack": "node scripts/test-runtime-stack.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
@@ -41,6 +43,7 @@
     "@types/node": "22.20.5",
     "@types/pg": "8.23.1",
     "bullmq": "6.5.3",
+    "ioredis": "6.0.0",
     "pg": "8.23.1",
     "tsx": "4.23.15",
     "typescript": "5.9.3",

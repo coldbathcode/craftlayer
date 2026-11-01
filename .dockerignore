@@ -16,3 +16,5 @@ playwright-report
 **/next-env.d.ts
 **/*.tsbuildinfo
 .github
+
+.worker-secrets

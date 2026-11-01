@@ -12,8 +12,8 @@
   "dependencies": {
     "@craftlayer/config": "workspace:*",
     "@craftlayer/contracts": "workspace:*",
-    "@craftlayer/db": "workspace:*",
-    "redis": "6.3.1"
+    "redis": "6.3.1",
+    "@craftlayer/runtime": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"

@@ -89,3 +89,24 @@ Accounting explicitly reports `reserved_estimates`: a task attempt charges its b
 CL-03-04 is in progress. The API can enroll/list/revoke org/environment-bound simulation workers with `agent:assign`. Enrollment returns a credential once; list/revoke responses are redacted. Store the returned token only in a protected file, never queue it. The production worker process/configuration and CLI enrollment convenience are not yet delivered at this checkpoint.
 
 `/api/v1/worker/claim`, `/heartbeat`, `/prepare`, `/finish` and `/stopped` accept only a registered bearer and protocol header `x-craftlayer-worker-protocol: 1`; cookie/CSRF identity cannot substitute for worker registration. Canonical scope, current initiating grant, task/agent availability, generation, fence, attempt ceiling and deadline are checked before claims and permits. SQL never spans an external action. A prepared receipt makes a lost acknowledgement uncertain; expiry does not refund active holds. These server checks pass real PostgreSQL/API fault tests; the local process watchdog, model decision path and independent approval primitive are still being implemented.
+
+## Registered simulation worker process
+
+The process checkpoint adds a real API-controlled worker and CLI enrollment. Base Compose leaves its consumer unconfigured, health-checking private API/Redis without a database credential. A configured worker can process at most two simulation actions concurrently; canonical active-agent/membership/budget checks remain at the API. Task projections now include the latest canonical agent UUID. Model/approval execution remains the next checkpoint, not a delivered feature yet.
+
+After logging in as an adult with the required environment assignment, enroll a worker and prepare transport settings:
+
+```bash
+pnpm cli worker enroll ORGANIZATION_UUID ENVIRONMENT_UUID
+pnpm setup:worker
+docker compose --env-file .env --env-file .worker-secrets/compose.env \
+  -f docker-compose.yml -f infra/compose/worker.yml up -d --build --wait
+```
+
+Enrollment writes ignored mode-0600 `.worker-secrets/credential.json` under a mode-0700 directory; it refuses to overwrite an existing credential. The CLI prints metadata/path only. The directory is mounted read-only only into the worker, whose UID/GID match its owning host operator. It never contains provider master keys or identity database settings. Worker registrations expire after 24 hours; `worker list <org> <environment>` is redacted and `worker revoke <org> <worker> <version>` revokes immediately at subsequent authorization checks. Lost enrollment responses cannot recover a plaintext token: inspect/revoke the orphaned registration and enroll again deliberately. File/token rotation requires quiescing and restarting the worker; it does not silently resume paused work.
+
+Host development uses `pnpm dev:worker` and protected `.worker-secrets/host.env`, with the developer data-port override described in quickstart. Do not load the API's root `.env` into a worker process. Its config parser rejects database, recovery, CSRF, SMTP and provider-file authority. Docker uses only its selected transport environment. Core Redis is trusted private infrastructure; reference-only queue data does not turn it into a hostile multi-tenant broker.
+
+The watchdog uses monotonic request-start times, subtracts network delay, clamps renewals to the initial action deadline and never resurrects an expired controller. One-second heartbeat failure aborts the action. A hung heartbeat cannot extend action authority; simulated effects stop before the original ten-second-or-smaller deadline. RPCs have explicit deadlines and 16 KiB response bounds. These simulation guarantees are not physical game/sandbox shutdown certification.
+
+`pnpm test:runtime-stack` creates a disposable private installation, enrolls a protected real worker, executes a parallel two-agent DAG through CLI/API, checks verified results and env/mount/log separation, then removes its containers/images/volumes. It performs zero catalog/model/game calls. `pnpm test:offline` proves the pure/watchdog suite without external networking.

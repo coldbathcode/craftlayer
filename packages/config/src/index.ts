@@ -237,3 +237,47 @@ export async function within<T>(
     if (timer) clearTimeout(timer);
   }
 }
+
+/** Workers have transport credentials only; identity/provider/database authority stays at the API. */
+export function parseWorkerConfig(env: Record<string, string | undefined>) {
+  const forbidden = [
+    "DATABASE_URL",
+    "AUTH_DATABASE_URL",
+    "MIGRATION_DATABASE_URL",
+    "PROVISION_DATABASE_URL",
+    "CRAFTLAYER_BOOTSTRAP_TOKEN",
+    "CRAFTLAYER_RECOVERY_TOKEN",
+    "CRAFTLAYER_CSRF_SECRET",
+    "CRAFTLAYER_SMTP_URL",
+    "CRAFTLAYER_PROVIDER_KEY_FILE",
+    "CRAFTLAYER_PROVIDER_POLICY_FILE",
+  ];
+  if (forbidden.some((key) => Boolean(env[key])))
+    throw new Error("Worker secret separation violated; values omitted");
+  const worker = z.strictObject({
+    REDIS_URL: z
+      .url()
+      .refine((v) => ["redis:", "rediss:"].includes(new URL(v).protocol)),
+    CRAFTLAYER_BIND_HOST: z
+      .enum(["127.0.0.1", "0.0.0.0", "::1"])
+      .default("127.0.0.1"),
+    CRAFTLAYER_WORKER_PORT: z.coerce
+      .number()
+      .int()
+      .min(1024)
+      .max(65535)
+      .default(4001),
+    CRAFTLAYER_WORKER_API_ORIGIN: z.url().default("http://127.0.0.1:4000"),
+    CRAFTLAYER_WORKER_CREDENTIAL_FILE: z.string().startsWith("/").optional(),
+    CRAFTLAYER_LOG_LEVEL: z
+      .enum(["fatal", "error", "warn", "info", "debug", "silent"])
+      .default("info"),
+  });
+  const values = Object.fromEntries(
+      Object.keys(worker.shape).map((key) => [key, env[key]]),
+    ),
+    parsed = worker.safeParse(values);
+  if (!parsed.success)
+    throw new Error("Invalid worker configuration; values omitted");
+  return parsed.data;
+}
