@@ -1,6 +1,6 @@
 # Relational data model and tenant isolation
 
-Status: logical design for the full product. Chapters 00–01 have authoritative SQL migrations for organizations/projects and identity/RBAC/recovery/audit; later runtime entities remain planned. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
+Status: logical design for the full product. Chapters 00–02 have authoritative SQL migrations for organizations/projects, identity/RBAC/recovery/audit and provider configuration/budget ledgers; later runtime entities remain planned. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
 
 ## Conventions
 

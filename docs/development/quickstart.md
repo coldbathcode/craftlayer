@@ -100,3 +100,5 @@ If port 3000 is occupied, change `CRAFTLAYER_HTTP_PORT` and the matching `CRAFTL
 Before editing, inspect Git status and current delivery status. At the end of every build step, run relevant checks, record task evidence and the exact next action, commit the task changes, push to `origin main`, then verify remote/local equality. This is the user's standing requirement in [AGENTS.md](../../AGENTS.md). Chapter boundaries still require authorization for the next chapter.
 
 Open `/account` for first-owner setup and account administration. Follow the [identity/recovery runbook](identity-and-recovery.md); implementation tests leave your installation unclaimed.
+
+Optional provider configuration, protected key rotation and conservative accounting are documented in [the provider runbook](providers-and-budgets.md). The default stack still needs no provider key. Public model generation and fleet execution are not available until their authorized runtime work.

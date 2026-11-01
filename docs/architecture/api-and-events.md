@@ -1,6 +1,6 @@
 # API, event stream, CLI and extension contracts
 
-Status: Chapters 00–01 routes are implemented; later routes remain design contracts. Strict Zod response projections are shared by Fastify/OpenAPI and the browser SDK; request schemas live in explicit Fastify route definitions. SDK transport validates the shared schema rather than duplicating DTO types. See [identity runbook](../development/identity-and-recovery.md). A generated endpoint-method SDK can extend this transport in Chapter 03.
+Status: Chapters 00–02 identity and provider-administration routes are implemented; later routes remain design contracts. Strict Zod response projections are shared by Fastify/OpenAPI and the browser SDK; request schemas live in explicit Fastify route definitions. SDK transport validates the shared schema rather than duplicating DTO types. See the [identity runbook](../development/identity-and-recovery.md) and [provider runbook](../development/providers-and-budgets.md). A generated endpoint-method SDK can extend this transport in Chapter 03.
 
 ## HTTP conventions
 
@@ -23,7 +23,7 @@ Error envelope:
 
 400 invalid input; 401 missing/expired auth; 403 permission denied for known accessible scope; 404 inaccessible/missing resource; 409 version/state/idempotency conflict; 422 invalid graph/policy configuration; 429 rate/quota limit; 503 dependency unavailable. Avoid leaking foreign resource existence through validation errors.
 
-Require `Idempotency-Key` on execute/create operations with external consequences; store request digest and response reference by org/principal/route. Same key and payload replay response; different payload returns 409. Use version/`If-Match` for mutable resources and policy transitions. Idempotent API submission does not guarantee external exactly-once effects.
+The following external-execution HTTP conventions are planned for Chapter 03. Chapter 02 has no public generation endpoint: its internal request UUID/input hash rejects replay rather than caching output, and administration uses explicit `expected_version` where mutable. Require `Idempotency-Key` on execute/create operations with external consequences; store request digest and response reference by org/principal/route. Same key and payload replay response; different payload returns 409. Use version/`If-Match` for mutable resources and policy transitions. Idempotent API submission does not guarantee external exactly-once effects.
 
 ## Route plan
 
@@ -38,8 +38,11 @@ Require `Idempotency-Key` on execute/create operations with external consequence
 | `/users`, `/organizations`, `/memberships`, `/roles` | Scoped identity administration; instance org creation is explicit | 01 |
 | `/invitations`, `POST /invitations/consume`, `DELETE /invitations/:id` | Expiring single-use invite with approved role | 01 |
 | `/projects`, `/environments` | Project/env config and policy; `environment:admin` | 01, 04 |
-| `/providers`, `/providers/:id/models`, `/providers/:id/test` | Redacted config/catalog and bounded admin test | 02 |
-| `/budgets`, `/usage` | Scoped limits/reports; changes audited | 02 |
+| `/providers`, `/providers/:id/models`, `POST /providers/:id/refresh` | Redacted connections and explicit bounded catalog discovery; no inference test route | 02 |
+| `/providers/:id/status`, `/credential`, `/rewrap` | Explicit versioned status/credential mutation and key re-encryption | 02 |
+| `/model-policy/:kind/:id`, `/budgets/:kind/:id`, `/usage` | Scoped versioned policies/limits and bounded reports; changes audited | 02 |
+| `POST /usage/:id/reconcile` | Explicit quiescence attestation/hash; conservative settlement, no raw usage injection | 02 |
+| `/providers/stop`, `POST /providers/stop/clear` | Persistent provider latch and separately authorized clear, no implicit resume | 02 |
 | `/agents`, `/groups`, `/groups/:id/agents` | Fleet lifecycle and assignment | 03 |
 | `/mission-templates`, `/presets`, `/presets/:id/approve` | Versioned templates and adult approval | 03, 05 |
 | `POST /missions`; `POST /missions/:id/execute` | Draft then validated DAG snapshot/queue | 03 |
