@@ -1,6 +1,7 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { Writable } from "node:stream";
 import pg from "pg";
@@ -29,6 +30,7 @@ import {
   ProviderGateway,
 } from "../../packages/providers/src/index.js";
 import { BudgetLedger } from "../../packages/providers/src/ledger.js";
+import { RuntimeService } from "../../packages/runtime/src/index.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -2449,8 +2451,16 @@ describe("runtime domain persistence", () => {
         [group, orgId, project.id, environment.id],
       );
       await c.query(
-        "insert into runtime_templates(id,organization_id,family_id,version,name,adapter,hash,graph,created_by) values($1,$2,$1,1,'Fixture','simulation',$3,$4,$5)",
-        [template, orgId, "a".repeat(64), graph, ownerId],
+        "insert into runtime_templates(id,organization_id,family_id,version,name,adapter,hash,graph,created_by,project_id,environment_id) values($1,$2,$1,1,'Fixture','simulation',$3,$4,$5,$6,$7)",
+        [
+          template,
+          orgId,
+          "a".repeat(64),
+          graph,
+          ownerId,
+          project.id,
+          environment.id,
+        ],
       );
       for (const id of [mission, otherMission])
         await c.query(
@@ -2536,5 +2546,334 @@ describe("runtime domain persistence", () => {
     expect(
       (await runtime.query("select id from runtime_missions")).rows,
     ).toHaveLength(0);
+  });
+});
+
+describe("scoped runtime command API and CLI", () => {
+  const runtime = new RuntimeService({
+    databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+    auth,
+    cursorSecret: csrfSecret,
+    clock: () => now.getTime(),
+  });
+  let api: Awaited<ReturnType<typeof buildApp>>;
+  const headers = (
+    token = ownerToken,
+    org = orgId,
+    key = crypto.randomUUID(),
+  ) => ({
+    cookie: `craftlayer_session=${token}`,
+    origin: "http://127.0.0.1:3000",
+    "x-csrf-token": auth.csrfToken(token),
+    "x-craftlayer-organization": org,
+    "idempotency-key": key,
+  });
+  beforeAll(async () => {
+    api = await buildApp({ auth, runtime, readiness: async () => true });
+  });
+  afterAll(async () => {
+    await api?.close();
+    await runtime.close();
+  });
+  async function fixture() {
+    const project = await auth.createProject(
+      ownerToken,
+      orgId,
+      "Command project",
+    );
+    const env = await auth.createEnvironment(ownerToken, orgId, {
+      projectId: project.id,
+      name: "Command simulation",
+      type: "simulation",
+    });
+    const agent = await runtime.createAgent(ownerToken, orgId, {
+      environment_id: env.id,
+      name: "Fixture agent",
+      adapter: "simulation",
+    });
+    const group = await runtime.createGroup(ownerToken, orgId, {
+      environment_id: env.id,
+      name: "Fixture group",
+      agent_ids: [agent.id],
+    });
+    const template = await runtime.createTemplate(ownerToken, orgId, {
+      environment_id: env.id,
+      name: "Finite fixture",
+      adapter: "simulation",
+      graph: {
+        schema_version: 1,
+        nodes: [
+          {
+            key: "observe",
+            action: { kind: "fixture.echo", value: "observed" },
+          },
+          {
+            key: "build",
+            dependencies: [{ key: "observe" }],
+            action: { kind: "fixture.echo", value: "verified" },
+          },
+        ],
+      },
+    });
+    return { project, env, agent, group, template };
+  }
+  it("creates immutable scoped snapshots and executes one logical generation under concurrent HTTP replay", async () => {
+    const f = await fixture(),
+      key = crypto.randomUUID(),
+      body = {
+        group_id: f.group.id,
+        template_id: f.template.id,
+        name: "Idempotent fixture",
+      };
+    const responses = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        api.inject({
+          method: "POST",
+          url: "/api/v1/missions",
+          headers: headers(ownerToken, orgId, key),
+          payload: body,
+        }),
+      ),
+    );
+    expect(responses.every((r) => r.statusCode === 200)).toBe(true);
+    const mission = responses[0]?.json();
+    expect(new Set(responses.map((r) => r.json().id)).size).toBe(1);
+    expect(mission.tasks).toHaveLength(2);
+    expect(
+      (
+        await api.inject({
+          method: "POST",
+          url: "/api/v1/missions",
+          headers: headers(ownerToken, orgId, key),
+          payload: { ...body, name: "Changed" },
+        })
+      ).statusCode,
+    ).toBe(409);
+    const executionKey = crypto.randomUUID(),
+      executions = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          api.inject({
+            method: "POST",
+            url: `/api/v1/missions/${mission.id}/execute`,
+            headers: headers(ownerToken, orgId, executionKey),
+            payload: { expected_version: 1 },
+          }),
+        ),
+      );
+    expect(executions.map((r) => r.statusCode)).toEqual(Array(8).fill(200));
+    expect(new Set(executions.map((r) => r.json().version)).size).toBe(1);
+    expect(executions[0]?.json().state).toBe("queued");
+    const revised = await runtime.createTemplate(ownerToken, orgId, {
+      environment_id: f.env.id,
+      name: "Version two",
+      adapter: "simulation",
+      supersedes: f.template.id,
+      graph: {
+        schema_version: 1,
+        nodes: [{ key: "new", action: { kind: "fixture.echo", value: "new" } }],
+      },
+    });
+    expect(revised.version).toBe(2);
+    expect(revised.family_id).toBe(f.template.family_id);
+    expect(
+      (await runtime.getMission(ownerToken, orgId, mission.id)).template_hash,
+    ).toBe(f.template.hash);
+    expect(responses[0]?.body).not.toMatch(
+      /execution_grant|signature|cookieToken|password_hash/,
+    );
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        orgId,
+      ]);
+      const rows = await client.query(
+        "select count(*)::int as n from audit_events where organization_id=$1 and action='runtime.mission_executed' and target_id=$2",
+        [orgId, mission.id],
+      );
+      expect(rows.rows[0].n).toBe(1);
+      await client.query("rollback");
+    } finally {
+      client.release();
+    }
+  });
+  it("rejects cycles, foreign resources, wrong environments, viewers and children without broader lists", async () => {
+    const f = await fixture(),
+      foreign = await auth.createOrganization(
+        ownerToken,
+        "Foreign runtime scope",
+      );
+    await expect(
+      runtime.createGroup(ownerToken, foreign.id, {
+        environment_id: f.env.id,
+        name: "Wrong",
+        agent_ids: [f.agent.id],
+      }),
+    ).rejects.toBeDefined();
+    const second = await auth.createEnvironment(ownerToken, orgId, {
+      projectId: f.project.id,
+      name: "Other simulation",
+      type: "simulation",
+    });
+    await expect(
+      runtime.createGroup(ownerToken, orgId, {
+        environment_id: second.id,
+        name: "Wrong world",
+        agent_ids: [f.agent.id],
+      }),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      runtime.createTemplate(ownerToken, orgId, {
+        environment_id: f.env.id,
+        name: "Cycle",
+        adapter: "simulation",
+        graph: {
+          schema_version: 1,
+          nodes: [
+            {
+              key: "a",
+              dependencies: [{ key: "a" }],
+              action: { kind: "fixture.echo", value: "bad" },
+            },
+          ],
+        },
+      }),
+    ).rejects.toMatchObject({ status: 400 });
+    const viewer = await fixtureMember("viewer"),
+      child = await fixtureMember("child", orgId, true);
+    for (const member of [viewer, child]) {
+      await expect(
+        runtime.createAgent(member.token, orgId, {
+          environment_id: f.env.id,
+          name: "Denied",
+          adapter: "simulation",
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        runtime.listMissions(member.token, orgId, f.env.id),
+      ).rejects.toMatchObject({ status: 403 });
+    }
+    expect(
+      (await api.inject({ url: "/api/v1/missions", headers: headers() }))
+        .statusCode,
+    ).toBe(400);
+  });
+  it("persists revocable initiating authority and serves actual CLI requests with the same permissions", async () => {
+    const f = await fixture(),
+      mission = await runtime.createMission(
+        ownerToken,
+        orgId,
+        crypto.randomUUID(),
+        {
+          name: "CLI fixture",
+          group_id: f.group.id,
+          template_id: f.template.id,
+        },
+      );
+    const directory = await mkdtemp(`${tmpdir()}/craftlayer-cli-runtime-`),
+      socket = createServer();
+    await new Promise<void>((accept) => socket.listen(0, "127.0.0.1", accept));
+    const address = socket.address();
+    if (!address || typeof address === "string")
+      throw new Error("Missing port");
+    const port = address.port;
+    await new Promise<void>((accept) => socket.close(() => accept()));
+    const server = await buildApp({
+      auth,
+      runtime,
+      readiness: async () => true,
+      publicUrl: `http://127.0.0.1:${port}`,
+    });
+    await server.listen({ host: "127.0.0.1", port });
+    async function cli(args: string[], input = "") {
+      return new Promise<{ code: number | null; output: string }>((accept) => {
+        const c = spawn(
+          process.execPath,
+          ["--import", "tsx", "apps/cli/src/main.ts", ...args],
+          {
+            env: {
+              ...process.env,
+              CRAFTLAYER_CLI_SESSION_FILE: `${directory}/session`,
+            },
+            stdio: ["pipe", "pipe", "pipe"],
+          },
+        );
+        let output = "";
+        c.stdout.on("data", (x) => {
+          output += x;
+        });
+        c.stderr.on("data", (x) => {
+          output += x;
+        });
+        c.stdin.end(input);
+        c.on("close", (code) => accept({ code, output }));
+      });
+    }
+    try {
+      expect(
+        (await cli(["login", `http://127.0.0.1:${port}`, ownerLogin], password))
+          .code,
+      ).toBe(0);
+      const get = await cli(["mission", "get", orgId, mission.id]);
+      expect(get.code).toBe(0);
+      expect(JSON.parse(get.output).state).toBe("draft");
+      expect(get.output).not.toMatch(/execution_grant|csrf|cookie/);
+      const execute = await cli([
+        "mission",
+        "execute",
+        orgId,
+        mission.id,
+        "1",
+        crypto.randomUUID(),
+      ]);
+      expect(execute.code).toBe(0);
+      expect(JSON.parse(execute.output).state).toBe("queued");
+      expect((await cli(["logout"])).code).toBe(0);
+      const client = new pg.Client({
+        connectionString: process.env.TEST_DATABASE_URL,
+      });
+      await client.connect();
+      try {
+        await client.query("begin");
+        await client.query("select set_config('app.organization_id',$1,true)", [
+          orgId,
+        ]);
+        const grant = (
+          await client.query(
+            "select execution_grant from runtime_missions where id=$1",
+            [mission.id],
+          )
+        ).rows[0].execution_grant;
+        await expect(
+          auth.revalidateExecutionGrant(grant),
+        ).rejects.toMatchObject({ status: 403 });
+        await client.query("rollback");
+      } finally {
+        await client.end();
+      }
+      const viewer = await fixtureMember("viewer");
+      expect(
+        (
+          await cli(
+            ["login", `http://127.0.0.1:${port}`, viewer.login],
+            password,
+          )
+        ).code,
+      ).toBe(0);
+      const denied = await cli([
+        "mission",
+        "execute",
+        orgId,
+        mission.id,
+        "2",
+        crypto.randomUUID(),
+      ]);
+      expect(denied.code).toBe(1);
+      expect(denied.output).toContain("API denied (403)");
+      expect((await cli(["logout"])).code).toBe(0);
+    } finally {
+      await server.close();
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -99,6 +99,7 @@ export const graphSchema = z.strictObject({
 });
 export type MissionGraph = z.infer<typeof graphSchema>;
 export const templateCreate = z.strictObject({
+  environment_id: z.uuid(),
   name: z.string().trim().min(1).max(120),
   adapter: z.literal("simulation"),
   graph: graphSchema,

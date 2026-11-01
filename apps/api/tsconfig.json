@@ -27,6 +27,9 @@
     },
     {
       "path": "../../packages/providers"
+    },
+    {
+      "path": "../../packages/runtime"
     }
   ]
 }

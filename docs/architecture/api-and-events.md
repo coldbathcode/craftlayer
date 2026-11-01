@@ -92,3 +92,7 @@ Support `--json`, stable exit codes, noninteractive operation, explicit org/env 
 Retain the blueprint's `startAgent`, `observe`, `execute`, `stopAgent`, `listModels`, and `generate` concepts. Add an explicit execution context with cancellation, action deadline, lease/fence, capability set, organization/environment identity and typed tool inputs. `stopAgent` is idempotent; `execute` returns verified/uncertain/failed outcome, receipts, resource usage and bounded observations.
 
 Adapters advertise contract version, supported task/tool schemas, idempotency class, reconciliation capability and host requirements. Contract tests cover invalid configs, timeout, stop, reconnect, effect uncertainty and redaction. No arbitrary dynamic plugin installation in the first release; adapters are reviewed and built into versioned images.
+
+## Chapter 03 command checkpoint
+
+Scoped simulation agents/groups, immutable environment-bound templates, mission draft/list/get/execute and typed SDK/CLI are implemented in CL-03-02. Mission create/execute require UUID `Idempotency-Key`; changes use `expected_version`. Only original authorized response snapshots replay, and execution workers must revalidate session-bound grants. Streaming/stop/worker protocol remain later Chapter 03 checkpoints. See [runtime runbook](../development/runtime.md) and ADR 0014.

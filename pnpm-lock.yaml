@@ -57,6 +57,9 @@ importers:
       '@craftlayer/providers':
         specifier: workspace:*
         version: link:../../packages/providers
+      '@craftlayer/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@fastify/cookie':
         specifier: 11.1.5
         version: 11.1.5
@@ -87,6 +90,12 @@ importers:
       '@craftlayer/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@craftlayer/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
 
   apps/web:
     dependencies:
@@ -201,6 +210,31 @@ importers:
       '@craftlayer/contracts':
         specifier: workspace:*
         version: link:../contracts
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
+
+  packages/runtime:
+    dependencies:
+      '@craftlayer/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@craftlayer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@craftlayer/core':
+        specifier: workspace:*
+        version: link:../core
+      '@craftlayer/providers':
+        specifier: workspace:*
+        version: link:../providers
       pg:
         specifier: 8.23.1
         version: 8.23.1

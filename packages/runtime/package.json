@@ -1,0 +1,29 @@
+{
+  "name": "@craftlayer/runtime",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@craftlayer/auth": "workspace:*",
+    "@craftlayer/contracts": "workspace:*",
+    "@craftlayer/core": "workspace:*",
+    "@craftlayer/providers": "workspace:*",
+    "pg": "8.23.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/pg": "8.23.1"
+  }
+}

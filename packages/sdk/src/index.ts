@@ -16,6 +16,7 @@ export async function identityRequest<T extends z.ZodType>(
     method?: string;
     json?: unknown;
     csrf?: string;
+    idempotencyKey?: string;
     organization?: string;
     signal?: AbortSignal;
   } = {},
@@ -37,6 +38,9 @@ export async function identityRequest<T extends z.ZodType>(
     headers: {
       ...(options.json !== undefined
         ? { "content-type": "application/json" }
+        : {}),
+      ...(options.idempotencyKey
+        ? { "idempotency-key": options.idempotencyKey }
         : {}),
       ...(options.csrf ? { "x-csrf-token": options.csrf } : {}),
       ...(options.organization
@@ -68,3 +72,4 @@ export async function identityRequest<T extends z.ZodType>(
     );
   return parsed.data;
 }
+export * from "./runtime.js";

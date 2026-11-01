@@ -105,6 +105,8 @@ export const runtimeTemplates = pgTable(
     organizationId: uuid("organization_id")
       .notNull()
       .references(() => organizations.id),
+    projectId: uuid("project_id").notNull(),
+    environmentId: uuid("environment_id").notNull(),
     familyId: uuid("family_id").notNull(),
     version: integer("version").notNull(),
     name: varchar("name", { length: 120 }).notNull(),
@@ -118,6 +120,15 @@ export const runtimeTemplates = pgTable(
     unique().on(t.organizationId, t.id),
     unique().on(t.organizationId, t.familyId, t.version),
     unique().on(t.organizationId, t.id, t.hash),
+    unique().on(t.organizationId, t.projectId, t.environmentId, t.id, t.hash),
+    foreignKey({
+      columns: [t.organizationId, t.projectId, t.environmentId],
+      foreignColumns: [
+        environments.organizationId,
+        environments.projectId,
+        environments.id,
+      ],
+    }),
     foreignKey({
       columns: [t.organizationId, t.createdBy],
       foreignColumns: [memberships.organizationId, memberships.userId],
@@ -384,6 +395,26 @@ export const runtimeApprovals = pgTable(
     }),
     foreignKey({
       columns: [t.organizationId, t.approverId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+    }),
+  ],
+);
+
+export const runtimeIdempotency = pgTable(
+  "runtime_idempotency",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    actorId: uuid("actor_id").notNull(),
+    route: varchar("route", { length: 120 }).notNull(),
+    key: uuid("key").notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    response: jsonb("response").notNull(),
+    createdAt: time("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.actorId, t.route, t.key] }),
+    foreignKey({
+      columns: [t.organizationId, t.actorId],
       foreignColumns: [memberships.organizationId, memberships.userId],
     }),
   ],

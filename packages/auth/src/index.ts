@@ -695,6 +695,22 @@ export class AuthService {
       async (_client, principal) => operation(principal),
     );
   }
+  /** Scoped server composition hook; only bounded local/SQL decisions under current authority. */
+  async guardResource<T>(
+    token: string,
+    org: string,
+    permission: Permission,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+    operation: (principal: Principal) => Promise<T>,
+  ): Promise<T> {
+    return this.orgAction(
+      token,
+      org,
+      permission,
+      scope,
+      async (_client, principal) => operation(principal),
+    );
+  }
   async createOrganization(token: string, name: string) {
     name = z.string().trim().min(1).max(120).parse(name);
     return this.transaction(async (client) => {

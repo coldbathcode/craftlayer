@@ -12,11 +12,13 @@ import {
 } from "fastify-type-provider-zod";
 import { registerAuth } from "./auth-routes.js";
 import { type ConnectionApi, registerProviders } from "./provider-routes.js";
+import { type RuntimeApi, registerRuntime } from "./runtime-routes.js";
 export async function buildApp(options: {
   readiness: () => Promise<boolean>;
   logger?: FastifyBaseLogger;
   auth?: IdentityService;
   providers?: ConnectionApi;
+  runtime?: RuntimeApi;
   publicUrl?: string;
 }) {
   const app = Fastify({
@@ -142,6 +144,8 @@ export async function buildApp(options: {
     );
   if (options.providers && options.auth)
     await registerProviders(app, options.providers);
+  if (options.runtime && options.auth)
+    await registerRuntime(app, options.runtime);
   await app.ready();
   return app;
 }

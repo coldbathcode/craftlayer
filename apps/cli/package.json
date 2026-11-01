@@ -10,8 +10,10 @@
     }
   },
   "dependencies": {
+    "@craftlayer/auth": "workspace:*",
     "@craftlayer/config": "workspace:*",
-    "@craftlayer/auth": "workspace:*"
+    "@craftlayer/sdk": "workspace:*",
+    "zod": "4.6.7"
   },
   "scripts": {
     "build": "tsc -b"

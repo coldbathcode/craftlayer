@@ -5,12 +5,14 @@ import {
   parseOwnerRecoveryConfig,
   parseServerConfig,
 } from "@craftlayer/config";
+import { runtimeCli } from "./runtime.js";
 import { readSecret } from "./secret.js";
 
 const [command, subcommand, file] = process.argv.slice(2);
-if (!command || ["help", "--help", "-h"].includes(command)) {
+if (await runtimeCli(process.argv.slice(2))) {
+} else if (!command || ["help", "--help", "-h"].includes(command)) {
   console.log(
-    "CraftLayer CLI — foundation\n\n  config validate [env-file]   Validate server config without printing secrets\n  help                         Show this help\n\nOwner tools: owner bootstrap-token; owner reset-password <login> (hidden input or stdin). Mission commands arrive in later chapters.",
+    "CraftLayer CLI — local Core\n\n  config validate [env-file]   Validate server config without printing secrets\n  help                         Show this help\n\nOwner tools: owner bootstrap-token; owner reset-password <login> (hidden input or stdin). Runtime: login <origin> <login>; logout; fleet agents|groups <org> <environment>; fleet create-agent|create-group <org> <json-file>; template create <org> <json-file>; template list <org> <environment>; mission create <org> <json-file> <idempotency-uuid>; mission get|list <org> <id-or-environment>; mission execute <org> <mission> <version> <idempotency-uuid>. Passwords use hidden input/stdin; local session files are mode 0600.",
   );
 } else if (command === "config" && subcommand === "validate") {
   try {

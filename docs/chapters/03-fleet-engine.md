@@ -34,9 +34,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Cycles, cross-mission edges, invalid states and oversized graphs reject; valid deterministic mission reaches success.
 
-### [ ] CL-03-02 — Mission API, grants and CLI
+### [x] CL-03-02 — Mission API, grants and CLI
 
-**Depends on:** CL-03-01. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-01. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add scoped fleet/template/mission commands, execution grants, optimistic versions, idempotency keys and typed SDK/CLI. Persist actor authority for worker revalidation.
 

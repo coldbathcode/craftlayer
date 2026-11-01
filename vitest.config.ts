@@ -5,14 +5,21 @@ export default defineConfig({
   cacheDir: `${tmpdir()}/craftlayer-vitest`,
   resolve: {
     alias: Object.fromEntries(
-      ["core", "contracts", "config", "db", "auth", "sdk", "providers"].map(
-        (name) => [
-          `@craftlayer/${name}`,
-          fileURLToPath(
-            new URL(`./packages/${name}/src/index.ts`, import.meta.url),
-          ),
-        ],
-      ),
+      [
+        "core",
+        "contracts",
+        "config",
+        "db",
+        "auth",
+        "sdk",
+        "providers",
+        "runtime",
+      ].map((name) => [
+        `@craftlayer/${name}`,
+        fileURLToPath(
+          new URL(`./packages/${name}/src/index.ts`, import.meta.url),
+        ),
+      ]),
     ),
   },
   test: {

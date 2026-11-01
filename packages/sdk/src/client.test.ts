@@ -31,12 +31,16 @@ it("confines credentialed requests to API paths and rejects redirected/private r
   await identityRequest("/api/v1/auth/sessions/fixture", healthSchema, {
     method: "DELETE",
     csrf: "fixture-csrf",
+    idempotencyKey: "fixture-idempotency",
   });
   expect(mock).toHaveBeenLastCalledWith(
     "/api/v1/auth/sessions/fixture",
     expect.objectContaining({
       method: "DELETE",
-      headers: { "x-csrf-token": "fixture-csrf" },
+      headers: {
+        "x-csrf-token": "fixture-csrf",
+        "idempotency-key": "fixture-idempotency",
+      },
     }),
   );
   vi.stubGlobal(
