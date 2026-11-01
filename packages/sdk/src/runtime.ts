@@ -7,6 +7,8 @@ import {
   itemsSchema,
   missionCreate,
   missionView,
+  stopRequest,
+  stopView,
   templateCreate,
   templateView,
   workerCreate,
@@ -44,6 +46,39 @@ export function createRuntimeClient(send: RuntimeTransport) {
           organization: org,
         },
       ),
+    missionControl: (
+      org: string,
+      id: string,
+      command: "pause" | "cancel" | "resume",
+      version: number,
+      key: string,
+    ) =>
+      send(
+        `/api/v1/missions/${encodeURIComponent(id)}/${command}`,
+        missionView,
+        {
+          method: "POST",
+          json: { expected_version: version },
+          idempotencyKey: key,
+          organization: org,
+        },
+      ),
+    stop: (org: string, input: z.input<typeof stopRequest>) =>
+      send("/api/v1/emergency-stop", stopView, {
+        method: "POST",
+        json: stopRequest.parse(input),
+        organization: org,
+      }),
+    stopOperation: (org: string, id: string) =>
+      send(`/api/v1/stop-operations/${encodeURIComponent(id)}`, stopView, {
+        organization: org,
+      }),
+    clearStop: (org: string, id: string, epoch: number, reason: string) =>
+      send(`/api/v1/emergency-stop/${encodeURIComponent(id)}/clear`, stopView, {
+        method: "POST",
+        json: { expected_epoch: epoch, reason },
+        organization: org,
+      }),
     enrollWorker: (org: string, input: z.input<typeof workerCreate>) =>
       send("/api/v1/workers", workerEnrollment, {
         method: "POST",

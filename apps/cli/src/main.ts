@@ -5,6 +5,7 @@ import {
   parseOwnerRecoveryConfig,
   parseServerConfig,
 } from "@craftlayer/config";
+import { RuntimeService } from "@craftlayer/runtime";
 import { runtimeCli } from "./runtime.js";
 import { readSecret } from "./secret.js";
 
@@ -12,7 +13,7 @@ const [command, subcommand, file] = process.argv.slice(2);
 if (await runtimeCli(process.argv.slice(2))) {
 } else if (!command || ["help", "--help", "-h"].includes(command)) {
   console.log(
-    "CraftLayer CLI — local Core\n\n  config validate [env-file]   Validate server config without printing secrets\n  help                         Show this help\n\nOwner tools: owner bootstrap-token; owner reset-password <login> (hidden input or stdin). Runtime: login <origin> <login>; logout; fleet agents|groups <org> <environment>; fleet create-agent|create-group <org> <json-file>; template create <org> <json-file>; template list <org> <environment>; mission create <org> <json-file> <idempotency-uuid>; mission get|list <org> <id-or-environment>; mission execute <org> <mission> <version> <idempotency-uuid>. worker enroll <org> <environment> [protected-file]; worker list <org> <environment>; worker revoke <org> <worker> <version>. approval list <org> <environment>; approval approve|reject <org> <approval>. Passwords use hidden input/stdin; local session files are mode 0600.",
+    "CraftLayer CLI — local Core\n\n  config validate [env-file]   Validate server config without printing secrets\n  help                         Show this help\n\nOwner tools: owner emergency-stop (works without API/UI/Redis); owner bootstrap-token; owner reset-password <login> (hidden input or stdin). Runtime: login <origin> <login>; logout; fleet agents|groups <org> <environment>; fleet create-agent|create-group <org> <json-file>; template create <org> <json-file>; template list <org> <environment>; mission create <org> <json-file> <idempotency-uuid>; mission get|list <org> <id-or-environment>; mission execute <org> <mission> <version> <idempotency-uuid>. worker enroll <org> <environment> [protected-file]; worker list <org> <environment>; worker revoke <org> <worker> <version>. mission pause|cancel|resume <org> <mission> <version> <idempotency-uuid>; stop request <org> <json-file>; stop get <org> <operation>; stop clear <org> <operation> <epoch> <reason>; approval list <org> <environment>; approval approve|reject <org> <approval>. Passwords use hidden input/stdin; local session files are mode 0600.",
   );
 } else if (command === "config" && subcommand === "validate") {
   try {
@@ -35,6 +36,46 @@ if (await runtimeCli(process.argv.slice(2))) {
     console.error("Run pnpm setup:local first.");
     process.exitCode = 1;
   } else console.log(process.env.CRAFTLAYER_BOOTSTRAP_TOKEN);
+} else if (command === "owner" && subcommand === "emergency-stop") {
+  let auth: AuthService | undefined, runtime: RuntimeService | undefined;
+  try {
+    const config = parseServerConfig(process.env);
+    if (
+      !config.AUTH_DATABASE_URL ||
+      !config.CRAFTLAYER_BOOTSTRAP_TOKEN ||
+      !config.CRAFTLAYER_RECOVERY_TOKEN ||
+      !config.CRAFTLAYER_CSRF_SECRET
+    )
+      throw new Error("Local configuration required");
+    auth = new AuthService({
+      databaseUrl: config.AUTH_DATABASE_URL,
+      bootstrapToken: config.CRAFTLAYER_BOOTSTRAP_TOKEN,
+      recoveryToken: config.CRAFTLAYER_RECOVERY_TOKEN,
+      csrfSecret: config.CRAFTLAYER_CSRF_SECRET,
+    });
+    await auth.initialize();
+    runtime = new RuntimeService({
+      databaseUrl: config.DATABASE_URL,
+      auth,
+      cursorSecret: config.CRAFTLAYER_CSRF_SECRET,
+    });
+    console.log(
+      JSON.stringify(
+        await runtime.localEmergencyStop(
+          config.CRAFTLAYER_RECOVERY_TOKEN,
+          "Local owner emergency stop",
+        ),
+      ),
+    );
+  } catch {
+    console.error(
+      "Local emergency stop failed; check protected owner configuration. Values omitted.",
+    );
+    process.exitCode = 1;
+  } finally {
+    await runtime?.close();
+    await auth?.close();
+  }
 } else if (
   command === "owner" &&
   subcommand === "reset-password" &&

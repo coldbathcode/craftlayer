@@ -58,9 +58,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Concurrent claims, stale worker commits, invalid model tools and old protocol versions cannot execute unauthorized results.
 
-### [ ] CL-03-05 — Pause, cancel and emergency stop
+### [x] CL-03-05 — Pause, cancel and emergency stop
 
-**Depends on:** CL-03-04. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-04. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add latched scope epochs, no-new-dispatch rules, stop operation acknowledgement/quiescence, local watchdog and explicit clear/resume. Use fake adapter to model uncertain effects.
 

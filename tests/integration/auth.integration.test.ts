@@ -34,6 +34,7 @@ import {
 } from "../../packages/providers/src/index.js";
 import { BudgetLedger } from "../../packages/providers/src/ledger.js";
 import {
+  instanceStopScope,
   queueName,
   RuntimeService,
   redisConnection,
@@ -3916,7 +3917,7 @@ describe("registered worker authority and fenced effects", () => {
     if (!a) throw new Error("Missing approval");
     return { ...f, token, approval: a };
   }
-  async function reclaim(f: Awaited<ReturnType<typeof approvalFixture>>) {
+  async function reclaim(f: { org: string; token: string }) {
     now = new Date(now.getTime() + 5001);
     let ref: DispatchReference | undefined;
     for (let i = 0; i < 30 && !ref; i++)
@@ -4036,6 +4037,293 @@ describe("registered worker authority and fenced effects", () => {
       ).rejects.toMatchObject({ status: 403 });
     } finally {
       await runtime.cleanup(b.org);
+    }
+  });
+  it("persists emergency stop through coordinator restart, fences late results and never resumes on clear", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    let restart: RuntimeService | undefined;
+    try {
+      const claim = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!claim) throw new Error("Missing claim");
+      const stopped = await api.inject({
+        method: "POST",
+        url: "/api/v1/emergency-stop",
+        headers: {
+          cookie: `craftlayer_session=${ownerToken}`,
+          origin: "http://127.0.0.1:3000",
+          "x-csrf-token": auth.csrfToken(ownerToken),
+          "x-craftlayer-organization": f.org,
+        },
+        payload: {
+          kind: "environment",
+          scope_id: f.env.id,
+          reason: "Fixture emergency",
+        },
+      });
+      expect(stopped.statusCode).toBe(200);
+      const stop = stopped.json();
+      expect(stop).toMatchObject({
+        latched: true,
+        requested: 1,
+        acknowledged: 0,
+        quiesced: 0,
+      });
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("paused");
+      await expect(
+        runtime.prepareAction(token, 1, handle(claim)),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        runtime.finish(token, 1, {
+          ...handle(claim),
+          outcome: "succeeded",
+          value: "verified",
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      restart = new RuntimeService({
+        databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+        auth,
+        cursorSecret: csrfSecret,
+        clock: () => now.getTime(),
+      });
+      expect((await restart.getStop(ownerToken, f.org, stop.id)).latched).toBe(
+        true,
+      );
+      const before = await runtime.getMission(ownerToken, f.org, f.mission);
+      await expect(
+        runtime.resumeMission(
+          ownerToken,
+          f.org,
+          f.mission,
+          before.version,
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      await runtime.clearStop(
+        ownerToken,
+        f.org,
+        stop.id,
+        stop.epoch,
+        "Checked local fixture",
+      );
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("paused");
+      await expect(
+        runtime.resumeMission(
+          ownerToken,
+          f.org,
+          f.mission,
+          before.version,
+          crypto.randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 409 });
+      await runtime.acknowledgeStopped(token, 1, handle(claim));
+      expect(await runtime.getStop(ownerToken, f.org, stop.id)).toMatchObject({
+        latched: false,
+        acknowledged: 1,
+        quiesced: 1,
+        unreachable: 0,
+      });
+      const resumed = await runtime.resumeMission(
+        ownerToken,
+        f.org,
+        f.mission,
+        before.version,
+        crypto.randomUUID(),
+      );
+      expect(resumed.state).toBe("queued");
+      const h = await reclaim({ ...f, token });
+      expect(h.generation).toBeGreaterThan(claim.generation);
+      await runtime.prepareAction(token, 1, h);
+      await runtime.finish(token, 1, {
+        ...h,
+        outcome: "succeeded",
+        value: "verified",
+      });
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("succeeded");
+    } finally {
+      await restart?.close();
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("keeps cancellation pending until known quiescence and holds uncertain effects", async () => {
+    for (const prepared of [false, true]) {
+      const f = await fixture(),
+        token = f.enrolled.credential.token;
+      try {
+        const c = (await runtime.claim(token, 1, f.reference)).claim;
+        if (!c) throw new Error("Missing claim");
+        if (prepared) await runtime.prepareAction(token, 1, handle(c));
+        const m = await runtime.getMission(ownerToken, f.org, f.mission),
+          key = crypto.randomUUID();
+        expect(
+          (
+            await runtime.missionControl(
+              ownerToken,
+              f.org,
+              f.mission,
+              "cancel",
+              m.version,
+              key,
+            )
+          ).state,
+        ).toBe("cancelling");
+        expect(
+          (
+            await runtime.missionControl(
+              ownerToken,
+              f.org,
+              f.mission,
+              "cancel",
+              m.version,
+              key,
+            )
+          ).state,
+        ).toBe("cancelling");
+        await runtime.acknowledgeStopped(token, 1, handle(c));
+        const done = await runtime.getMission(ownerToken, f.org, f.mission);
+        expect(done.state).toBe(prepared ? "blocked" : "cancelled");
+        expect(
+          (
+            await runtime.runtimeBudget(
+              ownerToken,
+              f.org,
+              "organization",
+              f.org,
+            )
+          ).active_agents,
+        ).toBe(prepared ? 1 : 0);
+        if (prepared)
+          await expect(
+            runtime.resumeMission(
+              ownerToken,
+              f.org,
+              f.mission,
+              done.version,
+              crypto.randomUUID(),
+            ),
+          ).rejects.toMatchObject({ status: 409 });
+      } finally {
+        await runtime.cleanup(f.org);
+      }
+    }
+  });
+  it("denies unauthorized stop scopes, marks unreachable workers and supports owner-only local stop without API or Redis", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    let instance: Awaited<ReturnType<typeof runtime.requestStop>> | undefined;
+    try {
+      const viewer = await fixtureMember("viewer", f.org),
+        admin = await fixtureMember("org_admin", f.org),
+        child = await fixtureMember("org_admin", f.org, true);
+      for (const u of [viewer, child])
+        await expect(
+          runtime.requestStop(u.token, f.org, {
+            kind: "organization",
+            scope_id: f.org,
+            reason: "Denied",
+          }),
+        ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        runtime.requestStop(admin.token, f.org, {
+          kind: "instance",
+          scope_id: instanceStopScope,
+          reason: "Denied",
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        runtime.localEmergencyStop("wrong", "Denied"),
+      ).rejects.toMatchObject({ status: 403 });
+      const claim = (await runtime.claim(token, 1, f.reference)).claim;
+      if (!claim) throw new Error("Missing claim");
+      const output = await new Promise<string>((resolve, reject) => {
+        const child = spawn(
+          process.execPath,
+          ["apps/cli/dist/main.js", "owner", "emergency-stop"],
+          {
+            env: {
+              ...process.env,
+              DATABASE_URL: process.env.TEST_DATABASE_URL,
+              AUTH_DATABASE_URL: databaseUrl,
+              REDIS_URL: "redis://127.0.0.1:1",
+              CRAFTLAYER_BOOTSTRAP_TOKEN: bootstrapToken,
+              CRAFTLAYER_RECOVERY_TOKEN: recoveryToken,
+              CRAFTLAYER_CSRF_SECRET: csrfSecret,
+            },
+            stdio: ["ignore", "pipe", "pipe"],
+          },
+        );
+        let value = "",
+          error = "";
+        child.stdout.on("data", (x) => {
+          value += x;
+        });
+        child.stderr.on("data", (x) => {
+          error += x;
+        });
+        child.on("error", reject);
+        child.on("exit", (code) =>
+          code === 0
+            ? resolve(value)
+            : reject(new Error(`Local stop CLI failed: ${error}`)),
+        );
+      });
+      instance = JSON.parse(output);
+      if (!instance) throw new Error("Missing local stop");
+      expect(instance.latched).toBe(true);
+      now = new Date(now.getTime() + 10001);
+      expect(
+        await runtime.getStop(ownerToken, f.org, instance.id),
+      ).toMatchObject({ unreachable: 1, quiesced: 0 });
+      await expect(runtime.claim(token, 1, f.reference)).rejects.toMatchObject({
+        status: 403,
+      });
+      await runtime.acknowledgeStopped(token, 1, handle(claim));
+    } finally {
+      if (instance)
+        await runtime.clearStop(
+          ownerToken,
+          f.org,
+          instance.id,
+          instance.epoch,
+          "Local fixture complete",
+        );
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("denies inference at the dispatch mark when emergency stop wins the race", async () => {
+    const f = await configuredModel();
+    let stop: Awaited<ReturnType<typeof runtime.requestStop>> | undefined;
+    try {
+      beforeModelDispatch = async () => {
+        stop = await runtime.requestStop(ownerToken, f.org, {
+          kind: "mission",
+          scope_id: f.mission,
+          reason: "Dispatch race",
+        });
+      };
+      expect(await runtime.decide(f.token, 1, f.h)).toMatchObject({
+        blocked: true,
+      });
+      expect(modelCalls).toBe(0);
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("paused");
+    } finally {
+      if (stop)
+        await runtime.clearStop(
+          ownerToken,
+          f.org,
+          stop.id,
+          stop.epoch,
+          "Fixture checked",
+        );
+      await runtime.cleanup(f.org);
     }
   });
 });

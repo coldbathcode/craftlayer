@@ -318,3 +318,22 @@ export const approvalView = z.strictObject({
   action: fixtureTool,
   expires_at: z.iso.datetime(),
 });
+
+export const stopRequest = z.strictObject({
+  kind: z.enum(["instance", "organization", "environment", "mission"]),
+  scope_id: z.uuid(),
+  reason: z.string().trim().min(1).max(240),
+});
+export const stopView = z.strictObject({
+  id: z.uuid(),
+  kind: stopRequest.shape.kind,
+  scope_id: z.uuid(),
+  epoch: z.number().int().positive(),
+  latched: z.boolean(),
+  requested: z.number().int().nonnegative(),
+  acknowledged: z.number().int().nonnegative(),
+  quiesced: z.number().int().nonnegative(),
+  unreachable: z.number().int().nonnegative(),
+  created_at: z.iso.datetime(),
+  cleared_at: z.iso.datetime().nullable(),
+});

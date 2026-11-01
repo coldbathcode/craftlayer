@@ -154,6 +154,7 @@ export const runtimeMissions = pgTable(
     generation: integer("generation").notNull().default(1),
     executionGrant: jsonb("execution_grant"),
     executionDigest: char("execution_digest", { length: 64 }),
+    cancelRequestedAt: time("cancel_requested_at"),
     deadline: time("deadline"),
     createdAt: time("created_at").notNull().defaultNow(),
   },
@@ -614,6 +615,51 @@ export const runtimeModelCalls = pgTable(
         runtimeAttempts.taskId,
         runtimeAttempts.id,
       ],
+    }),
+  ],
+);
+
+export const runtimeStopLatches = pgTable(
+  "runtime_stop_latches",
+  {
+    kind: text("kind").notNull(),
+    scopeId: uuid("scope_id").notNull(),
+    organizationId: uuid("organization_id").references(() => organizations.id),
+    epoch: integer("epoch").notNull(),
+    latched: boolean("latched").notNull(),
+    operationId: uuid("operation_id").notNull(),
+    reason: varchar("reason", { length: 240 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.kind, t.scopeId] })],
+);
+export const runtimeStopOperations = pgTable("runtime_stop_operations", {
+  id: uuid("id").primaryKey(),
+  organizationId: uuid("organization_id").references(() => organizations.id),
+  kind: text("kind").notNull(),
+  scopeId: uuid("scope_id").notNull(),
+  epoch: integer("epoch").notNull(),
+  reason: varchar("reason", { length: 240 }).notNull(),
+  actorId: uuid("actor_id"),
+  createdAt: time("created_at").notNull(),
+  clearedAt: time("cleared_at"),
+});
+export const runtimeStopTargets = pgTable(
+  "runtime_stop_targets",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    operationId: uuid("operation_id")
+      .notNull()
+      .references(() => runtimeStopOperations.id),
+    attemptId: uuid("attempt_id").notNull(),
+    deadlineAt: time("deadline_at").notNull(),
+    acknowledgedAt: time("acknowledged_at"),
+    quiescedAt: time("quiesced_at"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.operationId, t.attemptId] }),
+    foreignKey({
+      columns: [t.organizationId, t.attemptId],
+      foreignColumns: [runtimeAttempts.organizationId, runtimeAttempts.id],
     }),
   ],
 );

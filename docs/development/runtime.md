@@ -1,6 +1,6 @@
 # Simulation runtime and fleet operations
 
-Chapter 03 is in progress. CL-03-01–04 supply bounded domain persistence, authenticated fleet/template/mission commands, durable fair dispatch and API-controlled simulation workers with bounded model decisions and independent approvals. Stop controls, streaming and recovery follow in CL-03-05–07. No Minecraft connection, coding runner, external tool or live inference is implied. [ADR 0014](../architecture/decisions/0014-runtime-authority-and-recovery.md) defines the trust boundary.
+Chapter 03 is in progress. CL-03-01–04 supply bounded domain persistence, authenticated fleet/template/mission commands, durable fair dispatch and API-controlled simulation workers with bounded model decisions and independent approvals. Persistent stop controls are implemented in CL-03-05; streaming and recovery follow in CL-03-06–07. No Minecraft connection, coding runner, external tool or live inference is implied. [ADR 0014](../architecture/decisions/0014-runtime-authority-and-recovery.md) defines the trust boundary.
 
 Use a dedicated `simulation` environment created through the authenticated environment API with `{projectId,name,type:"simulation"}`. The existing account console can create projects; simulation setup is currently an API/CLI workflow, not the Minecraft world UI. Adults need explicit environment-scoped permissions or organization administration. Child access remains limited to assigned Minecraft worlds and cannot enter simulation.
 
@@ -114,3 +114,24 @@ pnpm cli approval reject ORGANIZATION_UUID APPROVAL_UUID
 ```
 
 Use a separate adult CLI session/file for the reviewer. Approved work retains its original finite attempt ceiling; approval never increases budgets or creates permissions. This simulation primitive does not authorize future coding, deployment or Minecraft tools.
+
+## Pause, cancel and emergency stop
+
+`mission pause|cancel|resume <org> <mission> <expected-version> <idempotency-uuid>` uses the same scoped REST permissions as the dashboard will use. Pause preserves verified tasks and capacity, advances execution generation and requests active attempts stop. Cancel reports `cancelling` until known quiescence; a prepared/unknown effect stays `blocked/uncertain` with its active hold. Resume requires both current pause and execute authority, a fresh signed execution grant, cleared applicable latches and no active/uncertain attempt. It preserves the original mission deadline and finite attempt counts. It cannot resurrect terminal/cancel-requested missions.
+
+`POST /api/v1/emergency-stop` accepts `{kind,scope_id,reason}`. Kinds are `organization`, `environment`, `mission` and owner-only `instance`; the instance scope UUID is `00000000-0000-4000-8000-000000000001`. Scope comes from authenticated permission/canonical resources, never a body org override. Children cannot control simulation. Latches and monotonic epochs persist in PostgreSQL; each stop records targeted attempts and pauses applicable missions. Claims, permits and the actual model dispatch mark reject applicable latches after commit. A concurrently published queue hint cannot authorize effects.
+
+`GET /api/v1/stop-operations/:id` exposes scoped requested/acknowledged/quiesced/unreachable counts. Known retirement can prove quiescence independently of worker acknowledgement. An expired deadline without acknowledgement or known quiescence is unreachable, never silently considered stopped. Unknown effect state is conservative even after a worker acknowledges that its process stopped. `POST /api/v1/emergency-stop/:id/clear` requires `{expected_epoch,reason}` and the distinct clear permission (instance owner for instance scope). Old operation/epoch cannot clear a newer latch. Clearing leaves missions paused; resume is explicit.
+
+```bash
+pnpm cli stop request ORGANIZATION_UUID stop.json
+pnpm cli stop get ORGANIZATION_UUID OPERATION_UUID
+pnpm cli stop clear ORGANIZATION_UUID OPERATION_UUID EPOCH 'Reviewed local state'
+pnpm cli mission resume ORGANIZATION_UUID MISSION_UUID VERSION IDEMPOTENCY_UUID
+# Protected host recovery capability; needs PostgreSQL but no API, UI or Redis:
+pnpm cli owner emergency-stop
+```
+
+The local owner command uses the ignored host configuration/recovery capability, does not expose a recovery HTTP endpoint, and cannot clear or resume work. Keep that configuration protected as described in the identity runbook. It never prints database credentials or recovery tokens. Connected worker authorization loss aborts at the one-second heartbeat; a hung heartbeat cannot extend the original action deadline (at most ten seconds). Fake-clock proofs measure last simulation effects at/before one second for connected denial and before six seconds under a hung-heartbeat six-second action. Actual game/sandbox process disconnect guarantees remain adapter work, not simulation certification.
+
+Stop/audit history is retained. The current conservative mission storage allocation does not measure actual disk use; production retention and disk exhaustion supervision remain Chapter 09. Safety stop is not disabled because a normal mission budget is exhausted.

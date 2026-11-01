@@ -96,6 +96,9 @@ importers:
       '@craftlayer/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@craftlayer/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
       '@craftlayer/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk

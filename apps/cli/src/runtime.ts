@@ -51,6 +51,7 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
       "mission",
       "worker",
       "approval",
+      "stop",
     ].includes(command ?? "")
   )
     return false;
@@ -184,7 +185,30 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     }
     let result: unknown;
     const json = async () => JSON.parse(await readFile(a ?? "", "utf8"));
-    if (command === "approval" && sub === "list" && a)
+    if (command === "stop" && sub === "request")
+      result = await client.stop(org, await json());
+    else if (command === "stop" && sub === "get" && a)
+      result = await client.stopOperation(org, z.uuid().parse(a));
+    else if (command === "stop" && sub === "clear" && a)
+      result = await client.clearStop(
+        org,
+        z.uuid().parse(a),
+        z.coerce.number().int().positive().parse(b),
+        z.string().min(1).max(240).parse(key),
+      );
+    else if (
+      command === "mission" &&
+      ["pause", "cancel", "resume"].includes(sub ?? "") &&
+      a
+    )
+      result = await client.missionControl(
+        org,
+        z.uuid().parse(a),
+        z.enum(["pause", "cancel", "resume"]).parse(sub),
+        z.coerce.number().int().positive().parse(b),
+        z.uuid().parse(key),
+      );
+    else if (command === "approval" && sub === "list" && a)
       result = await client.approvals(org, z.uuid().parse(a));
     else if (
       command === "approval" &&

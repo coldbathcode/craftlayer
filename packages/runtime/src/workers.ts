@@ -492,7 +492,7 @@ export class RuntimeWorkers extends RuntimeScheduler {
     const org = ctx.worker.organization_id;
     await this.retire(c, ctx, "released");
     await c.query(
-      "update runtime_tasks set state='blocked',reason=$3 where organization_id=$1 and id=$2 and state in ('leased','running')",
+      "update runtime_tasks set state='blocked',reason=$3 where organization_id=$1 and id=$2 and state in ('leased','running','cancel_requested')",
       [org, ctx.task.id, reason],
     );
     await c.query(

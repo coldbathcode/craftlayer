@@ -19,6 +19,8 @@ import {
   prepareView,
   runtimeLimitsSchema,
   runtimeQuotaView,
+  stopRequest,
+  stopView,
   templateCreate,
   templateView,
   versionRequest,
@@ -195,6 +197,75 @@ export async function registerRuntime(
         r.params.id,
         key(r),
         r.body.expected_version,
+      ),
+  );
+  for (const command of ["pause", "cancel"] as const)
+    api.post(
+      `/api/v1/missions/:id/${command}`,
+      {
+        schema: {
+          params,
+          body: versionRequest,
+          response: { ...errors, 200: missionView },
+        },
+      },
+      (r) =>
+        runtime.missionControl(
+          token(r),
+          org(r),
+          r.params.id,
+          command,
+          r.body.expected_version,
+          key(r),
+        ),
+    );
+  api.post(
+    "/api/v1/missions/:id/resume",
+    {
+      schema: {
+        params,
+        body: versionRequest,
+        response: { ...errors, 200: missionView },
+      },
+    },
+    (r) =>
+      runtime.resumeMission(
+        token(r),
+        org(r),
+        r.params.id,
+        r.body.expected_version,
+        key(r),
+      ),
+  );
+  api.post(
+    "/api/v1/emergency-stop",
+    { schema: { body: stopRequest, response: { ...errors, 200: stopView } } },
+    (r) => runtime.requestStop(token(r), org(r), r.body),
+  );
+  api.get(
+    "/api/v1/stop-operations/:id",
+    { schema: { params, response: { ...errors, 200: stopView } } },
+    (r) => runtime.getStop(token(r), org(r), r.params.id),
+  );
+  api.post(
+    "/api/v1/emergency-stop/:id/clear",
+    {
+      schema: {
+        params,
+        body: z.strictObject({
+          expected_epoch: z.number().int().positive(),
+          reason: z.string().trim().min(1).max(240),
+        }),
+        response: { ...errors, 200: stopView },
+      },
+    },
+    (r) =>
+      runtime.clearStop(
+        token(r),
+        org(r),
+        r.params.id,
+        r.body.expected_epoch,
+        r.body.reason,
       ),
   );
   const quotaParams = z.strictObject({

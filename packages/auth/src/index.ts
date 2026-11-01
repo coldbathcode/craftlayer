@@ -712,6 +712,51 @@ export class AuthService {
       async (_client, principal) => operation(principal),
     );
   }
+  /** Owner-only composition hook; does not expose the identity database client. */
+  async guardInstance<T>(
+    token: string,
+    operation: (principal: Principal) => Promise<T>,
+  ): Promise<T> {
+    this.ensureReady();
+    return this.transaction(async (client) => {
+      const p = await this.sessionIn(client, token);
+      if (
+        p.user.account_type !== "adult" ||
+        !(
+          await client.query("select 1 from instance_owners where user_id=$1", [
+            p.user.id,
+          ])
+        ).rowCount
+      )
+        throw new AuthError(
+          403,
+          "INSTANCE_PERMISSION_DENIED",
+          "Instance owner permission required.",
+        );
+      return operation(p);
+    });
+  }
+  /** Protected local recovery capability, intentionally unavailable as an HTTP route. */
+  async guardLocalRecovery<T>(
+    token: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    this.ensureReady();
+    return this.transaction(async (client) => {
+      const row = (
+        await client.query<{ recovery_hash: string }>(
+          "select recovery_hash from installation_settings where id=true and bootstrapped_at is not null",
+        )
+      ).rows[0];
+      if (!row || !equal(digest(token), row.recovery_hash))
+        throw new AuthError(
+          403,
+          "RECOVERY_DENIED",
+          "Local owner recovery credential is invalid.",
+        );
+      return operation();
+    });
+  }
   async createOrganization(token: string, name: string) {
     name = z.string().trim().min(1).max(120).parse(name);
     return this.transaction(async (client) => {
