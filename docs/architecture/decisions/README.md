@@ -20,3 +20,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0011 — Foundation toolchain and image pins](0011-foundation-toolchain.md) is adopted for Chapter 00; the original ten proposals retain their individual status until reviewed.
 
 [ADR 0012 — Identity-service boundary](0012-identity-boundary.md) records Chapter 01's restricted auth role, tenant constraints and upgrade provisioning.
+
+[ADR 0013 — Provider gateway boundary](0013-provider-gateway-boundary.md) records Chapter 02 provider contracts, strict cost eligibility, operator endpoint trust and durable accounting decisions.

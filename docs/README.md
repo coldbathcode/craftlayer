@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–01 implemented; Chapter 01 review evidence is available and Chapter 02 requires authorization; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–01 implemented; Chapter 01 is accepted for advancement and Chapter 02 is authorized/in progress; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 

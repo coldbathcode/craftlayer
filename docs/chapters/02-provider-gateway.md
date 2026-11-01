@@ -1,6 +1,6 @@
 # Chapter 02 — Provider gateway
 
-**Status:** not started. **Specification:** ready for engineering review. **Implementation evidence:** none.
+**Status:** in progress; user authorized Chapter 02. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M1. **Requirements:** PR-004–007, PR-021; NFR-09.
 
@@ -10,7 +10,7 @@ Provide OpenRouter/Ollama access through a fail-closed policy gateway with audit
 
 ## Dependencies and entry gate
 
-Chapters 00–01 accepted. Auth, tenant scope, encrypted-secret storage pattern and migration infrastructure exist.
+Chapters 00–01 accepted for advancement. Auth, tenant scope and migration infrastructure exist. The recovery outbox supplies an encryption pattern; provider credential storage/key rotation is new work in CL-02-02, not an existing completed feature.
 
 Before work: inspect Git status, read AGENTS.md and delivery status, confirm the authorized chapter scope, and inspect the previous review evidence. Do not assume a dependency is complete merely because its specification exists.
 
@@ -26,9 +26,9 @@ Architecture references: [model-routing](../architecture/model-routing.md), [dat
 
 Each task is initially unchecked. Dependencies below describe the default conservative order; record an explicit justified dependency change before reordering. Task sizes are relative engineering complexity (M/L), not delivery dates.
 
-### [ ] CL-02-01 — Provider and pricing contracts
+### [x] CL-02-01 — Provider and pricing contracts
 
-**Depends on:** Chapter 01 gate. **Size:** M. **Status:** not started.
+**Depends on:** Chapter 01 gate. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Define request/result/error schemas, capabilities, price dimensions/units/provenance and freshness semantics. Add fake transport/clock fixtures and identify strict zero-cost enforcement support per path.
 

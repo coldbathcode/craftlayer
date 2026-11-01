@@ -12,7 +12,7 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 | D-04 | Auth/hash/session libraries | Resolved for Chapter 01: Argon2id 2.2.2 binding, opaque sessions and versioned authority; ADR 0012/review | 01 / security engineer | Maintenance review, secure config and measured hashing |
 | D-05 | Owner recovery/email behavior | Resolved for Chapter 01: identity-only hidden/stdin local recovery; TLS SMTP optional, tests use fakes | 01 / auth engineer | Safe reset without token leakage or Cloud |
 | D-06 | Credential master-key storage | Local protected key file/secret reference, versioned encryption | 02 / security/operator | Rotation, wrong-org decrypt denial and separate-key restore |
-| D-07 | Strict free-only provider assurance | Ineligible if billing behavior cannot be bounded | 02/07 / provider engineer | Official pricing/feature/endpoint behavior plus negative contracts |
+| D-07 | Strict free-only provider assurance | ADR 0013: OpenRouter strict zero-cost enforcement remains unproved and ineligible; exact operator-local Ollama only with cloud disabled | 02/07 / provider engineer | Official pricing/feature/endpoint behavior plus negative contracts |
 | D-08 | Model selection and catalog TTL | No permanent free-model list; proposed 5-min hosted TTL | 02 / provider engineer | Freshness/outage tests and explicit metadata limits |
 | D-09 | Minecraft versions and bot login | Private Java server; supported legitimate auth path | 04 / adapter engineer | Connect/reconnect proof, account/license/network prerequisites |
 | D-10 | Minecraft fixture terrain and materials | Seeded flat approved region; prepared supply before survival | 04/06 / adapter engineer | Reproducible world and BOM/verifier |
@@ -54,3 +54,5 @@ Status: open planning register, 2026-10-31. Owners below are proposed responsibi
 For a new material question: assign ID, describe impact, propose the safest useful default, record alternatives/evidence and identify the chapter gate. Ask the user only when the answer materially changes authorized product scope or requires an external/irreversible action; routine local engineering choices can be resolved with documented rationale. Update ADRs and affected tests/specifications after a decision.
 
 An open question does not block unrelated planning. Never resolve a high-risk unknown by inventing a tested fact or silently weakening the acceptance criteria.
+
+Chapter 02 authorization: the user requested “keep going next steps” after the Chapter 01 review. Chapter 03 is not yet authorized. ADR 0013 also resolves the entry-gate overstatement: only the recovery encryption pattern existed before Chapter 02; provider credential storage is implemented in its own task.

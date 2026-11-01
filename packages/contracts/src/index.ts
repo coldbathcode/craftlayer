@@ -13,3 +13,5 @@ export const errorSchema = z.strictObject({
   }),
 });
 export * from "./identity.js";
+
+export * from "./providers.js";

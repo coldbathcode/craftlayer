@@ -1,0 +1,27 @@
+import {
+  type GenerateRequest,
+  type GenerateResult,
+  type ModelDescriptor,
+  type ProviderErrorCode,
+  providerErrorSchema,
+} from "@craftlayer/contracts";
+export class ProviderError extends Error {
+  constructor(
+    public readonly code: ProviderErrorCode,
+    public readonly dispatched: boolean,
+    public readonly retry_after_ms: number | null = null,
+  ) {
+    super(`Provider operation failed: ${code}`);
+    this.name = "ProviderError";
+    providerErrorSchema.parse({ code, dispatched, retry_after_ms });
+  }
+}
+export interface ModelProvider {
+  discover(signal: AbortSignal): Promise<ModelDescriptor[]>;
+  generate(
+    model: ModelDescriptor,
+    request: GenerateRequest,
+    signal: AbortSignal,
+  ): Promise<GenerateResult>;
+}
+export * from "./pricing.js";

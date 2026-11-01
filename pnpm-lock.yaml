@@ -190,6 +190,15 @@ importers:
         specifier: 8.23.1
         version: 8.23.1
 
+  packages/providers:
+    dependencies:
+      '@craftlayer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+
   packages/sdk:
     dependencies:
       '@craftlayer/contracts':
