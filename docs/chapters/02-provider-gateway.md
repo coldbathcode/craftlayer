@@ -42,9 +42,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Secret canary is absent from browser/client/events/logs; wrong-org decrypt and forbidden endpoints deny.
 
-### [ ] CL-02-03 — Ollama adapter
+### [x] CL-02-03 — Ollama adapter
 
-**Depends on:** CL-02-02. **Size:** M. **Status:** not started.
+**Depends on:** CL-02-02. **Size:** M. **Status:** verified; see build log.
 
 **Implementation:** Implement bounded discovery/generation/cancel/timeout and explicit operator-owned local endpoint trust. Distinguish infrastructure cost from provider price and do not accept arbitrary local-network URLs.
 

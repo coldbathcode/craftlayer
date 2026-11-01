@@ -26,4 +26,6 @@ export interface ModelProvider {
 }
 export * from "./connections.js";
 export * from "./instance.js";
+export * from "./ollama.js";
 export * from "./pricing.js";
+export * from "./wire.js";

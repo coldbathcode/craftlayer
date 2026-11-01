@@ -22,7 +22,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-01-07](../chapters/01-identity-and-rbac.md) | Isolation and revocation review | CL-01-06 | L | Verified |
 | [CL-02-01](../chapters/02-provider-gateway.md) | Provider and pricing contracts | Chapter 01 gate | M | Verified |
 | [CL-02-02](../chapters/02-provider-gateway.md) | Credential and connection management | CL-02-01 | L | Verified |
-| [CL-02-03](../chapters/02-provider-gateway.md) | Ollama adapter | CL-02-02 | M | Not started |
+| [CL-02-03](../chapters/02-provider-gateway.md) | Ollama adapter | CL-02-02 | M | Verified |
 | [CL-02-04](../chapters/02-provider-gateway.md) | OpenRouter adapter | CL-02-03 | L | Not started |
 | [CL-02-05](../chapters/02-provider-gateway.md) | Policy and cooldown router | CL-02-04 | L | Not started |
 | [CL-02-06](../chapters/02-provider-gateway.md) | Budget ledger and reconciliation | CL-02-05 | L | Not started |
