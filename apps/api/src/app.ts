@@ -1,6 +1,7 @@
 import { AuthError, type IdentityService } from "@craftlayer/auth";
 import { newRequestId } from "@craftlayer/config";
 import { healthSchema } from "@craftlayer/contracts";
+import { ProviderError } from "@craftlayer/providers";
 import swagger from "@fastify/swagger";
 import Fastify, { type FastifyBaseLogger } from "fastify";
 import {
@@ -10,10 +11,12 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { registerAuth } from "./auth-routes.js";
+import { type ConnectionApi, registerProviders } from "./provider-routes.js";
 export async function buildApp(options: {
   readiness: () => Promise<boolean>;
   logger?: FastifyBaseLogger;
   auth?: IdentityService;
+  providers?: ConnectionApi;
   publicUrl?: string;
 }) {
   const app = Fastify({
@@ -46,6 +49,25 @@ export async function buildApp(options: {
       { request_id: request.id, code: "REQUEST_FAILED" },
       "Request failed",
     );
+    if (error instanceof ProviderError) {
+      void reply
+        .code(
+          error.code === "policy_denied"
+            ? 403
+            : error.code === "auth"
+              ? 503
+              : 502,
+        )
+        .send({
+          error: {
+            code: `PROVIDER_${error.code.toUpperCase()}`,
+            message:
+              "Provider configuration or policy denied this operation; values omitted.",
+            request_id: request.id,
+          },
+        });
+      return;
+    }
     if (error instanceof AuthError) {
       if ([401, 403, 404].includes(error.status))
         await options.auth
@@ -112,6 +134,8 @@ export async function buildApp(options: {
       options.auth,
       options.publicUrl ?? "http://127.0.0.1:3000",
     );
+  if (options.providers && options.auth)
+    await registerProviders(app, options.providers);
   await app.ready();
   return app;
 }

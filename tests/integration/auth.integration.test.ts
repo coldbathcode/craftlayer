@@ -1,9 +1,19 @@
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { Writable } from "node:stream";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../apps/api/src/app.js";
 import { AuthService } from "../../packages/auth/src/index.js";
+import { createLogger } from "../../packages/config/src/index.js";
+import { openCredential } from "../../packages/providers/src/credentials.js";
+import { fixtureModel } from "../../packages/providers/src/fixtures.js";
+import {
+  ConnectionService,
+  ProviderFiles,
+} from "../../packages/providers/src/index.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -1212,6 +1222,325 @@ it("serializes concurrent owner disables and preserves a recoverable active owne
       )
     ).user.id,
   ).toBe(ownerId);
+});
+
+describe("provider credential and connection boundary", () => {
+  let providerLogs = "";
+  let directory = "",
+    providers: ConnectionService,
+    providerApp: Awaited<ReturnType<typeof buildApp>>;
+  const runtime = new pg.Pool({
+    connectionString: process.env.TEST_DATABASE_URL,
+    max: 1,
+  });
+  const one = randomBytes(32).toString("hex"),
+    two = randomBytes(32).toString("hex"),
+    canary = "synthetic-provider-credential-canary";
+  const keyPath = () => `${directory}/keys`,
+    policyPath = () => `${directory}/policy`;
+  beforeAll(async () => {
+    directory = await mkdtemp(`${tmpdir()}/craftlayer-provider-integration-`);
+    await writeFile(
+      keyPath(),
+      JSON.stringify({ active: "one", keys: { one } }),
+      { mode: 0o600 },
+    );
+    await writeFile(
+      policyPath(),
+      JSON.stringify({
+        version: 1,
+        openrouter_enabled: true,
+        allow_paid: false,
+        max_paid_micro_usd: "0",
+        stopped: false,
+        ollama: [
+          {
+            id: "fixture-local",
+            url: "http://127.0.0.1:11434",
+            addresses: ["127.0.0.1"],
+            models: ["fixture:local"],
+            cloud_disabled: true,
+            context_tokens: 32768,
+            output_tokens: 1024,
+          },
+        ],
+      }),
+      { mode: 0o600 },
+    );
+    providers = new ConnectionService({
+      databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+      auth,
+      files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
+      clock: () => now.getTime(),
+    });
+    providerApp = await buildApp({
+      auth,
+      providers,
+      logger: createLogger(
+        "info",
+        new Writable({
+          write(chunk, _encoding, next) {
+            providerLogs += chunk.toString();
+            next();
+          },
+        }),
+      ),
+      readiness: async () => true,
+      publicUrl: "http://127.0.0.1:3000",
+    });
+  });
+  afterAll(async () => {
+    await providerApp?.close();
+    await providers?.close();
+    await runtime.end();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const headers = (token = ownerToken, org = orgId) => ({
+    cookie: `craftlayer_session=${token}`,
+    origin: "http://127.0.0.1:3000",
+    "x-craftlayer-organization": org,
+    "x-csrf-token": auth.csrfToken(token),
+  });
+  it("stores only bound ciphertext and returns strict redacted API projections", async () => {
+    const response = await providerApp.inject({
+      method: "POST",
+      url: "/api/v1/providers",
+      headers: headers(),
+      payload: {
+        kind: "openrouter",
+        endpoint_id: "openrouter",
+        label: "Synthetic provider",
+        secret: canary,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().credential_configured).toBe(true);
+    expect(response.body).not.toContain(canary);
+    expect(providerLogs).not.toContain(canary);
+    const id = response.json().id;
+    const client = await runtime.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        orgId,
+      ]);
+      const row = (
+        await client.query("select * from provider_connections where id=$1", [
+          id,
+        ])
+      ).rows[0];
+      expect(row.credential_payload.includes(Buffer.from(canary))).toBe(false);
+      expect(
+        openCredential(
+          { active: "one", keys: { one } },
+          orgId,
+          id,
+          1,
+          "one",
+          row.credential_payload,
+        ),
+      ).toBe(canary);
+      expect(() =>
+        openCredential(
+          { active: "one", keys: { one } },
+          crypto.randomUUID(),
+          id,
+          1,
+          "one",
+          row.credential_payload,
+        ),
+      ).toThrow();
+      await client.query("commit");
+      expect(
+        (await client.query("select * from provider_connections")).rows,
+      ).toEqual([]);
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+    const list = await providerApp.inject({
+      url: "/api/v1/providers",
+      headers: headers(),
+    });
+    expect(list.statusCode).toBe(200);
+    expect(list.body).not.toMatch(
+      /credential_payload|credential_version|secret|synthetic-provider-credential/,
+    );
+    expect(
+      (
+        await providerApp.inject({
+          method: "POST",
+          url: "/api/v1/providers",
+          headers: { ...headers(), origin: "https://evil.invalid" },
+          payload: {
+            kind: "ollama",
+            endpoint_id: "fixture-local",
+            label: "denied",
+          },
+        })
+      ).statusCode,
+    ).toBe(403);
+  });
+  it("rejects viewers, child role combinations, body endpoints and foreign connection IDs", async () => {
+    const viewer = await fixtureMember("viewer"),
+      child = await fixtureMember("org_admin", orgId, true);
+    for (const user of [viewer, child])
+      expect(
+        (
+          await providerApp.inject({
+            url: "/api/v1/providers",
+            headers: headers(user.token),
+          })
+        ).statusCode,
+      ).toBe(403);
+    expect(
+      (
+        await providerApp.inject({
+          method: "POST",
+          url: "/api/v1/providers",
+          headers: headers(),
+          payload: {
+            kind: "ollama",
+            endpoint_id: "fixture-local",
+            label: "forbidden",
+            url: "http://169.254.169.254",
+          },
+        })
+      ).statusCode,
+    ).toBe(400);
+    const foreign = await auth.createOrganization(
+        ownerToken,
+        "Foreign provider fixture",
+      ),
+      connection = await providers.createConnection(ownerToken, foreign.id, {
+        kind: "ollama",
+        endpoint_id: "fixture-local",
+        label: "Foreign hidden",
+      });
+    expect(
+      (
+        await providerApp.inject({
+          method: "PUT",
+          url: `/api/v1/providers/${connection.id}/status`,
+          headers: headers(),
+          payload: { expected_version: 1, enabled: false },
+        })
+      ).statusCode,
+    ).toBe(404);
+    const list = await providerApp.inject({
+      url: "/api/v1/providers",
+      headers: headers(),
+    });
+    expect(list.body).not.toContain("Foreign hidden");
+    const client = await runtime.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        orgId,
+      ]);
+      await expect(
+        client.query(
+          "insert into model_snapshots(organization_id,connection_id,connection_version,model_id,descriptor,fetched_at,expires_at) values($1,$2,1,'fixture',$3,now(),now())",
+          [orgId, connection.id, JSON.stringify(fixtureModel(now.getTime()))],
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+    } finally {
+      await client.query("rollback");
+      client.release();
+    }
+  });
+  it("rotates encrypted key versions, checks optimistic versions and revokes credentials", async () => {
+    const connection = await providers.createConnection(ownerToken, orgId, {
+      kind: "openrouter",
+      endpoint_id: "openrouter",
+      label: "Rotation fixture",
+      secret: canary,
+    });
+    await writeFile(
+      keyPath(),
+      JSON.stringify({ active: "two", keys: { one, two } }),
+    );
+    const rotated = await providers.changeCredential(
+      ownerToken,
+      orgId,
+      connection.id,
+      1,
+      null,
+      true,
+    );
+    expect(rotated.key_id).toBe("two");
+    await expect(
+      providers.setEnabled(ownerToken, orgId, connection.id, 1, false),
+    ).rejects.toMatchObject({ status: 409 });
+    await writeFile(
+      keyPath(),
+      JSON.stringify({ active: "two", keys: { two } }),
+    );
+    const row = await providers.changeCredential(
+      ownerToken,
+      orgId,
+      connection.id,
+      rotated.version,
+      "replacement-fixture-credential",
+    );
+    expect(row.version).toBe(3);
+    const revoked = await providerApp.inject({
+      method: "DELETE",
+      url: `/api/v1/providers/${connection.id}/credential`,
+      headers: headers(),
+      payload: { expected_version: 3 },
+    });
+    expect(revoked.statusCode).toBe(200);
+    expect(revoked.json()).toMatchObject({
+      enabled: false,
+      credential_configured: false,
+      version: 4,
+      key_id: null,
+    });
+    await writeFile(
+      keyPath(),
+      JSON.stringify({ active: "one", keys: { one } }),
+    );
+  });
+  it("holds current authority across bounded provider SQL mutations and denies after revocation", async () => {
+    const admin = await fixtureMember("org_admin");
+    let release = () => {},
+      reached = () => {};
+    const entered = new Promise<void>((resolve) => {
+        reached = resolve;
+      }),
+      finish = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    const guarded = auth.guardOrganization(
+      admin.token,
+      orgId,
+      "provider:manage",
+      async () => {
+        reached();
+        await finish;
+        return true;
+      },
+    );
+    await entered;
+    let committed = false;
+    const revoke = auth
+      .setMembershipDisabled(ownerToken, orgId, admin.memberId, true)
+      .then(() => {
+        committed = true;
+      });
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(committed).toBe(false);
+    } finally {
+      release();
+    }
+    expect(await guarded).toBe(true);
+    await revoke;
+    await expect(
+      providers.listConnections(admin.token, orgId),
+    ).rejects.toMatchObject({ status: 404 });
+  });
 });
 
 // CHAPTER_TESTS

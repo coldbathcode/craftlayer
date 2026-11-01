@@ -680,6 +680,21 @@ export class AuthService {
       }),
     );
   }
+  /** Server composition hook: bounded SQL callbacks only; never perform network I/O here. */
+  async guardOrganization<T>(
+    token: string,
+    org: string,
+    permission: Permission,
+    operation: (principal: Principal) => Promise<T>,
+  ): Promise<T> {
+    return this.orgAction(
+      token,
+      org,
+      permission,
+      { kind: "organization", id: org },
+      async (_client, principal) => operation(principal),
+    );
+  }
   async createOrganization(token: string, name: string) {
     name = z.string().trim().min(1).max(120).parse(name);
     return this.transaction(async (client) => {

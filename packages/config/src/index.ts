@@ -37,6 +37,8 @@ export function parseOwnerRecoveryConfig(
 }
 const schema = z
   .strictObject({
+    CRAFTLAYER_PROVIDER_KEY_FILE: z.string().startsWith("/").optional(),
+    CRAFTLAYER_PROVIDER_POLICY_FILE: z.string().startsWith("/").optional(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
       .default("development"),

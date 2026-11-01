@@ -176,3 +176,25 @@ export type GenerateResult = z.infer<typeof generateResultSchema>;
 export type ModelPolicy = z.infer<typeof modelPolicySchema>;
 export type PriceSnapshot = z.infer<typeof pricingSchema>;
 export type ProviderErrorCode = (typeof providerErrorCodes)[number];
+
+export const connectionSchema = z.strictObject({
+  id: z.uuid(),
+  kind: providerKind,
+  endpoint_id: z.string().max(40),
+  label: z.string().max(80),
+  enabled: z.boolean(),
+  version: z.number().int().positive(),
+  credential_configured: z.boolean(),
+  key_id: z.string().nullable(),
+});
+export const connectionCreateSchema = z.strictObject({
+  kind: providerKind,
+  endpoint_id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+  label: z.string().trim().min(1).max(80),
+  secret: z
+    .string()
+    .min(16)
+    .max(512)
+    .regex(/^[\x21-\x7e]+$/)
+    .optional(),
+});

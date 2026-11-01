@@ -24,4 +24,6 @@ export interface ModelProvider {
     signal: AbortSignal,
   ): Promise<GenerateResult>;
 }
+export * from "./connections.js";
+export * from "./instance.js";
 export * from "./pricing.js";

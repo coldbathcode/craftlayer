@@ -34,9 +34,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Malformed/unknown capabilities and price metadata are explicit; contract fixtures cover every normalized error.
 
-### [ ] CL-02-02 — Credential and connection management
+### [x] CL-02-02 — Credential and connection management
 
-**Depends on:** CL-02-01. **Size:** L. **Status:** not started.
+**Depends on:** CL-02-01. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement encrypted org-bound credentials, key references/rotation, endpoint validation and redacted admin routes. Keep secret decryption inside trusted server/worker paths.
 

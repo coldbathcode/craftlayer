@@ -31,7 +31,8 @@
     "test:e2e": "node --env-file-if-exists=.env node_modules/@playwright/test/cli.js test",
     "test:offline": "node scripts/test-offline.mjs",
     "check:stack": "node --env-file-if-exists=.env scripts/check-stack.mjs",
-    "test:identity-ui": "node scripts/test-identity-ui.mjs"
+    "test:identity-ui": "node scripts/test-identity-ui.mjs",
+    "setup:providers": "node scripts/setup-providers.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

@@ -6,6 +6,7 @@ import {
   within,
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
+import { ConnectionService, ProviderFiles } from "@craftlayer/providers";
 import { createClient } from "redis";
 import { buildApp } from "./app.js";
 
@@ -45,6 +46,14 @@ try {
     () => true,
     () => false,
   );
+  const providers = new ConnectionService({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    files: new ProviderFiles({
+      keys: config.CRAFTLAYER_PROVIDER_KEY_FILE,
+      policy: config.CRAFTLAYER_PROVIDER_POLICY_FILE,
+    }),
+  });
   let mailBusy = false;
   const mailTimer = config.CRAFTLAYER_SMTP_URL
     ? setInterval(() => {
@@ -74,6 +83,7 @@ try {
     if (redis.isOpen) redis.destroy();
     await pool.end();
     await auth.close();
+    await providers.close();
   };
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
@@ -82,12 +92,13 @@ try {
   const app = await buildApp({
     logger: log,
     auth,
+    providers,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
     readiness: async () => {
       const [db, pong] = await within(
         Promise.all([
           pool.query(
-            "select to_regclass('public.organizations') is not null as migrated",
+            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null as migrated",
           ),
           redis.isReady ? redis.ping() : Promise.resolve(null),
         ]),
@@ -101,6 +112,7 @@ try {
     if (redis.isOpen) redis.destroy();
     await pool.end();
     await auth.close();
+    await providers.close();
   };
   installShutdown(() => close(), log);
   await app.listen({
