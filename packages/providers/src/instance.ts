@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { isIP } from "node:net";
-import { microUsd } from "@craftlayer/contracts";
+import {
+  budgetLimitsSchema,
+  defaultInstanceLimits,
+  microUsd,
+} from "@craftlayer/contracts";
 import { z } from "zod";
 import { ProviderError } from "./index.js";
 
@@ -58,6 +62,7 @@ export const approvedLocalSchema = z.strictObject({
 });
 export const instancePolicySchema = z
   .strictObject({
+    limits: budgetLimitsSchema.default(defaultInstanceLimits),
     version: z.number().int().positive(),
     openrouter_enabled: z.boolean(),
     openrouter_models: z.array(z.string().max(180)).max(32).default([]),
@@ -73,6 +78,7 @@ export const instancePolicySchema = z
 export type InstancePolicy = z.infer<typeof instancePolicySchema>;
 export type ApprovedLocal = z.infer<typeof approvedLocalSchema>;
 export const disabledInstance: InstancePolicy = {
+  limits: { ...defaultInstanceLimits },
   version: 1,
   openrouter_enabled: false,
   openrouter_models: [],

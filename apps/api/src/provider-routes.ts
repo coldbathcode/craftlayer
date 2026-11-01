@@ -1,5 +1,7 @@
 import { AuthError } from "@craftlayer/auth";
 import {
+  budgetLimitsSchema,
+  budgetViewSchema,
   connectionCreateSchema,
   connectionSchema,
   errorSchema,
@@ -7,13 +9,14 @@ import {
   modelPolicySchema,
   modelSchema,
   okSchema,
+  usageReportSchema,
 } from "@craftlayer/contracts";
-import type { GatewayControl } from "@craftlayer/providers";
+import type { ProviderGateway } from "@craftlayer/providers";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 
-export type ConnectionApi = Pick<GatewayControl, keyof GatewayControl>;
+export type ConnectionApi = Pick<ProviderGateway, keyof ProviderGateway>;
 export async function registerProviders(
   app: FastifyInstance,
   providers: ConnectionApi,
@@ -237,5 +240,64 @@ export async function registerProviders(
       },
     },
     async (r) => providers.setStopped(token(r), org(r), false),
+  );
+  api.get(
+    "/api/v1/budgets/:kind/:id",
+    {
+      schema: {
+        params: scopes,
+        response: { ...responses, 200: budgetViewSchema },
+      },
+    },
+    async (r) =>
+      providers.getBudget(token(r), org(r), r.params.kind, r.params.id),
+  );
+  api.put(
+    "/api/v1/budgets/:kind/:id",
+    {
+      schema: {
+        params: scopes,
+        body: z.strictObject({
+          expected_version: z.number().int().nonnegative().max(2147483646),
+          limits: budgetLimitsSchema,
+        }),
+        response: { ...responses, 200: budgetViewSchema },
+      },
+    },
+    async (r) =>
+      providers.setBudget(
+        token(r),
+        org(r),
+        r.params.kind,
+        r.params.id,
+        r.body.expected_version,
+        r.body.limits,
+      ),
+  );
+  api.get(
+    "/api/v1/usage",
+    { schema: { response: { ...responses, 200: usageReportSchema } } },
+    async (r) => providers.usage(token(r), org(r)),
+  );
+  api.post(
+    "/api/v1/usage/:id/reconcile",
+    {
+      schema: {
+        params,
+        body: z.strictObject({
+          receipt_hash: z.string().regex(/^[a-f0-9]{64}$/),
+          confirmed_quiescent: z.literal(true),
+        }),
+        response: { ...responses, 200: okSchema },
+      },
+    },
+    async (r) =>
+      providers.reconcile(
+        token(r),
+        org(r),
+        r.params.id,
+        r.body.receipt_hash,
+        r.body.confirmed_quiescent,
+      ),
   );
 }

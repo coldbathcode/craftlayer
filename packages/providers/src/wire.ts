@@ -181,7 +181,6 @@ export class HttpWire implements JsonWire {
         },
         (response) => {
           if (response.statusCode !== 200) {
-            response.resume();
             reject(
               statusError(
                 response.statusCode ?? 500,
@@ -189,6 +188,7 @@ export class HttpWire implements JsonWire {
                 input.effectful,
               ),
             );
+            response.destroy();
             return;
           }
           if (

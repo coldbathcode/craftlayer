@@ -6,7 +6,7 @@ import {
   within,
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
-import { GatewayControl, ProviderFiles } from "@craftlayer/providers";
+import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
 import { createClient } from "redis";
 import { buildApp } from "./app.js";
 
@@ -46,7 +46,7 @@ try {
     () => true,
     () => false,
   );
-  const providers = new GatewayControl({
+  const providers = new ProviderGateway({
     databaseUrl: config.DATABASE_URL,
     auth,
     files: new ProviderFiles({

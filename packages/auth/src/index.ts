@@ -942,7 +942,10 @@ export class AuthService {
       },
     );
   }
-  async revalidateExecutionGrant(value: ExecutionGrant) {
+  async guardExecution<T>(
+    value: ExecutionGrant,
+    operation: (principal: Principal) => Promise<T>,
+  ): Promise<T> {
     this.ensureReady();
     const parsed = executionGrantSchema.safeParse(value);
     if (!parsed.success)
@@ -1000,10 +1003,13 @@ export class AuthService {
           "GRANT_DENIED",
           "Execution authority changed.",
         );
-      return true;
+      return operation(p);
     });
   }
 
+  async revalidateExecutionGrant(value: ExecutionGrant) {
+    return this.guardExecution(value, async () => true);
+  }
   private async roleFor(client: pg.PoolClient, org: string, id: string) {
     const role = (
       await client.query<{ id: string; name: string; built_in: boolean }>(

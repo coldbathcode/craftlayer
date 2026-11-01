@@ -124,6 +124,13 @@ export const usageSchema = z
     "Observed usage requires both counters",
   );
 export const generateResultSchema = z.strictObject({
+  latency_ms: z
+    .number()
+    .int()
+    .nonnegative()
+    .max(Number.MAX_SAFE_INTEGER)
+    .nullable()
+    .default(null),
   text: z.string().max(262144),
   tool_calls: z
     .array(
@@ -203,4 +210,104 @@ export const connectionCreateSchema = z.strictObject({
     .max(512)
     .regex(/^[\x21-\x7e]+$/)
     .optional(),
+});
+
+export const budgetLimitsSchema = z.strictObject({
+  calls: z.number().int().min(0).max(100000),
+  input_tokens: z.number().int().min(0).max(1000000000),
+  output_tokens: z.number().int().min(0).max(1000000000),
+  total_tokens: z.number().int().min(0).max(2000000000),
+  micro_usd: microUsd,
+  concurrent: z.number().int().min(0).max(64),
+});
+export const defaultBudgetLimits = {
+  calls: 10,
+  input_tokens: 163840,
+  output_tokens: 20480,
+  total_tokens: 184320,
+  micro_usd: "0",
+  concurrent: 2,
+} as const;
+export const defaultInstanceLimits = {
+  calls: 100,
+  input_tokens: 1638400,
+  output_tokens: 204800,
+  total_tokens: 1843200,
+  micro_usd: "0",
+  concurrent: 4,
+} as const;
+export type BudgetLimits = z.infer<typeof budgetLimitsSchema>;
+
+const counterString = z.string().regex(/^(0|[1-9][0-9]{0,37})$/);
+export const budgetAmountsSchema = z.strictObject({
+  calls: counterString,
+  input_tokens: counterString,
+  output_tokens: counterString,
+  total_tokens: counterString,
+  micro_usd: counterString,
+});
+export const budgetViewSchema = z.strictObject({
+  version: z.number().int().nonnegative(),
+  limits: budgetLimitsSchema,
+  active: z.number().int().nonnegative(),
+  window_start: z.iso.datetime(),
+  reserved: budgetAmountsSchema,
+  used: budgetAmountsSchema,
+});
+const quality = z.enum(["observed", "estimated", "unknown"]);
+export const usageReportSchema = z.strictObject({
+  reservations: z
+    .array(
+      z.strictObject({
+        id: z.uuid(),
+        request_id: z.uuid(),
+        connection_id: z.uuid(),
+        model_id: z.string(),
+        state: z.enum([
+          "reserved",
+          "dispatched",
+          "settled",
+          "uncertain",
+          "released",
+        ]),
+        input_max: counterString,
+        output_max: counterString,
+        max_cost: counterString,
+        charged_input: counterString.nullable(),
+        charged_output: counterString.nullable(),
+        charged_cost: counterString.nullable(),
+        usage_quality: quality.nullable(),
+        created_at: z.iso.datetime(),
+      }),
+    )
+    .max(100),
+  ledger: z
+    .array(
+      z.strictObject({
+        id: z.string(),
+        reservation_id: z.uuid(),
+        event: z.enum([
+          "reserve",
+          "dispatch",
+          "settle",
+          "release",
+          "uncertain",
+          "reconcile",
+          "adjust",
+        ]),
+        usage_quality: quality,
+        spend_quality: z.enum(["estimated", "unknown"]),
+        reserved_delta: z.record(
+          z.string(),
+          z.string().regex(/^-?(0|[1-9][0-9]{0,37})$/),
+        ),
+        used_delta: z.record(
+          z.string(),
+          z.string().regex(/^-?(0|[1-9][0-9]{0,37})$/),
+        ),
+        receipt_hash: z.string().nullable(),
+        created_at: z.iso.datetime(),
+      }),
+    )
+    .max(100),
 });

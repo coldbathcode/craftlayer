@@ -2,6 +2,7 @@ import {
   type GenerateRequest,
   type GenerateResult,
   generateRequestSchema,
+  generateResultSchema,
   type ModelDescriptor,
   type ModelPolicy,
   modelSchema,
@@ -163,6 +164,7 @@ export class ModelRouter {
     const parsed = generateRequestSchema.safeParse(input);
     if (!parsed.success) throw new RouterBlocked(["invalid_request"]);
     const request = parsed.data;
+    const started = this.now();
     const inputBound =
       request.messages.reduce(
         (sum, message) => sum + Buffer.byteLength(message.content) + 32,
@@ -249,8 +251,17 @@ export class ModelRouter {
           },
         );
         if (!dispatched) throw new ProviderError("policy_denied", true);
-        await this.port.complete(reservation, { result, dispatched: true });
-        return { result, attempts: attempt + 1 };
+        if (!generateResultSchema.safeParse(result).success)
+          throw new ProviderError("malformed_response", true);
+        const measured = generateResultSchema.parse({
+          ...result,
+          latency_ms: Math.max(0, this.now() - started),
+        });
+        await this.port.complete(reservation, {
+          result: measured,
+          dispatched: true,
+        });
+        return { result: measured, attempts: attempt + 1 };
       } catch (error) {
         const normalized =
           error instanceof ProviderError

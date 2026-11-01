@@ -66,9 +66,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Zero calls reach paid/ineligible endpoints; 429 falls back only to eligible local/free paths; no candidate blocks.
 
-### [ ] CL-02-06 — Budget ledger and reconciliation
+### [x] CL-02-06 — Budget ledger and reconciliation
 
-**Depends on:** CL-02-05. **Size:** L. **Status:** not started.
+**Depends on:** CL-02-05. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Add stable-order multi-scope reservations, integer monetary math, request idempotency, observed/estimated usage settlement and conservative uncertain holds. Prevent hidden SDK retry amplification.
 

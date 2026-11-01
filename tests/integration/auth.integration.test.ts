@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { Writable } from "node:stream";
 import pg from "pg";
@@ -8,15 +8,27 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../apps/api/src/app.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import { createLogger } from "../../packages/config/src/index.js";
+import {
+  defaultBudgetLimits,
+  defaultInstanceLimits,
+  defaultModelPolicy,
+  type GenerateRequest,
+  type GenerateResult,
+  type ModelDescriptor,
+} from "../../packages/contracts/src/index.js";
+import type { ConnectionRow } from "../../packages/providers/src/connections.js";
 import { openCredential } from "../../packages/providers/src/credentials.js";
 import {
   FakeProvider,
   fixtureModel,
+  fixtureRequest,
 } from "../../packages/providers/src/fixtures.js";
 import {
-  GatewayControl,
+  ProviderError,
   ProviderFiles,
+  ProviderGateway,
 } from "../../packages/providers/src/index.js";
+import { BudgetLedger } from "../../packages/providers/src/ledger.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -1229,8 +1241,54 @@ it("serializes concurrent owner disables and preserves a recoverable active owne
 
 describe("provider credential and connection boundary", () => {
   let providerLogs = "";
+  let basePolicy = "",
+    fakeHostedProof = false;
+  let fakeInputPrice: string | undefined;
+  let generateHook:
+    | ((
+        row: ConnectionRow,
+        model: ModelDescriptor,
+        request: GenerateRequest,
+        signal: AbortSignal,
+        barrier?: () => Promise<void>,
+      ) => Promise<GenerateResult>)
+    | undefined;
+  const result = (input = 20, output = 3): GenerateResult => ({
+    latency_ms: 1,
+    text: "Synthetic result",
+    tool_calls: [],
+    finish_reason: "stop",
+    usage: { quality: "observed", input_tokens: input, output_tokens: output },
+    provider_request_id: null,
+  });
+
+  const fakeFactory = (row: ConnectionRow) => {
+    const fake = new FakeProvider([
+      fixtureModel(now.getTime(), {
+        id: row.kind === "ollama" ? "fixture:local" : "fixture/model:free",
+        provider: row.kind,
+        classification: row.kind === "ollama" ? "operator_local" : "hosted",
+        zero_cost_enforced: row.kind === "ollama" || fakeHostedProof,
+      }),
+    ]);
+    if (fakeInputPrice && fake.models[0]) {
+      fake.models[0].pricing.dimensions.input = {
+        amount: fakeInputPrice,
+        unit: "token",
+      };
+      fake.models[0].pricing.source_hash = createHash("sha256")
+        .update(JSON.stringify(fake.models[0].pricing.dimensions))
+        .digest("hex");
+    }
+    const normal = fake.generate.bind(fake);
+    fake.generate = async (model, request, signal, barrier) =>
+      generateHook
+        ? generateHook(row, model, request, signal, barrier)
+        : normal(model, request, signal, barrier);
+    return fake;
+  };
   let directory = "",
-    providers: GatewayControl,
+    providers: ProviderGateway,
     providerApp: Awaited<ReturnType<typeof buildApp>>;
   const runtime = new pg.Pool({
     connectionString: process.env.TEST_DATABASE_URL,
@@ -1271,21 +1329,14 @@ describe("provider credential and connection boundary", () => {
       }),
       { mode: 0o600 },
     );
-    providers = new GatewayControl({
+    providers = new ProviderGateway({
       databaseUrl: process.env.TEST_DATABASE_URL ?? "",
       auth,
       files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
       clock: () => now.getTime(),
-      providerFactory: (row) =>
-        new FakeProvider([
-          fixtureModel(now.getTime(), {
-            id: row.kind === "ollama" ? "fixture:local" : "fixture/model:free",
-            provider: row.kind,
-            classification: row.kind === "ollama" ? "operator_local" : "hosted",
-            zero_cost_enforced: row.kind === "ollama",
-          }),
-        ]),
+      providerFactory: fakeFactory,
     });
+    basePolicy = await readFile(policyPath(), "utf8");
     providerApp = await buildApp({
       auth,
       providers,
@@ -1301,6 +1352,12 @@ describe("provider credential and connection boundary", () => {
       readiness: async () => true,
       publicUrl: "http://127.0.0.1:3000",
     });
+  });
+  beforeEach(async () => {
+    generateHook = undefined;
+    fakeHostedProof = false;
+    fakeInputPrice = undefined;
+    if (basePolicy) await writeFile(policyPath(), basePolicy);
   });
   afterAll(async () => {
     await providerApp?.close();
@@ -1581,7 +1638,7 @@ describe("provider credential and connection boundary", () => {
       next.policy,
     );
     expect((await providers.stopStatus(ownerToken, orgId)).stopped).toBe(true);
-    const restarted = new GatewayControl({
+    const restarted = new ProviderGateway({
       databaseUrl: process.env.TEST_DATABASE_URL ?? "",
       auth,
       files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
@@ -1599,6 +1656,690 @@ describe("provider credential and connection boundary", () => {
     ).rejects.toMatchObject({ status: 403 });
     await providers.setStopped(ownerToken, orgId, false);
     expect((await providers.stopStatus(ownerToken, orgId)).stopped).toBe(false);
+  });
+  async function inferenceFixture(
+    label: string,
+    kind: "ollama" | "openrouter" = "ollama",
+  ) {
+    const org = await auth.createOrganization(ownerToken, label),
+      project = await auth.createProject(ownerToken, org.id, label);
+    const connection = await providers.createConnection(ownerToken, org.id, {
+      kind,
+      endpoint_id: kind === "ollama" ? "fixture-local" : "openrouter",
+      label,
+      ...(kind === "openrouter" ? { secret: canary } : {}),
+    });
+    await providers.refreshModels(ownerToken, org.id, connection.id);
+    const grant = await auth.issueExecutionGrant(
+      ownerToken,
+      org.id,
+      "mission:execute",
+      { kind: "project", id: project.id },
+    );
+    return { org: org.id, project: project.id, connection, grant };
+  }
+  async function scoped<T>(
+    org: string,
+    operation: (client: pg.PoolClient) => Promise<T>,
+  ): Promise<T> {
+    const client = await runtime.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        org,
+      ]);
+      const value = await operation(client);
+      await client.query("commit");
+      return value;
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  it("settles hierarchical reservations exactly once and keeps prompts out of storage and reports", async () => {
+    const f = await inferenceFixture("Ledger identity fixture"),
+      request = fixtureRequest({
+        messages: [
+          { role: "user", content: "private-prompt-canary-for-ledger" },
+        ],
+      });
+    let calls = 0;
+    generateHook = async (_row, _model, _request, _signal, barrier) => {
+      await barrier?.();
+      calls++;
+      return result();
+    };
+    await providers.generate(f.grant, request, {
+      mission_id: crypto.randomUUID(),
+      task_id: crypto.randomUUID(),
+    });
+    expect(calls).toBe(1);
+    const budget = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(budget).toMatchObject({
+      active: 0,
+      reserved: { calls: "0", input_tokens: "0" },
+      used: {
+        calls: "1",
+        input_tokens: "20",
+        output_tokens: "3",
+        total_tokens: "23",
+        micro_usd: "0",
+      },
+    });
+    const usage = await providers.usage(ownerToken, f.org),
+      reservation = usage.reservations[0];
+    expect(reservation.state).toBe("settled");
+    const ledger = new BudgetLedger(() => now.getTime());
+    await scoped(f.org, (client) =>
+      ledger.complete(
+        client,
+        f.org,
+        { id: reservation.id },
+        { result: result(), dispatched: true },
+      ),
+    );
+    expect((await providers.usage(ownerToken, f.org)).ledger).toHaveLength(3);
+    const links = await scoped(
+      f.org,
+      async (client) =>
+        (
+          await client.query(
+            "select scope_kind from reservation_budget_links where reservation_id=$1",
+            [reservation.id],
+          )
+        ).rows,
+    );
+    expect(links.map((r) => r.scope_kind).sort()).toEqual([
+      "mission",
+      "organization",
+      "project",
+      "task",
+      "user",
+    ]);
+    await expect(providers.generate(f.grant, request)).rejects.toBeDefined();
+    await expect(
+      providers.generate(f.grant, {
+        ...request,
+        messages: [{ role: "user", content: "changed" }],
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(calls).toBe(1);
+    expect(JSON.stringify(usage)).not.toContain("private-prompt-canary");
+    const persisted = await scoped(
+      f.org,
+      async (client) =>
+        (
+          await client.query(
+            "select row_to_json(q)::text as value from provider_requests q where organization_id=$1",
+            [f.org],
+          )
+        ).rows,
+    );
+    expect(persisted[0].value).not.toContain("private-prompt-canary");
+    const response = await providerApp.inject({
+      url: "/api/v1/usage",
+      headers: headers(ownerToken, f.org),
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).not.toMatch(
+      /credential_payload|private-prompt-canary/,
+    );
+  });
+  it("atomically intersects concurrent organization/user/project quotas without partial debits", async () => {
+    const f = await inferenceFixture("Concurrent budget fixture");
+    for (const [kind, id, calls] of [
+      ["organization", f.org, 3],
+      ["user", ownerId, 1],
+      ["project", f.project, 2],
+    ] as const)
+      await providers.setBudget(ownerToken, f.org, kind, id, 0, {
+        ...defaultBudgetLimits,
+        calls,
+      });
+    let dispatches = 0;
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      dispatches++;
+      return result();
+    };
+    const outcomes = await Promise.allSettled(
+      Array.from({ length: 8 }, () =>
+        providers.generate(f.grant, fixtureRequest()),
+      ),
+    );
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    expect(dispatches).toBe(1);
+    for (const [kind, id] of [
+      ["organization", f.org],
+      ["user", ownerId],
+      ["project", f.project],
+    ] as const) {
+      const view = await providers.getBudget(ownerToken, f.org, kind, id);
+      expect(view.used.calls).toBe("1");
+      expect(view.reserved.calls).toBe("0");
+      expect(view.active).toBe(0);
+    }
+  });
+  it("retains timeout holds across restart and reconciles only with conservative quiescent acknowledgement", async () => {
+    const f = await inferenceFixture("Uncertain budget fixture");
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      throw new ProviderError("timeout", true);
+    };
+    await expect(
+      providers.generate(f.grant, fixtureRequest()),
+    ).rejects.toBeDefined();
+    let view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.active).toBe(1);
+    expect(view.reserved.calls).toBe("1");
+    const usage = await providers.usage(ownerToken, f.org),
+      id = usage.reservations[0].id;
+    expect(usage.reservations[0].state).toBe("uncertain");
+    const restarted = new ProviderGateway({
+      databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+      auth,
+      files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
+      clock: () => now.getTime(),
+    });
+    try {
+      expect(
+        (await restarted.getBudget(ownerToken, f.org, "organization", f.org))
+          .active,
+      ).toBe(1);
+    } finally {
+      await restarted.close();
+    }
+    await expect(
+      providers.reconcile(ownerToken, f.org, id, "b".repeat(64), false),
+    ).rejects.toMatchObject({ status: 400 });
+    await providers.reconcile(ownerToken, f.org, id, "b".repeat(64), true);
+    await expect(
+      providers.reconcile(ownerToken, f.org, id, "b".repeat(64), true),
+    ).rejects.toMatchObject({ status: 409 });
+    view = await providers.getBudget(ownerToken, f.org, "organization", f.org);
+    expect(view.active).toBe(0);
+    expect(view.reserved.calls).toBe("0");
+    expect(view.used).toMatchObject({
+      calls: "1",
+      input_tokens: "1024",
+      output_tokens: "64",
+      total_tokens: "1088",
+      micro_usd: "0",
+    });
+    expect(
+      (await providers.usage(ownerToken, f.org)).reservations[0].usage_quality,
+    ).toBe("estimated");
+  });
+  it("blocks policy or credential changes between reservation and dispatch without spending", async () => {
+    for (const action of ["policy", "credential", "stop"] as const) {
+      fakeHostedProof = action === "credential";
+      const f = await inferenceFixture(
+        `Dispatch race ${action}`,
+        action === "credential" ? "openrouter" : "ollama",
+      );
+      if (action === "credential")
+        await providers.setPolicy(ownerToken, f.org, "organization", f.org, 0, {
+          ...defaultModelPolicy,
+          allow_hosted: true,
+        });
+      let calls = 0;
+      generateHook = async (_r, _m, _q, _s, barrier) => {
+        if (action === "policy")
+          await providers.setPolicy(
+            ownerToken,
+            f.org,
+            "organization",
+            f.org,
+            0,
+            { ...defaultModelPolicy, allowed_models: [] },
+          );
+        else if (action === "credential")
+          await providers.changeCredential(
+            ownerToken,
+            f.org,
+            f.connection.id,
+            1,
+            "rotated-synthetic-credential",
+          );
+        else await providers.setStopped(ownerToken, f.org, true);
+        await barrier?.();
+        calls++;
+        return result();
+      };
+      await expect(
+        providers.generate(f.grant, fixtureRequest()),
+      ).rejects.toBeDefined();
+      expect(calls).toBe(0);
+      const view = await providers.getBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+      );
+      expect(view.reserved.calls).toBe("0");
+      expect(view.used.calls).toBe("0");
+      expect(view.active).toBe(0);
+    }
+  });
+  it("never hides higher repeated receipts and latches stop on provider overrun", async () => {
+    const f = await inferenceFixture("Receipt overrun fixture");
+    await providers.generate(f.grant, fixtureRequest());
+    const id = (await providers.usage(ownerToken, f.org)).reservations[0].id,
+      ledger = new BudgetLedger(() => now.getTime());
+    await scoped(f.org, (client) =>
+      ledger.complete(
+        client,
+        f.org,
+        { id },
+        { result: result(10, 60), dispatched: true },
+      ),
+    );
+    let view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.used).toMatchObject({
+      input_tokens: "20",
+      output_tokens: "60",
+      total_tokens: "80",
+    });
+    await scoped(f.org, (client) =>
+      ledger.complete(
+        client,
+        f.org,
+        { id },
+        { result: result(2048, 65), dispatched: true },
+      ),
+    );
+    view = await providers.getBudget(ownerToken, f.org, "organization", f.org);
+    expect(view.used).toMatchObject({
+      input_tokens: "2048",
+      output_tokens: "65",
+      total_tokens: "2113",
+      calls: "1",
+    });
+    expect((await providers.stopStatus(ownerToken, f.org)).stopped).toBe(true);
+    await expect(
+      providers.generate(f.grant, fixtureRequest()),
+    ).rejects.toMatchObject({ reasons: ["stopped"] });
+    await expect(
+      scoped(f.org, (client) =>
+        client.query("delete from usage_ledger where organization_id=$1", [
+          f.org,
+        ]),
+      ),
+    ).rejects.toThrow(/permission denied/);
+    expect(
+      await scoped(
+        f.org,
+        async (client) =>
+          (await client.query("select * from provider_instance_windows")).rows,
+      ),
+    ).toEqual([]);
+  });
+  it("enforces the instance ceiling across organizations without exposing aggregate counters", async () => {
+    const first = await inferenceFixture("Global budget first"),
+      second = await inferenceFixture("Global budget second");
+    const total = await scoped(first.org, async (client) => {
+      await client.query(
+        "select set_config('app.provider_budget','enabled',true)",
+      );
+      return (
+        (
+          await client.query(
+            "select used_calls+reserved_calls as total from provider_instance_windows where window_start=$1",
+            [new BudgetLedger(() => now.getTime()).window()],
+          )
+        ).rows[0]?.total ?? "0"
+      );
+    });
+    const policy = JSON.parse(basePolicy);
+    policy.version++;
+    policy.limits = { ...defaultInstanceLimits, calls: Number(total) + 1 };
+    await writeFile(policyPath(), JSON.stringify(policy));
+    let calls = 0;
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      calls++;
+      return result();
+    };
+    const outcomes = await Promise.allSettled([
+      providers.generate(first.grant, fixtureRequest()),
+      providers.generate(second.grant, fixtureRequest()),
+    ]);
+    expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+    expect(calls).toBe(1);
+    const firstUsage = await providers.usage(ownerToken, first.org),
+      secondUsage = await providers.usage(ownerToken, second.org);
+    expect(
+      firstUsage.reservations.length + secondUsage.reservations.length,
+    ).toBe(1);
+    const winner = firstUsage.reservations[0] ?? secondUsage.reservations[0],
+      foreign = firstUsage.reservations.length ? second.org : first.org;
+    await expect(
+      providers.reconcile(ownerToken, foreign, winner.id, "a".repeat(64), true),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      await scoped(
+        first.org,
+        async (client) =>
+          (await client.query("select * from provider_instance_windows")).rows,
+      ),
+    ).toEqual([]);
+  });
+  it("persists a synthetic 429 cooldown across restart and accounts every fallback", async () => {
+    fakeHostedProof = true;
+    const f = await inferenceFixture(
+      "Persisted cooldown fixture",
+      "openrouter",
+    );
+    const local = await providers.createConnection(ownerToken, f.org, {
+      kind: "ollama",
+      endpoint_id: "fixture-local",
+      label: "Eligible local fallback",
+    });
+    await providers.refreshModels(ownerToken, f.org, local.id);
+    await providers.setPolicy(ownerToken, f.org, "organization", f.org, 0, {
+      ...defaultModelPolicy,
+      allow_hosted: true,
+    });
+    let hosted = 0,
+      localCalls = 0;
+    generateHook = async (row, _m, _q, _s, barrier) => {
+      await barrier?.();
+      if (row.kind === "openrouter") {
+        hosted++;
+        throw new ProviderError("rate_limited", true, 30000);
+      }
+      localCalls++;
+      return result();
+    };
+    expect((await providers.generate(f.grant, fixtureRequest())).attempts).toBe(
+      2,
+    );
+    expect(hosted).toBe(1);
+    expect(localCalls).toBe(1);
+    const restarted = new ProviderGateway({
+      databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+      auth,
+      files: new ProviderFiles({ keys: keyPath(), policy: policyPath() }),
+      clock: () => now.getTime(),
+      providerFactory: fakeFactory,
+    });
+    try {
+      expect(
+        (await restarted.generate(f.grant, fixtureRequest())).attempts,
+      ).toBe(1);
+    } finally {
+      await restarted.close();
+    }
+    expect(hosted).toBe(1);
+    expect(localCalls).toBe(2);
+    const held = (await providers.usage(ownerToken, f.org)).reservations.find(
+      (r) => r.state === "uncertain",
+    );
+    expect(held.connection_id).toBe(f.connection.id);
+    await providers.reconcile(ownerToken, f.org, held.id, "c".repeat(64), true);
+    expect(
+      (await providers.getBudget(ownerToken, f.org, "organization", f.org)).used
+        .calls,
+    ).toBe("3");
+  });
+  it("does not dispatch a reservation across an hourly window boundary", async () => {
+    now = new Date(Math.floor(now.getTime() / 3600000) * 3600000 + 3599000);
+    ownerToken = (
+      await auth.login({ login: ownerLogin, password }, "window-boundary-login")
+    ).cookieToken;
+    const f = await inferenceFixture("Window boundary fixture");
+    let calls = 0;
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      now = new Date(now.getTime() + 2000);
+      await barrier?.();
+      calls++;
+      return result();
+    };
+    await expect(
+      providers.generate(f.grant, fixtureRequest()),
+    ).rejects.toBeDefined();
+    expect(calls).toBe(0);
+    const view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.active).toBe(0);
+    expect(view.reserved.calls).toBe("0");
+    expect(view.used.calls).toBe("0");
+    expect(
+      (await providers.usage(ownerToken, f.org)).reservations[0].state,
+    ).toBe("released");
+  });
+  it("keeps uncertain concurrency held across hourly rollover until acknowledged", async () => {
+    const f = await inferenceFixture("Cross-window active fixture");
+    await providers.setBudget(ownerToken, f.org, "organization", f.org, 0, {
+      ...defaultBudgetLimits,
+      concurrent: 1,
+    });
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      throw new ProviderError("timeout", true);
+    };
+    await expect(
+      providers.generate(f.grant, fixtureRequest()),
+    ).rejects.toBeDefined();
+    const held = (await providers.usage(ownerToken, f.org)).reservations[0];
+    now = new Date(now.getTime() + 3600001);
+    ownerToken = (
+      await auth.login({ login: ownerLogin, password }, "cross-window-login")
+    ).cookieToken;
+    await providers.refreshModels(ownerToken, f.org, f.connection.id);
+    const grant = await auth.issueExecutionGrant(
+      ownerToken,
+      f.org,
+      "mission:execute",
+      { kind: "project", id: f.project },
+    );
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      return result();
+    };
+    await expect(
+      providers.generate(grant, fixtureRequest()),
+    ).rejects.toMatchObject({ reasons: ["budget_concurrency_exhausted"] });
+    let view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.active).toBe(1);
+    expect(view.used.calls).toBe("0");
+    await providers.reconcile(ownerToken, f.org, held.id, "d".repeat(64), true);
+    view = await providers.getBudget(ownerToken, f.org, "organization", f.org);
+    expect(view.active).toBe(0);
+    expect(view.used.calls).toBe("0");
+  });
+  it("settles already-dispatched work after membership revocation while rejecting future authority", async () => {
+    const f = await inferenceFixture("Revoked settlement fixture"),
+      admin = await fixtureMember("org_admin", f.org);
+    const grant = await auth.issueExecutionGrant(
+      admin.token,
+      f.org,
+      "mission:execute",
+      { kind: "project", id: f.project },
+    );
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      await auth.setMembershipDisabled(ownerToken, f.org, admin.memberId, true);
+      return result();
+    };
+    expect(
+      (await providers.generate(grant, fixtureRequest())).result.text,
+    ).toBe("Synthetic result");
+    expect(
+      (await providers.getBudget(ownerToken, f.org, "organization", f.org)).used
+        .calls,
+    ).toBe("1");
+    await expect(
+      providers.generate(grant, fixtureRequest()),
+    ).rejects.toBeDefined();
+  });
+  it("charges missing observed usage conservatively and distinguishes it from observed zero", async () => {
+    const f = await inferenceFixture("Unknown usage fixture");
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      return {
+        ...result(),
+        usage: { quality: "unknown", input_tokens: null, output_tokens: null },
+      };
+    };
+    expect(
+      (await providers.generate(f.grant, fixtureRequest())).result.usage
+        .quality,
+    ).toBe("unknown");
+    const view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.used).toMatchObject({
+      calls: "1",
+      input_tokens: "1024",
+      output_tokens: "64",
+      total_tokens: "1088",
+    });
+    expect(
+      (await providers.usage(ownerToken, f.org)).reservations[0].usage_quality,
+    ).toBe("estimated");
+  });
+  it("recovers crash-like reserved/dispatch checkpoints conservatively and fences late dispatch", async () => {
+    for (const phase of ["reserved", "dispatched"] as const) {
+      const f = await inferenceFixture(`Orphan ${phase} fixture`),
+        ledger = new BudgetLedger(() => now.getTime()),
+        request = fixtureRequest(),
+        epoch = "d".repeat(64),
+        context = { org: f.org, user: ownerId, project: f.project };
+      const policy = { ...defaultModelPolicy },
+        configuration = {
+          instance: { ...defaultInstanceLimits },
+          instance_paid_cap: "0",
+          policies: { [`organization/${f.org}`]: policy },
+        };
+      const reservation = await scoped(f.org, async (client) => {
+        await ledger.begin(client, context, request);
+        const row = await ledger.reserve(
+          client,
+          context,
+          request,
+          {
+            connection_id: f.connection.id,
+            version: 1,
+            model: fixtureModel(now.getTime(), { id: "fixture:local" }),
+            cooldown_until: 0,
+          },
+          0,
+          epoch,
+          0n,
+          configuration,
+        );
+        if (phase === "dispatched")
+          await ledger.dispatch(client, context, row, epoch, configuration);
+        return row;
+      });
+      await providers.reconcile(
+        ownerToken,
+        f.org,
+        reservation.id,
+        "e".repeat(64),
+        true,
+      );
+      const view = await providers.getBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+      );
+      expect(view.active).toBe(0);
+      expect(view.reserved.calls).toBe("0");
+      expect(view.used.calls).toBe(phase === "dispatched" ? "1" : "0");
+      await expect(
+        scoped(f.org, (client) =>
+          ledger.dispatch(client, context, reservation, epoch, configuration),
+        ),
+      ).rejects.toMatchObject({ reasons: ["reservation_changed"] });
+    }
+  });
+  it("uses integer monetary reservations and never discounts uncertain invoice components", async () => {
+    fakeInputPrice = "0.0000001";
+    const f = await inferenceFixture(
+      "Synthetic nonzero pricing fixture",
+      "openrouter",
+    );
+    const policy = JSON.parse(basePolicy);
+    policy.version++;
+    policy.allow_paid = true;
+    policy.max_paid_micro_usd = "1024";
+    policy.limits = { ...defaultInstanceLimits, micro_usd: "1024" };
+    await writeFile(policyPath(), JSON.stringify(policy));
+    await providers.setPolicy(ownerToken, f.org, "organization", f.org, 0, {
+      ...defaultModelPolicy,
+      free_only: false,
+      allow_hosted: true,
+      max_paid_micro_usd: "1024",
+    });
+    for (const [kind, id] of [
+      ["organization", f.org],
+      ["user", ownerId],
+      ["project", f.project],
+    ] as const)
+      await providers.setBudget(ownerToken, f.org, kind, id, 0, {
+        ...defaultBudgetLimits,
+        micro_usd: "1024",
+      });
+    let calls = 0;
+    generateHook = async (_r, _m, _q, _s, barrier) => {
+      await barrier?.();
+      calls++;
+      return result();
+    };
+    const attempts = await Promise.allSettled(
+      Array.from({ length: 4 }, () =>
+        providers.generate(f.grant, fixtureRequest()),
+      ),
+    );
+    expect(attempts.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(calls).toBe(1);
+    const view = await providers.getBudget(
+      ownerToken,
+      f.org,
+      "organization",
+      f.org,
+    );
+    expect(view.reserved.micro_usd).toBe("0");
+    expect(view.used.micro_usd).toBe("1024");
+    expect(view.used.calls).toBe("1");
+    const report = await providers.usage(ownerToken, f.org);
+    expect(report.reservations[0].charged_cost).toBe("1024");
+    expect(report.ledger.find((e) => e.event === "settle").spend_quality).toBe(
+      "estimated",
+    );
+    now = new Date((Math.floor(now.getTime() / 3600000) + 1) * 3600000);
   });
   it("holds current authority across bounded provider SQL mutations and denies after revocation", async () => {
     const admin = await fixtureMember("org_admin");

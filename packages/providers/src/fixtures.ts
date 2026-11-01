@@ -83,6 +83,7 @@ export class FakeProvider implements ModelProvider {
     private outcomes: Array<GenerateResult | Error> = [
       {
         text: "Synthetic result",
+        latency_ms: null,
         tool_calls: [],
         finish_reason: "stop",
         usage: { input_tokens: 20, output_tokens: 3, quality: "observed" },

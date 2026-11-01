@@ -27,9 +27,6 @@ export interface ModelProvider {
 }
 export * from "./connections.js";
 export * from "./control.js";
+export * from "./gateway.js";
 export * from "./instance.js";
-export * from "./ollama.js";
-export * from "./openrouter.js";
 export * from "./pricing.js";
-export * from "./router.js";
-export * from "./wire.js";
