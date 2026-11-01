@@ -1,6 +1,6 @@
 # Simulation runtime and fleet operations
 
-Chapter 03 is in progress. CL-03-01–03 implement bounded domain persistence, authenticated fleet/template/mission commands and durable fair dispatch. Authenticated workers, stop controls and streaming are subsequent checkpoints; queued references do not yet execute in a production worker at this checkpoint. No Minecraft connection, coding runner, external tool or live inference is implied. [ADR 0014](../architecture/decisions/0014-runtime-authority-and-recovery.md) defines the trust boundary.
+Chapter 03 is in progress. CL-03-01–04 supply bounded domain persistence, authenticated fleet/template/mission commands, durable fair dispatch and API-controlled simulation workers with bounded model decisions and independent approvals. Stop controls, streaming and recovery follow in CL-03-05–07. No Minecraft connection, coding runner, external tool or live inference is implied. [ADR 0014](../architecture/decisions/0014-runtime-authority-and-recovery.md) defines the trust boundary.
 
 Use a dedicated `simulation` environment created through the authenticated environment API with `{projectId,name,type:"simulation"}`. The existing account console can create projects; simulation setup is currently an API/CLI workflow, not the Minecraft world UI. Adults need explicit environment-scoped permissions or organization administration. Child access remains limited to assigned Minecraft worlds and cannot enter simulation.
 
@@ -70,12 +70,6 @@ Replace the illustrative environment string with a real UUID. Defaults are requi
 
 A successful CLI login prints only authentication status. Other commands emit authorized JSON resource projections or sanitized errors with nonzero exit codes. Logout revokes the session and therefore any queued grant tied to it; worker execution must revalidate, not trust the original submit response. Child/viewer denials are enforced by the API regardless of CLI arguments.
 
-## Evidence and next implementation
-
-`pnpm check` and `pnpm test:db` exercise graph/state bounds, immutable/same-mission SQL constraints, concurrent idempotency, current authority, tenant/environment isolation, native HTTP CLI login/get/execute/logout, revoked execution grants and viewer CLI denial. Tests use disposable databases and their own HTTP server/session directory. Never use the real unclaimed installation for fixtures.
-
-Read current delivery status before continuing. CL-03-03 supplies the durable outbox and fair scheduling; CL-03-04 supplies authenticated worker effects, then CL-03-05–07 stop, streams/recovery and fault review. These sections will be updated with actual commands/evidence as implemented, not treated as existing behavior.
-
 ## Durable dispatch and runtime quotas
 
 BullMQ 6.5.3 uses the existing private Redis backend; PostgreSQL remains authoritative. Queue messages carry schema version, event UUID, org lookup hint, task UUID and execution generation only. No grant, prompt, provider token or worker bearer is queued. Each API process can take bounded fair tenant turns through a transaction-scoped leadership lock and monotonic turn index; inactive tenants leave the scan. Outbox rows lease publication for 15 seconds and acknowledge by lease ID outside Redis I/O. A crash after publication repeats the same event ID. A still-ready task with missing delivery can publish a new hint after five seconds; actual worker claims must still fence canonical state. Dispatch repair is bounded to 128 references/task. Redis operations have two-second connect/command bounds, with durable retry timing rather than an open SQL transaction.
@@ -84,15 +78,9 @@ BullMQ 6.5.3 uses the existing private Redis backend; PostgreSQL remains authori
 
 Accounting explicitly reports `reserved_estimates`: a task attempt charges its bounded runtime and ten potential tool calls conservatively, rather than trusting a worker's CPU report. Storage allocates 4 KiB/agent, 8 KiB/group, 1 MiB/template and 1 MiB/task plus 256 KiB/mission for bounded records. These are conservative application allocations, not disk/CPU measurements or a substitute for container/host limits. Allocations are not silently refunded by deletion; retention/recovery tooling remains Chapter 09. Provider token/money limits remain independently authoritative. An exhausted cap blocks new work rather than increasing limits automatically.
 
-## Worker server-authority checkpoint
-
-CL-03-04 is in progress. The API can enroll/list/revoke org/environment-bound simulation workers with `agent:assign`. Enrollment returns a credential once; list/revoke responses are redacted. Store the returned token only in a protected file, never queue it. The production worker process/configuration and CLI enrollment convenience are not yet delivered at this checkpoint.
-
-`/api/v1/worker/claim`, `/heartbeat`, `/prepare`, `/finish` and `/stopped` accept only a registered bearer and protocol header `x-craftlayer-worker-protocol: 1`; cookie/CSRF identity cannot substitute for worker registration. Canonical scope, current initiating grant, task/agent availability, generation, fence, attempt ceiling and deadline are checked before claims and permits. SQL never spans an external action. A prepared receipt makes a lost acknowledgement uncertain; expiry does not refund active holds. These server checks pass real PostgreSQL/API fault tests; the local process watchdog, model decision path and independent approval primitive are still being implemented.
-
 ## Registered simulation worker process
 
-The process checkpoint adds a real API-controlled worker and CLI enrollment. Base Compose leaves its consumer unconfigured, health-checking private API/Redis without a database credential. A configured worker can process at most two simulation actions concurrently; canonical active-agent/membership/budget checks remain at the API. Task projections now include the latest canonical agent UUID. Model/approval execution remains the next checkpoint, not a delivered feature yet.
+The runtime includes a real API-controlled worker and CLI enrollment. Base Compose leaves its consumer unconfigured, health-checking private API/Redis without a database credential. A configured worker can process at most two simulation actions concurrently; canonical active-agent/membership/budget checks remain at the API. Task projections now include the latest canonical agent UUID. Model prompts remain at the trusted API; the worker receives only a registered action/proposal and short-lived authority.
 
 After logging in as an adult with the required environment assignment, enroll a worker and prepare transport settings:
 
@@ -110,3 +98,19 @@ Host development uses `pnpm dev:worker` and protected `.worker-secrets/host.env`
 The watchdog uses monotonic request-start times, subtracts network delay, clamps renewals to the initial action deadline and never resurrects an expired controller. One-second heartbeat failure aborts the action. A hung heartbeat cannot extend action authority; simulated effects stop before the original ten-second-or-smaller deadline. RPCs have explicit deadlines and 16 KiB response bounds. These simulation guarantees are not physical game/sandbox shutdown certification.
 
 `pnpm test:runtime-stack` creates a disposable private installation, enrolls a protected real worker, executes a parallel two-agent DAG through CLI/API, checks verified results and env/mount/log separation, then removes its containers/images/volumes. It performs zero catalog/model/game calls. `pnpm test:offline` proves the pure/watchdog suite without external networking.
+
+## Bounded model decisions and independent approvals
+
+Worker RPC `/api/v1/worker/decide` uses the same registered bearer/protocol/fence/current initiating authority as claims, permits and results. `fixture.model` can propose only strict JSON `{"tool":"fixture.echo","arguments":{"value":"..."}}` (value at most 512 characters). Unknown tools, extra authority fields, tool-call responses, oversized output and invalid JSON reject. At most three inference calls (initial plus two repairs) are allowed per attempt. Repairs contain a fixed schema reminder, never the untrusted previous response. Only the validated proposal is persisted; normal events contain neither prompt nor response.
+
+Each call gets a persisted server request UUID before provider work. Provider Gateway eligibility/free-only/accounting still applies. Immediately before its durable dispatch mark, a narrow SQL storage interface rechecks the exact canonical model call, worker, mission generation/fence/state, lease/action deadline and signed initiating grant. It shares the provider ledger transaction and runtime lock ordering; no transaction spans provider HTTP. Duplicate decisions in flight reject, completed decisions cache, and a lost response after dispatch blocks as uncertain without automatic inference replay or refund. Local tests use fake providers only; a real operator-local inference connection still requires deliberate operator configuration and authorization to run.
+
+`fixture.approval` blocks before any receipt/effect and exposes its exact action through `GET /api/v1/approvals?environment_id=UUID`. `POST /api/v1/approvals/:id/decision` accepts only `{decision:"approve"|"reject"}` from an independently authorized adult. The creator cannot approve themself. Hashes bind immutable action/mission/environment/template, execution generation and runtime policy versions; changed policy, stale generation or expired approval cannot authorize an action. Approval expires within five minutes/the mission deadline. The scheduler revalidates both initiating and approving grants before waking work. Preparation revalidates the exact same approval and both current authorities, with the permit deadline clamped to their session/grant/approval expiries. Approval tasks are serialized as barriers against concurrent mission actions. Rejection fails the blocked mission and releases only known inactive capacity.
+
+```bash
+pnpm cli approval list ORGANIZATION_UUID ENVIRONMENT_UUID
+pnpm cli approval approve ORGANIZATION_UUID APPROVAL_UUID
+pnpm cli approval reject ORGANIZATION_UUID APPROVAL_UUID
+```
+
+Use a separate adult CLI session/file for the reviewer. Approved work retains its original finite attempt ceiling; approval never increases budgets or creates permissions. This simulation primitive does not authorize future coding, deployment or Minecraft tools.

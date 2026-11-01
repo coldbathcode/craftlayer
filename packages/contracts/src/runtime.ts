@@ -306,3 +306,15 @@ export const modelDecision = z.union([
   }),
   runtimeBlocked,
 ]);
+
+export type RuntimeReason = z.infer<typeof runtimeReason>;
+export const approvalView = z.strictObject({
+  id: z.uuid(),
+  mission_id: z.uuid(),
+  task_id: z.uuid(),
+  generation: z.number().int().positive(),
+  state: z.enum(["pending", "approved", "rejected", "consumed"]),
+  action_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  action: fixtureTool,
+  expires_at: z.iso.datetime(),
+});

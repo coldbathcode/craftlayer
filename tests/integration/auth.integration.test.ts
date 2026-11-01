@@ -3241,7 +3241,75 @@ describe("durable fair scheduler and runtime quotas", () => {
 });
 
 describe("registered worker authority and fenced effects", () => {
+  let modelDirectory = "";
+  let outputs: string[] = [];
+  let modelCalls = 0;
+  let beforeModelDispatch: (() => Promise<void>) | undefined;
+  let afterModelDispatch: (() => Promise<void>) | undefined;
+  const modelPath = `${tmpdir()}/craftlayer-runtime-model-${crypto.randomUUID()}`;
+  const providers = new ProviderGateway({
+    databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+    auth,
+    files: new ProviderFiles({ policy: `${modelPath}/policy` }),
+    clock: () => now.getTime(),
+    providerFactory: () => {
+      const fake = new FakeProvider([fixtureModel(now.getTime())]);
+      fake.generate = async (_model, _request, signal, barrier) => {
+        signal.throwIfAborted();
+        await beforeModelDispatch?.();
+        await barrier?.();
+        modelCalls++;
+        await afterModelDispatch?.();
+        return {
+          text: outputs.shift() ?? "invalid",
+          tool_calls: [],
+          latency_ms: 1,
+          finish_reason: "stop",
+          usage: { quality: "observed", input_tokens: 30, output_tokens: 30 },
+          provider_request_id: null,
+        };
+      };
+      return fake;
+    },
+  });
+  async function setupModels() {
+    const { mkdir } = await import("node:fs/promises");
+    await mkdir(modelPath, { mode: 0o700 });
+    modelDirectory = modelPath;
+    await writeFile(
+      `${modelPath}/policy`,
+      JSON.stringify({
+        version: 1,
+        openrouter_enabled: false,
+        openrouter_models: [],
+        allow_paid: false,
+        max_paid_micro_usd: "0",
+        stopped: false,
+        ollama: [
+          {
+            id: "runtime-local",
+            url: "http://127.0.0.1:11434",
+            addresses: ["127.0.0.1"],
+            models: ["fixture-local"],
+            cloud_disabled: true,
+            context_tokens: 32768,
+            output_tokens: 1024,
+          },
+        ],
+      }),
+      { mode: 0o600 },
+    );
+  }
+  beforeEach(() => {
+    outputs = [];
+    modelCalls = 0;
+    beforeModelDispatch = undefined;
+    afterModelDispatch = undefined;
+  });
   class Harness extends RuntimeService {
+    async inspect(org: string, sql: string, params: unknown[] = []) {
+      return this.tx(org, (c) => c.query(sql, params));
+    }
     async cleanup(org: string) {
       await this.tx(org, async (c) => {
         const attempts = (
@@ -3289,12 +3357,14 @@ describe("registered worker authority and fenced effects", () => {
   const runtime = new Harness({
     databaseUrl: process.env.TEST_DATABASE_URL ?? "",
     auth,
+    providers,
     cursorSecret: csrfSecret,
     clock: () => now.getTime(),
   });
   let api: Awaited<ReturnType<typeof buildApp>>,
     logs = "";
   beforeAll(async () => {
+    await setupModels();
     api = await buildApp({
       auth,
       runtime,
@@ -3313,6 +3383,8 @@ describe("registered worker authority and fenced effects", () => {
   afterAll(async () => {
     await api.close();
     await runtime.close();
+    await providers.close();
+    await rm(modelDirectory, { recursive: true, force: true });
   });
   async function fixture(
     action: unknown = { kind: "fixture.echo", value: "verified" },
@@ -3643,6 +3715,327 @@ describe("registered worker authority and fenced effects", () => {
       await queue.obliterate({ force: true }).catch(() => {});
       await queue.disconnect();
       await runtime.cleanup(f.org);
+    }
+  });
+  async function configuredModel() {
+    const f = await fixture({
+      kind: "fixture.model",
+      prompt: "Synthetic approved prompt",
+    });
+    const connection = await providers.createConnection(ownerToken, f.org, {
+      kind: "ollama",
+      endpoint_id: "runtime-local",
+      label: "Runtime fake",
+    });
+    await providers.refreshModels(ownerToken, f.org, connection.id);
+    const c = (await runtime.claim(f.enrolled.credential.token, 1, f.reference))
+      .claim;
+    if (!c) throw new Error("Missing model claim");
+    return { ...f, h: handle(c), token: f.enrolled.credential.token };
+  }
+  it("repairs untrusted model proposals twice, caches canonical decisions and executes only the registered tool", async () => {
+    const f = await configuredModel();
+    try {
+      outputs = [
+        JSON.stringify({ tool: "terminal", arguments: { command: "evil" } }),
+        JSON.stringify({
+          tool: "fixture.echo",
+          arguments: { value: "x" },
+          approved: true,
+        }),
+        JSON.stringify({
+          tool: "fixture.echo",
+          arguments: { value: "reviewed" },
+        }),
+      ];
+      const response = await api.inject({
+        method: "POST",
+        url: "/api/v1/worker/decide",
+        headers: {
+          authorization: `Bearer ${f.token}`,
+          "x-craftlayer-worker-protocol": "1",
+        },
+        payload: f.h,
+      });
+      expect(response.statusCode).toBe(200);
+      const decision = response.json();
+      expect(decision).toMatchObject({
+        proposal: { tool: "fixture.echo", arguments: { value: "reviewed" } },
+      });
+      expect(modelCalls).toBe(3);
+      expect(await runtime.decide(f.token, 1, f.h)).toMatchObject(decision);
+      expect(modelCalls).toBe(3);
+      const rows = (
+        await runtime.inspect(
+          f.org,
+          "select step,state,proposal from runtime_model_calls where organization_id=$1 and attempt_id=$2 order by step",
+          [f.org, f.h.attempt_id],
+        )
+      ).rows;
+      expect(rows.map((r) => r.state)).toEqual([
+        "invalid",
+        "invalid",
+        "completed",
+      ]);
+      expect(JSON.stringify(rows)).not.toContain("evil");
+      await runtime.prepareAction(f.token, 1, f.h);
+      await expect(
+        runtime.finish(f.token, 1, {
+          ...f.h,
+          outcome: "succeeded",
+          value: "forged",
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      await runtime.finish(f.token, 1, {
+        ...f.h,
+        outcome: "succeeded",
+        value: "reviewed",
+      });
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("succeeded");
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("blocks repeated invalid plans and denies model dispatch after creator revocation", async () => {
+    const a = await configuredModel();
+    try {
+      outputs = ["bad", "bad", "bad", "should not be consumed"];
+      expect(await runtime.decide(a.token, 1, a.h)).toEqual({
+        blocked: true,
+        reason: "invalid_plan",
+      });
+      expect(modelCalls).toBe(3);
+    } finally {
+      await runtime.cleanup(a.org);
+    }
+    modelCalls = 0;
+    const b = await configuredModel();
+    try {
+      beforeModelDispatch = () => auth.logout(ownerToken);
+      expect(await runtime.decide(b.token, 1, b.h)).toMatchObject({
+        blocked: true,
+      });
+      expect(modelCalls).toBe(0);
+      expect(
+        (
+          await runtime.inspect(
+            b.org,
+            "select state from runtime_model_calls where organization_id=$1 and attempt_id=$2",
+            [b.org, b.h.attempt_id],
+          )
+        ).rows[0].state,
+      ).toBe("invalid");
+    } finally {
+      await runtime.cleanup(b.org);
+    }
+  });
+  it("serializes duplicate model decisions and blocks revoked-worker dispatch at the provider mark", async () => {
+    const f = await configuredModel();
+    let enter!: () => void, release!: () => void;
+    const entered = new Promise<void>((r) => {
+        enter = r;
+      }),
+      gate = new Promise<void>((r) => {
+        release = r;
+      });
+    beforeModelDispatch = async () => {
+      enter();
+      await gate;
+    };
+    outputs = [
+      JSON.stringify({ tool: "fixture.echo", arguments: { value: "one" } }),
+    ];
+    const deciding = runtime.decide(f.token, 1, f.h);
+    try {
+      await entered;
+      await expect(runtime.decide(f.token, 1, f.h)).rejects.toMatchObject({
+        status: 409,
+      });
+      await runtime.revokeWorker(
+        ownerToken,
+        f.org,
+        f.enrolled.registration.id,
+        1,
+      );
+      release();
+      expect(await deciding).toMatchObject({ blocked: true });
+      expect(modelCalls).toBe(0);
+      expect(
+        (
+          await runtime.inspect(
+            f.org,
+            "select id from runtime_action_receipts where organization_id=$1 and task_id=$2",
+            [f.org, f.h.task_id],
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      release();
+      await deciding.catch(() => {});
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("holds dispatched unknown inference without replaying it", async () => {
+    const f = await configuredModel();
+    try {
+      afterModelDispatch = async () => {
+        throw new ProviderError("timeout", true);
+      };
+      expect(await runtime.decide(f.token, 1, f.h)).toEqual({
+        blocked: true,
+        reason: "uncertain",
+      });
+      expect(modelCalls).toBe(1);
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_agents,
+      ).toBe(1);
+      await expect(runtime.decide(f.token, 1, f.h)).rejects.toMatchObject({
+        status: 409,
+      });
+      expect(modelCalls).toBe(1);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  async function approvalFixture() {
+    const f = await fixture({
+      kind: "fixture.approval",
+      value: "Exact approved action",
+    });
+    const token = f.enrolled.credential.token,
+      c = (await runtime.claim(token, 1, f.reference)).claim;
+    if (!c) throw new Error("Missing approval claim");
+    expect(await runtime.prepareAction(token, 1, handle(c))).toEqual({
+      blocked: true,
+      reason: "approval",
+    });
+    const a = (await runtime.listApprovals(ownerToken, f.org, f.env.id))[0];
+    if (!a) throw new Error("Missing approval");
+    return { ...f, token, approval: a };
+  }
+  async function reclaim(f: Awaited<ReturnType<typeof approvalFixture>>) {
+    now = new Date(now.getTime() + 5001);
+    let ref: DispatchReference | undefined;
+    for (let i = 0; i < 30 && !ref; i++)
+      await runtime.schedulerTick(async (r) => {
+        if (r.organization_id === f.org) ref = r;
+      });
+    if (!ref) throw new Error("Missing approved dispatch");
+    const c = (await runtime.claim(f.token, 1, ref)).claim;
+    if (!c) throw new Error("Missing approved claim");
+    return handle(c);
+  }
+  it("requires an independent adult for the exact action and revalidates the approver before dispatch", async () => {
+    const f = await approvalFixture();
+    try {
+      expect(f.approval.action).toEqual({
+        tool: "fixture.echo",
+        arguments: { value: "Exact approved action" },
+      });
+      await expect(
+        runtime.decideApproval(ownerToken, f.org, f.approval.id, "approve"),
+      ).rejects.toMatchObject({ status: 403 });
+      const adult = await fixtureMember("org_admin", f.org),
+        viewer = await fixtureMember("viewer", f.org),
+        child = await fixtureMember("org_admin", f.org, true);
+      for (const u of [viewer, child])
+        await expect(
+          runtime.decideApproval(u.token, f.org, f.approval.id, "approve"),
+        ).rejects.toMatchObject({ status: 403 });
+      await runtime.decideApproval(
+        adult.token,
+        f.org,
+        f.approval.id,
+        "approve",
+      );
+      const h = await reclaim(f);
+      await auth.logout(adult.token);
+      await expect(runtime.prepareAction(f.token, 1, h)).rejects.toMatchObject({
+        status: 403,
+      });
+      expect(
+        (
+          await runtime.inspect(
+            f.org,
+            "select id from runtime_action_receipts where organization_id=$1 and task_id=$2",
+            [f.org, h.task_id],
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+    const b = await approvalFixture();
+    try {
+      const adult = await fixtureMember("org_admin", b.org);
+      await runtime.decideApproval(
+        adult.token,
+        b.org,
+        b.approval.id,
+        "approve",
+      );
+      const h = await reclaim(b);
+      await runtime.prepareAction(b.token, 1, h);
+      await runtime.finish(b.token, 1, {
+        ...h,
+        outcome: "succeeded",
+        value: "Exact approved action",
+      });
+      expect(
+        (await runtime.getMission(ownerToken, b.org, b.mission)).state,
+      ).toBe("succeeded");
+      expect(
+        (await runtime.listApprovals(ownerToken, b.org, b.env.id))[0]?.state,
+      ).toBe("consumed");
+    } finally {
+      await runtime.cleanup(b.org);
+    }
+  });
+  it("invalidates changed-policy approvals and clamps claims to actual session expiry", async () => {
+    const f = await approvalFixture();
+    try {
+      const adult = await fixtureMember("org_admin", f.org);
+      const q = await runtime.runtimeBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+      );
+      await runtime.setRuntimeBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+        q.version,
+        q.limits,
+      );
+      await expect(
+        runtime.decideApproval(adult.token, f.org, f.approval.id, "approve"),
+      ).rejects.toMatchObject({ status: 409 });
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+    const b = await fixture();
+    try {
+      const session = (await auth.authenticate(ownerToken)).sessionId;
+      await pool.query("update sessions set idle_expires_at=$2 where id=$1", [
+        session,
+        new Date(now.getTime() + 100),
+      ]);
+      const c = (
+        await runtime.claim(b.enrolled.credential.token, 1, b.reference)
+      ).claim;
+      expect(c?.deadline_ms).toBeLessThanOrEqual(100);
+      if (!c) throw new Error("Missing bounded claim");
+      now = new Date(now.getTime() + 101);
+      await expect(
+        runtime.prepareAction(b.enrolled.credential.token, 1, handle(c)),
+      ).rejects.toMatchObject({ status: 403 });
+    } finally {
+      await runtime.cleanup(b.org);
     }
   });
 });

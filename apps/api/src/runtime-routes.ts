@@ -1,8 +1,8 @@
 import { AuthError } from "@craftlayer/auth";
 import {
-  actionPermit,
   agentCreate,
   agentView,
+  approvalView,
   attemptHandle,
   dispatchReference,
   errorSchema,
@@ -14,7 +14,9 @@ import {
   leaseView,
   missionCreate,
   missionView,
+  modelDecision,
   okSchema,
+  prepareView,
   runtimeLimitsSchema,
   runtimeQuotaView,
   templateCreate,
@@ -304,7 +306,7 @@ export async function registerRuntime(
     {
       schema: {
         body: attemptHandle,
-        response: { ...errors, 200: actionPermit },
+        response: { ...errors, 200: prepareView },
       },
     },
     (r) => runtime.prepareAction(bearer(r), protocol(r), r.body),
@@ -320,5 +322,57 @@ export async function registerRuntime(
     "/api/v1/worker/stopped",
     { schema: { body: attemptHandle, response: { ...errors, 200: okSchema } } },
     (r) => runtime.acknowledgeStopped(bearer(r), protocol(r), r.body),
+  );
+  api.get(
+    "/api/v1/approvals",
+    {
+      schema: {
+        querystring: query,
+        response: { ...errors, 200: itemsSchema(approvalView) },
+      },
+    },
+    async (r) => ({
+      items: await runtime.listApprovals(
+        token(r),
+        org(r),
+        r.query.environment_id,
+      ),
+    }),
+  );
+  api.post(
+    "/api/v1/approvals/:id/decision",
+    {
+      schema: {
+        params,
+        body: z.strictObject({ decision: z.enum(["approve", "reject"]) }),
+        response: { ...errors, 200: approvalView },
+      },
+    },
+    (r) =>
+      runtime.decideApproval(token(r), org(r), r.params.id, r.body.decision),
+  );
+  api.post(
+    "/api/v1/worker/decide",
+    {
+      schema: {
+        body: attemptHandle,
+        response: { ...errors, 200: modelDecision },
+      },
+    },
+    async (r, reply) => {
+      const controller = new AbortController(),
+        abort = () => controller.abort();
+      reply.raw.once("close", abort);
+      try {
+        return await runtime.decide(
+          bearer(r),
+          protocol(r),
+          r.body,
+          controller.signal,
+        );
+      } finally {
+        reply.raw.off("close", abort);
+      }
+    },
   );
 }

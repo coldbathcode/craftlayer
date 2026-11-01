@@ -36,7 +36,7 @@ export function deny(code = "RUNTIME_CONFLICT", status = 409): never {
 export interface RuntimeOptions {
   databaseUrl: string;
   auth: IdentityService;
-  providers?: ProviderGateway;
+  providers?: Pick<ProviderGateway, "generate">;
   cursorSecret: string;
   clock?: () => number;
 }
@@ -85,7 +85,7 @@ export interface TaskRow {
 export class RuntimeRepository {
   #pool: pg.Pool;
   protected readonly auth: IdentityService;
-  protected readonly providers: ProviderGateway | undefined;
+  protected readonly providers: Pick<ProviderGateway, "generate"> | undefined;
   protected readonly cursorSecret: string;
   protected readonly now: () => number;
   constructor(options: RuntimeOptions) {

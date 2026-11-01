@@ -39,8 +39,13 @@ const contextSchema = z
   .strictObject({
     mission_id: z.uuid().optional(),
     task_id: z.uuid().optional(),
+    attempt_id: z.uuid().optional(),
   })
-  .refine((v) => !v.task_id || Boolean(v.mission_id));
+  .refine(
+    (v) =>
+      (!v.task_id || Boolean(v.mission_id)) &&
+      (!v.attempt_id || Boolean(v.mission_id && v.task_id)),
+  );
 export type ExecutionBudgetContext = z.infer<typeof contextSchema>;
 interface CurrentState extends RoutingSnapshot {
   budget: BudgetConfiguration;
@@ -230,7 +235,26 @@ export class ProviderGateway extends GatewayControl {
           );
         }),
       dispatch: (reservation, epoch) =>
-        this.execute(grant, labels, async (client, _p, context) => {
+        this.execute(grant, labels, async (client, principal, context) => {
+          if (labels.attempt_id) {
+            const allowed = (
+              await client.query<{ allowed: boolean }>(
+                "select runtime_guard_provider_dispatch_v1($1,$2,$3,$4,$5,$6,$7,$8,$9) as allowed",
+                [
+                  context.org,
+                  labels.mission_id,
+                  labels.task_id,
+                  labels.attempt_id,
+                  request.request_id,
+                  grant.id,
+                  grant.signature,
+                  new Date(this.now()),
+                  new Date(principal.authorityExpiresAt ?? grant.expiresAt),
+                ],
+              )
+            ).rows[0]?.allowed;
+            if (!allowed) throw new ProviderError("policy_denied", false);
+          }
           const state = await this.current(client, context);
           if (state.epoch !== epoch || state.stopped)
             throw new ProviderError("policy_denied", false);
@@ -248,6 +272,8 @@ export class ProviderGateway extends GatewayControl {
             epoch,
             state.budget,
           );
+          if ((principal.authorityExpiresAt ?? grant.expiresAt) <= this.now())
+            throw new ProviderError("policy_denied", false);
         }),
       // Settlement must survive initiating-session revocation; this closure retains canonical org.
       complete: (reservation, outcome) =>

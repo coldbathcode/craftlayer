@@ -43,9 +43,15 @@ function origin(input: string) {
 export async function runtimeCli(args: string[]): Promise<boolean> {
   const [command, sub, org, a, b, key] = args;
   if (
-    !["login", "logout", "fleet", "template", "mission", "worker"].includes(
-      command ?? "",
-    )
+    ![
+      "login",
+      "logout",
+      "fleet",
+      "template",
+      "mission",
+      "worker",
+      "approval",
+    ].includes(command ?? "")
   )
     return false;
   try {
@@ -178,7 +184,19 @@ export async function runtimeCli(args: string[]): Promise<boolean> {
     }
     let result: unknown;
     const json = async () => JSON.parse(await readFile(a ?? "", "utf8"));
-    if (command === "worker" && sub === "list" && a)
+    if (command === "approval" && sub === "list" && a)
+      result = await client.approvals(org, z.uuid().parse(a));
+    else if (
+      command === "approval" &&
+      ["approve", "reject"].includes(sub ?? "") &&
+      a
+    )
+      result = await client.decideApproval(
+        org,
+        z.uuid().parse(a),
+        z.enum(["approve", "reject"]).parse(sub),
+      );
+    else if (command === "worker" && sub === "list" && a)
       result = await client.workers(org, z.uuid().parse(a));
     else if (command === "worker" && sub === "revoke" && a)
       result = await client.revokeWorker(

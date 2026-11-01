@@ -241,6 +241,10 @@ export async function within<T>(
 /** Workers have transport credentials only; identity/provider/database authority stays at the API. */
 export function parseWorkerConfig(env: Record<string, string | undefined>) {
   const forbidden = [
+    "RUNTIME_PASSWORD",
+    "IDENTITY_PASSWORD",
+    "MIGRATOR_PASSWORD",
+    "POSTGRES_PASSWORD",
     "DATABASE_URL",
     "AUTH_DATABASE_URL",
     "MIGRATION_DATABASE_URL",

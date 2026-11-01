@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   createHash,
   randomBytes,
@@ -13,6 +14,9 @@ import {
   finishRequest,
   finishView,
   leaseView,
+  type prepareView,
+  type RuntimeReason,
+  runtimeBlocked,
   taskDefinition,
   workerClaim,
   workerCreate,
@@ -60,6 +64,11 @@ export interface WorkerContext {
 const tokenHash = (token: string) =>
   createHash("sha256").update(token).digest("hex");
 export class RuntimeWorkers extends RuntimeScheduler {
+  protected authorizationWindow = new AsyncLocalStorage<{
+    expires: number;
+    approvalId?: string;
+    approvalSignature?: string;
+  }>();
   protected async serviceAudit(
     c: pg.PoolClient,
     org: string,
@@ -182,7 +191,10 @@ export class RuntimeWorkers extends RuntimeScheduler {
       token,
     );
     if (!m?.[1] || !m[2]) deny("WORKER_DENIED", 401);
-    return { org: z.uuid().parse(m[1]), id: z.uuid().parse(m[2]) };
+    const org = z.uuid().safeParse(m[1]),
+      id = z.uuid().safeParse(m[2]);
+    if (!org.success || !id.success) deny("WORKER_DENIED", 401);
+    return { org: org.data, id: id.data };
   }
   protected async worker(
     c: pg.PoolClient,
@@ -213,7 +225,7 @@ export class RuntimeWorkers extends RuntimeScheduler {
     );
     return row;
   }
-  private async candidate(token: string, protocol: number, task: string) {
+  protected async candidate(token: string, protocol: number, task: string) {
     const parts = this.workerParts(token, protocol);
     return this.tx(parts.org, async (c) => {
       const worker = await this.worker(c, token, protocol),
@@ -304,6 +316,17 @@ export class RuntimeWorkers extends RuntimeScheduler {
         )
           deny("SNAPSHOT_INVALID", 403);
         if (t.attempt_count >= def.max_attempts) deny("ATTEMPTS_EXHAUSTED");
+        const active = (
+          await c.query<{ kind: string }>(
+            "select t.definition->'action'->>'kind' as kind from runtime_attempts a join runtime_tasks t on t.organization_id=a.organization_id and t.id=a.task_id where a.organization_id=$1 and a.mission_id=$2 and a.state in ('leased','running','uncertain','cancel_requested')",
+            [parts.org, m.id],
+          )
+        ).rows;
+        if (
+          active.some((a) => a.kind === "fixture.approval") ||
+          (def.action.kind === "fixture.approval" && active.length)
+        )
+          return { claim: null };
         const agent = (
           await c.query<{ id: string }>(
             "select a.id from runtime_agents a join runtime_group_agents g on g.organization_id=a.organization_id and g.agent_id=a.id where a.organization_id=$1 and g.group_id=$2 and a.environment_id=$3 and a.state in ('idle','assigned') and not exists(select 1 from runtime_attempts x where x.organization_id=a.organization_id and x.agent_id=a.id and x.state in ('leased','running','uncertain','cancel_requested')) order by a.id limit 1 for update of a skip locked",
@@ -314,7 +337,12 @@ export class RuntimeWorkers extends RuntimeScheduler {
         const id = randomUUID(),
           fence = t.fence + 1,
           deadline = new Date(
-            Math.min(this.now() + def.timeout_ms, m.deadline.getTime()),
+            Math.min(
+              this.now() + def.timeout_ms,
+              m.deadline.getTime(),
+              p.authorityExpiresAt ?? grant.expiresAt,
+              grant.expiresAt,
+            ),
           ),
           lease = new Date(this.now() + 15000);
         await c.query(
@@ -431,6 +459,60 @@ export class RuntimeWorkers extends RuntimeScheduler {
       deny("WORKER_STOPPED");
     return { worker: w, mission: m, task: t, attempt: a };
   }
+  protected async executionAuthority<T>(
+    located: { mission: MissionRow; task: TaskRow },
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const grant = this.grant(located.mission);
+    return this.auth.guardExecution(grant, (p) =>
+      this.authorizationWindow.run(
+        {
+          expires: p.authorityExpiresAt ?? grant.expiresAt,
+        },
+        operation,
+      ),
+    );
+  }
+  protected async beforePrepare(
+    _c: pg.PoolClient,
+    ctx: WorkerContext,
+  ): Promise<z.infer<typeof runtimeBlocked> | null> {
+    if (
+      taskDefinition.parse(ctx.task.definition).action.kind ===
+      "fixture.approval"
+    )
+      deny("APPROVAL_REQUIRED", 403);
+    return null;
+  }
+  protected async blockAttempt(
+    c: pg.PoolClient,
+    ctx: WorkerContext,
+    reason: RuntimeReason,
+  ) {
+    const org = ctx.worker.organization_id;
+    await this.retire(c, ctx, "released");
+    await c.query(
+      "update runtime_tasks set state='blocked',reason=$3 where organization_id=$1 and id=$2 and state in ('leased','running')",
+      [org, ctx.task.id, reason],
+    );
+    await c.query(
+      "update runtime_missions set state='blocked',reason=$3,version=version+1 where organization_id=$1 and id=$2 and state in ('queued','running')",
+      [org, ctx.mission.id, reason],
+    );
+    await this.serviceAudit(
+      c,
+      org,
+      ctx.worker.id,
+      ctx.task.id,
+      ctx.attempt.id,
+      "runtime.task_blocked",
+    );
+    await this.event(c, ctx.mission, "task.blocked", {
+      task_id: ctx.task.id,
+      reason,
+    });
+    return runtimeBlocked.parse({ blocked: true, reason });
+  }
   protected async withAttempt<T>(
     token: string,
     protocol: number,
@@ -440,9 +522,15 @@ export class RuntimeWorkers extends RuntimeScheduler {
     const h = attemptHandle.strip().parse(input),
       located = await this.candidate(token, protocol, h.task_id),
       grant = this.grant(located.mission);
-    return this.auth.guardExecution(grant, () =>
+    return this.executionAuthority(located, () =>
       this.tx(located.worker.organization_id, async (c) => {
         const context = await this.attemptContext(c, token, protocol, h);
+        const until = this.authorizationWindow.getStore()?.expires;
+        if (until !== undefined)
+          context.attempt.deadline_at = new Date(
+            Math.min(context.attempt.deadline_at.getTime(), until),
+          );
+        this.lease(context.attempt);
         if (digest(this.grant(context.mission)) !== digest(grant))
           deny("GRANT_DENIED", 403);
         return operation(c, context);
@@ -503,15 +591,18 @@ export class RuntimeWorkers extends RuntimeScheduler {
     }
     deny("TOOL_NOT_AUTHORIZED", 403);
   }
-  async prepareAction(token: string, protocol: number, input: unknown) {
+  async prepareAction(
+    token: string,
+    protocol: number,
+    input: unknown,
+  ): Promise<z.infer<typeof prepareView>> {
     return this.withAttempt(
       token,
       protocol,
       attemptHandle.parse(input),
       async (c, ctx) => {
-        const def = taskDefinition.parse(ctx.task.definition);
-        if (def.action.kind === "fixture.approval")
-          deny("APPROVAL_REQUIRED", 403);
+        const blocked = await this.beforePrepare(c, ctx);
+        if (blocked) return blocked;
         const value = await this.expectedValue(c, ctx),
           key = digest({
             task: ctx.task.id,
@@ -595,6 +686,12 @@ export class RuntimeWorkers extends RuntimeScheduler {
           )
         ).rows;
       if (v.outcome === "succeeded") {
+        const definition = taskDefinition.parse(ctx.task.definition);
+        if (
+          definition.action.kind === "fixture.fail" &&
+          ctx.task.attempt_count <= definition.action.failures
+        )
+          deny("VERIFICATION_FAILED", 403);
         const expected = await this.expectedValue(c, ctx);
         if (
           v.value !== expected ||
@@ -711,7 +808,13 @@ export class RuntimeWorkers extends RuntimeScheduler {
           [parts.org, h.attempt_id],
         )
       ).rowCount;
-      if (receipt) {
+      const modelUnknown = (
+        await c.query(
+          "select request_id from runtime_model_calls where organization_id=$1 and attempt_id=$2 and state in ('dispatched','uncertain')",
+          [parts.org, h.attempt_id],
+        )
+      ).rowCount;
+      if (receipt || modelUnknown) {
         await this.uncertain(c, ctx);
         return { ok: true as const };
       }

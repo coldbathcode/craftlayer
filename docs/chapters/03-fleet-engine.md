@@ -50,9 +50,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Crash between commit/publish and duplicate relay produces one durable task result; org cannot starve peers.
 
-### [ ] CL-03-04 — Worker claims and bounded runtime
+### [x] CL-03-04 — Worker claims and bounded runtime
 
-**Depends on:** CL-03-03. **Size:** L. **Status:** in progress; server authority and worker-process checkpoints verified; model/approval integration remains.
+**Depends on:** CL-03-03. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Authenticate org-bound workers, claim tasks atomically, increment fence, heartbeat leases, validate structured tool proposals and enforce deadlines/cancellation. Keep model loops bounded.
 

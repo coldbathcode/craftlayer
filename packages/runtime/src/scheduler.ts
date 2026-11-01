@@ -18,6 +18,7 @@ export type Publisher = (
   environment: string,
 ) => Promise<void>;
 export class RuntimeScheduler extends RuntimeQuotas {
+  protected async resolvePending(_org: string): Promise<void> {}
   protected override async queued(c: pg.PoolClient, row: MissionRow) {
     await this.admit(c, row);
     await c.query(
@@ -222,6 +223,7 @@ export class RuntimeScheduler extends RuntimeQuotas {
       return next.organization_id;
     });
     if (!org) return null;
+    await this.resolvePending(org);
     const rows = await this.tx(
       org,
       async (c) =>

@@ -1,6 +1,7 @@
 import {
   agentCreate,
   agentView,
+  approvalView,
   groupCreate,
   groupView,
   itemsSchema,
@@ -27,6 +28,22 @@ export type RuntimeTransport = <T extends z.ZodType>(
 ) => Promise<z.infer<T>>;
 export function createRuntimeClient(send: RuntimeTransport) {
   return {
+    approvals: (org: string, environment: string) =>
+      send(
+        `/api/v1/approvals?environment_id=${encodeURIComponent(environment)}`,
+        itemsSchema(approvalView),
+        { organization: org },
+      ),
+    decideApproval: (org: string, id: string, decision: "approve" | "reject") =>
+      send(
+        `/api/v1/approvals/${encodeURIComponent(id)}/decision`,
+        approvalView,
+        {
+          method: "POST",
+          json: { decision },
+          organization: org,
+        },
+      ),
     enrollWorker: (org: string, input: z.input<typeof workerCreate>) =>
       send("/api/v1/workers", workerEnrollment, {
         method: "POST",
