@@ -8,6 +8,8 @@ import {
   itemsSchema,
   missionCreate,
   missionView,
+  runtimeLimitsSchema,
+  runtimeQuotaView,
   templateCreate,
   templateView,
   versionRequest,
@@ -180,6 +182,39 @@ export async function registerRuntime(
         r.params.id,
         key(r),
         r.body.expected_version,
+      ),
+  );
+  const quotaParams = z.strictObject({
+    kind: z.enum(["organization", "user", "project"]),
+    id: z.uuid(),
+  });
+  api.get(
+    "/api/v1/runtime-budgets/:kind/:id",
+    {
+      schema: {
+        params: quotaParams,
+        response: { ...errors, 200: runtimeQuotaView },
+      },
+    },
+    (r) => runtime.runtimeBudget(token(r), org(r), r.params.kind, r.params.id),
+  );
+  api.put(
+    "/api/v1/runtime-budgets/:kind/:id",
+    {
+      schema: {
+        params: quotaParams,
+        body: versionRequest.extend({ limits: runtimeLimitsSchema }),
+        response: { ...errors, 200: runtimeQuotaView },
+      },
+    },
+    (r) =>
+      runtime.setRuntimeBudget(
+        token(r),
+        org(r),
+        r.params.kind,
+        r.params.id,
+        r.body.expected_version,
+        r.body.limits,
       ),
   );
 }

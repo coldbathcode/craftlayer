@@ -181,3 +181,27 @@ export const dispatchReference = z.strictObject({
   execution_generation: z.number().int().positive(),
 });
 export type DispatchReference = z.infer<typeof dispatchReference>;
+export const runtimeLimitsSchema = z.strictObject({
+  active_missions: z.number().int().min(0).max(4),
+  active_agents: z.number().int().min(0).max(8),
+  hourly_tool_calls: z.number().int().min(0).max(10000),
+  hourly_runtime_ms: z.number().int().min(0).max(3600000),
+  storage_bytes: z.number().int().min(0).max(268435456),
+});
+export const defaultRuntimeLimits = {
+  active_missions: 2,
+  active_agents: 4,
+  hourly_tool_calls: 500,
+  hourly_runtime_ms: 600000,
+  storage_bytes: 67108864,
+} as const;
+export const runtimeQuotaView = z.strictObject({
+  accounting: z.literal("reserved_estimates"),
+  version: z.number().int().positive(),
+  limits: runtimeLimitsSchema,
+  active_missions: z.number().int().nonnegative(),
+  active_agents: z.number().int().nonnegative(),
+  storage_bytes: z.number().int().nonnegative(),
+  hourly_tool_calls: z.number().int().nonnegative(),
+  hourly_runtime_ms: z.number().int().nonnegative(),
+});

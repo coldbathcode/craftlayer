@@ -4,6 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { Writable } from "node:stream";
+import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../apps/api/src/app.js";
@@ -17,6 +18,7 @@ import {
   type GenerateResult,
   type ModelDescriptor,
 } from "../../packages/contracts/src/index.js";
+import type { DispatchReference } from "../../packages/contracts/src/runtime.js";
 import type { ConnectionRow } from "../../packages/providers/src/connections.js";
 import { openCredential } from "../../packages/providers/src/credentials.js";
 import {
@@ -30,7 +32,12 @@ import {
   ProviderGateway,
 } from "../../packages/providers/src/index.js";
 import { BudgetLedger } from "../../packages/providers/src/ledger.js";
-import { RuntimeService } from "../../packages/runtime/src/index.js";
+import {
+  queueName,
+  RuntimeService,
+  redisConnection,
+  redisPublisher,
+} from "../../packages/runtime/src/index.js";
 
 const databaseUrl = process.env.TEST_IDENTITY_DATABASE_URL;
 if (!databaseUrl) throw new Error("Disposable identity database required");
@@ -2874,6 +2881,333 @@ describe("scoped runtime command API and CLI", () => {
     } finally {
       await server.close();
       await rm(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("durable fair scheduler and runtime quotas", () => {
+  class Harness extends RuntimeService {
+    async reference(
+      ref: DispatchReference,
+      outcome: "succeeded" | "failed" = "succeeded",
+    ) {
+      return this.tx(ref.organization_id, async (c) => {
+        const task = (
+          await c.query(
+            "select t.*,m.generation,m.state as mission_state from runtime_tasks t join runtime_missions m on m.organization_id=t.organization_id and m.id=t.mission_id where t.organization_id=$1 and t.id=$2 and t.state='ready' and m.generation=$3 and m.state in ('queued','running') for update of t,m",
+            [ref.organization_id, ref.task_id, ref.execution_generation],
+          )
+        ).rows[0];
+        if (!task) return false;
+        await c.query(
+          "update runtime_missions set state='running',version=version+1 where organization_id=$1 and id=$2 and state='queued'",
+          [ref.organization_id, task.mission_id],
+        );
+        for (const state of ["leased", "running"])
+          await c.query(
+            "update runtime_tasks set state=$3 where organization_id=$1 and id=$2",
+            [ref.organization_id, task.id, state],
+          );
+        await c.query(
+          "update runtime_tasks set state=$3,verified=$4,result=$5 where organization_id=$1 and id=$2",
+          [
+            ref.organization_id,
+            task.id,
+            outcome,
+            outcome === "succeeded",
+            { value: "verified" },
+          ],
+        );
+        await this.progress(
+          c,
+          await this.mission(c, ref.organization_id, task.mission_id),
+        );
+        return true;
+      });
+    }
+    async cleanup(org: string) {
+      await this.tx(org, async (c) => {
+        const missions = (
+          await c.query<{ id: string }>(
+            "select id from runtime_missions where organization_id=$1 and state in ('queued','running','blocked','paused')",
+            [org],
+          )
+        ).rows;
+        for (const m of missions) {
+          await c.query(
+            "update runtime_tasks set state='cancelled' where organization_id=$1 and mission_id=$2 and state in ('pending','ready','retry_wait','blocked')",
+            [org, m.id],
+          );
+          const row = await this.mission(c, org, m.id);
+          await c.query(
+            "update runtime_missions set state='cancelled',version=version+1 where organization_id=$1 and id=$2 and state<>'running'",
+            [org, m.id],
+          );
+          await this.releaseMission(c, row);
+        }
+      });
+    }
+  }
+  const runtime = new Harness({
+    databaseUrl: process.env.TEST_DATABASE_URL ?? "",
+    auth,
+    cursorSecret: csrfSecret,
+    clock: () => now.getTime(),
+  });
+  afterAll(() => runtime.close());
+  async function fixture(name: string) {
+    const org = (await auth.createOrganization(ownerToken, name)).id,
+      project = await auth.createProject(ownerToken, org, "Scheduler project"),
+      env = await auth.createEnvironment(ownerToken, org, {
+        projectId: project.id,
+        name: "Scheduler simulation",
+        type: "simulation",
+      }),
+      agent = await runtime.createAgent(ownerToken, org, {
+        environment_id: env.id,
+        name: "Agent",
+        adapter: "simulation",
+      }),
+      group = await runtime.createGroup(ownerToken, org, {
+        environment_id: env.id,
+        name: "Group",
+        agent_ids: [agent.id],
+      }),
+      template = await runtime.createTemplate(ownerToken, org, {
+        environment_id: env.id,
+        name: "One task",
+        adapter: "simulation",
+        graph: {
+          schema_version: 1,
+          nodes: [
+            {
+              key: "echo",
+              action: { kind: "fixture.echo", value: "verified" },
+            },
+          ],
+        },
+      });
+    return { org, env, group, template };
+  }
+  async function mission(f: Awaited<ReturnType<typeof fixture>>) {
+    const draft = await runtime.createMission(
+      ownerToken,
+      f.org,
+      crypto.randomUUID(),
+      {
+        name: "Scheduler mission",
+        group_id: f.group.id,
+        template_id: f.template.id,
+      },
+    );
+    return runtime.executeMission(
+      ownerToken,
+      f.org,
+      draft.id,
+      crypto.randomUUID(),
+      1,
+    );
+  }
+  it("gives active organizations bounded fair turns and rejects concurrent over-admission", async () => {
+    const a = await fixture("Fair A"),
+      b = await fixture("Fair B");
+    try {
+      await mission(a);
+      await mission(b);
+      const seen: string[] = [];
+      for (let i = 0; i < 8; i++) {
+        const org = await runtime.schedulerTick(async () => {});
+        if (org) seen.push(org);
+      }
+      expect(seen).toContain(a.org);
+      expect(seen).toContain(b.org);
+      expect(
+        Math.abs(
+          seen.filter((x) => x === a.org).length -
+            seen.filter((x) => x === b.org).length,
+        ),
+      ).toBeLessThanOrEqual(1);
+    } finally {
+      await runtime.cleanup(a.org);
+      await runtime.cleanup(b.org);
+    }
+    const c = await fixture("Capacity race");
+    try {
+      const q = await runtime.runtimeBudget(
+        ownerToken,
+        c.org,
+        "organization",
+        c.org,
+      );
+      await runtime.setRuntimeBudget(
+        ownerToken,
+        c.org,
+        "organization",
+        c.org,
+        q.version,
+        { ...q.limits, active_missions: 1 },
+      );
+      const attempts = await Promise.allSettled(
+        Array.from({ length: 5 }, () => mission(c)),
+      );
+      expect(attempts.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+      expect(
+        (await runtime.runtimeBudget(ownerToken, c.org, "organization", c.org))
+          .active_missions,
+      ).toBe(1);
+      const budget = await runtime.runtimeBudget(
+        ownerToken,
+        c.org,
+        "organization",
+        c.org,
+      );
+      await runtime.setRuntimeBudget(
+        ownerToken,
+        c.org,
+        "organization",
+        c.org,
+        budget.version,
+        { ...budget.limits, storage_bytes: budget.storage_bytes + 1024 },
+      );
+      await expect(
+        runtime.createTemplate(ownerToken, c.org, {
+          environment_id: c.env.id,
+          name: "Over storage",
+          adapter: "simulation",
+          graph: {
+            schema_version: 1,
+            nodes: [
+              { key: "echo", action: { kind: "fixture.echo", value: "x" } },
+            ],
+          },
+        }),
+      ).rejects.toMatchObject({ status: 429 });
+    } finally {
+      await runtime.cleanup(c.org);
+    }
+  });
+  it("replays a commit/publish crash safely and repairs Redis queue loss from durable ready state", async () => {
+    const f = await fixture("Outbox fault"),
+      url = process.env.TEST_REDIS_URL;
+    if (!url) throw new Error("Disposable Redis required");
+    const queue = new Queue(queueName(f.org, f.env.id), {
+        connection: redisConnection(url),
+      }),
+      publish = redisPublisher(url);
+    queue.on("error", () => {});
+    const refs: DispatchReference[] = [];
+    try {
+      const m = await mission(f);
+      for (let i = 0; i < 8 && !refs.length; i++)
+        await runtime.schedulerTick(async (ref, environment) => {
+          if (ref.organization_id !== f.org) return;
+          await publish(ref, environment);
+          refs.push(ref);
+          throw new Error("Simulated death before ack");
+        });
+      expect(refs).toHaveLength(1);
+      expect(await queue.getWaitingCount()).toBe(1);
+      now = new Date(now.getTime() + 2500);
+      for (let i = 0; i < 8 && refs.length < 2; i++)
+        await runtime.schedulerTick(async (ref, environment) => {
+          if (ref.organization_id !== f.org) return;
+          await publish(ref, environment);
+          refs.push(ref);
+        });
+      expect(refs[1]?.event_id).toBe(refs[0]?.event_id);
+      expect(await queue.getWaitingCount()).toBe(1);
+      await queue.obliterate({ force: true });
+      now = new Date(now.getTime() + 6000);
+      for (let i = 0; i < 8 && refs.length < 3; i++)
+        await runtime.schedulerTick(async (ref, environment) => {
+          if (ref.organization_id !== f.org) return;
+          await publish(ref, environment);
+          refs.push(ref);
+        });
+      expect(refs[2]?.event_id).not.toBe(refs[0]?.event_id);
+      expect(await queue.getWaitingCount()).toBe(1);
+      const duplicate = refs[0];
+      if (!duplicate) throw new Error("Missing dispatch");
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () => runtime.reference(duplicate)),
+      );
+      expect(results.filter(Boolean)).toHaveLength(1);
+      expect((await runtime.getMission(ownerToken, f.org, m.id)).state).toBe(
+        "succeeded",
+      );
+    } finally {
+      await runtime.cleanup(f.org);
+      await queue.obliterate({ force: true }).catch(() => {});
+      await queue.disconnect();
+    }
+  });
+  it("fails required dependents in topological order while skipping optional dependents", async () => {
+    const f = await fixture("Dependency outcomes");
+    try {
+      const template = await runtime.createTemplate(ownerToken, f.org, {
+        environment_id: f.env.id,
+        name: "Dependent failure",
+        adapter: "simulation",
+        graph: {
+          schema_version: 1,
+          nodes: [
+            {
+              key: "z_source",
+              required: false,
+              action: {
+                kind: "fixture.fail",
+                failure: "permanent",
+                failures: 1,
+              },
+            },
+            {
+              key: "a_required",
+              dependencies: [{ key: "z_source" }],
+              action: { kind: "fixture.echo", value: "must not run" },
+            },
+            {
+              key: "b_optional",
+              required: false,
+              dependencies: [{ key: "z_source" }],
+              action: { kind: "fixture.echo", value: "skip" },
+            },
+          ],
+        },
+      });
+      const draft = await runtime.createMission(
+        ownerToken,
+        f.org,
+        crypto.randomUUID(),
+        {
+          name: "Failure propagation",
+          group_id: f.group.id,
+          template_id: template.id,
+        },
+      );
+      await runtime.executeMission(
+        ownerToken,
+        f.org,
+        draft.id,
+        crypto.randomUUID(),
+        1,
+      );
+      let reference: DispatchReference | undefined;
+      for (let i = 0; i < 12 && !reference; i++)
+        await runtime.schedulerTick(async (r) => {
+          if (r.organization_id === f.org) reference = r;
+        });
+      if (!reference) throw new Error("Missing reference");
+      await runtime.reference(reference, "failed");
+      const view = await runtime.getMission(ownerToken, f.org, draft.id);
+      expect(view.state).toBe("failed");
+      expect(view.tasks.find((t) => t.key === "a_required")?.state).toBe(
+        "failed",
+      );
+      expect(view.tasks.find((t) => t.key === "b_optional")?.state).toBe(
+        "skipped",
+      );
+    } finally {
+      await runtime.cleanup(f.org);
     }
   });
 });

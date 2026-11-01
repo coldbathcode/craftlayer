@@ -20,6 +20,7 @@
     "@craftlayer/contracts": "workspace:*",
     "@craftlayer/core": "workspace:*",
     "@craftlayer/providers": "workspace:*",
+    "bullmq": "6.5.3",
     "pg": "8.23.1",
     "zod": "4.6.7"
   },

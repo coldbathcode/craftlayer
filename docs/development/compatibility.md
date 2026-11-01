@@ -19,7 +19,7 @@ Recorded 2026-10-31. Exact dependency resolutions live in `pnpm-lock.yaml`; immu
 | Biome | 2.6.4 | Warning-free source formatting/lint; source Markdown excluded from automated rewrites |
 | Playwright | 1.64.1 | Chromium desktop and mobile viewport suites; WebKit/Firefox not claimed |
 | Mineflayer | Metadata inspected at 4.39.0; not installed | Requires Node >=22; actual Java/game/auth/pathfinder selection and testing remain Chapter 04 |
-| BullMQ | Not installed | Queue execution/recovery starts Chapter 03; foundation Redis is connectivity only |
+| BullMQ | 6.5.3, Redis backend | Chapter 03 real Redis publication/replay/queue-loss contracts; PostgreSQL authority and current task evidence in runtime status |
 | Provider transport | Node 22 native HTTP/TLS, no SDK | Chapter 02 bounded protocol/failure contracts and synthetic database/Compose qualification; real server/model versions unverified |
 | Java / Ollama | Not installed or required | Minecraft remains Chapter 04; Chapter 02 Ollama contracts use fakes, live inference/hardware deferred |
 

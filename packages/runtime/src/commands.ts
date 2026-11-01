@@ -23,6 +23,7 @@ export class RuntimeCommands extends RuntimeRepository {
       "agent:assign",
       async (c, p, e) => {
         const id = randomUUID();
+        await this.storage(c, org, p.user.id, e.project_id, id, 4096);
         await c.query(
           "insert into runtime_agents(id,organization_id,project_id,environment_id,name,adapter) values($1,$2,$3,$4,$5,'simulation')",
           [id, org, e.project_id, e.id, v.name],
@@ -121,6 +122,7 @@ export class RuntimeCommands extends RuntimeRepository {
         ).rows;
         if (agents.length !== v.agent_ids.length) deny("NOT_FOUND", 404);
         const id = randomUUID();
+        await this.storage(c, org, p.user.id, e.project_id, id, 8192);
         await c.query(
           "insert into runtime_groups(id,organization_id,project_id,environment_id,name) values($1,$2,$3,$4,$5)",
           [id, org, e.project_id, e.id, v.name],
@@ -187,6 +189,7 @@ export class RuntimeCommands extends RuntimeRepository {
         }
         const id = randomUUID(),
           hash = digest(v.graph);
+        await this.storage(c, org, p.user.id, e.project_id, id, 1048576);
         await c.query(
           "insert into runtime_templates(id,organization_id,project_id,environment_id,family_id,version,name,adapter,hash,graph,created_by) values($1,$2,$3,$4,$5,$6,$7,'simulation',$8,$9,$10)",
           [
@@ -269,6 +272,14 @@ export class RuntimeCommands extends RuntimeRepository {
             }
             if (digest(graph) !== template.hash) deny("SNAPSHOT_INVALID", 403);
             const id = randomUUID();
+            await this.storage(
+              c,
+              org,
+              p.user.id,
+              e.project_id,
+              id,
+              graph.nodes.length * 1048576 + 262144,
+            );
             await c.query(
               "insert into runtime_missions(id,organization_id,project_id,environment_id,group_id,template_id,name,template_hash,snapshot,created_by,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
               [

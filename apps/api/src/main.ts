@@ -7,7 +7,7 @@ import {
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
 import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
-import { RuntimeService } from "@craftlayer/runtime";
+import { RuntimeService, redisPublisher } from "@craftlayer/runtime";
 import { createClient } from "redis";
 import { buildApp } from "./app.js";
 
@@ -61,6 +61,24 @@ try {
     providers,
     cursorSecret: config.CRAFTLAYER_CSRF_SECRET,
   });
+  let scheduling = false;
+  const publish = redisPublisher(config.REDIS_URL);
+  const runtimeTimer = setInterval(() => {
+    if (scheduling) return;
+    scheduling = true;
+    void runtime
+      .schedulerTick(publish)
+      .catch(() =>
+        log.warn(
+          { code: "RUNTIME_TICK_FAILED" },
+          "Runtime maintenance denied; values omitted",
+        ),
+      )
+      .finally(() => {
+        scheduling = false;
+      });
+  }, 1000);
+  runtimeTimer.unref();
   let mailBusy = false;
   const mailTimer = config.CRAFTLAYER_SMTP_URL
     ? setInterval(() => {
@@ -86,6 +104,7 @@ try {
     commandsQueueMaxLength: 10,
   });
   close = async () => {
+    clearInterval(runtimeTimer);
     if (mailTimer) clearInterval(mailTimer);
     if (redis.isOpen) redis.destroy();
     await pool.end();
@@ -117,6 +136,7 @@ try {
   });
   close = async () => {
     await app.close();
+    clearInterval(runtimeTimer);
     if (mailTimer) clearInterval(mailTimer);
     if (redis.isOpen) redis.destroy();
     await pool.end();

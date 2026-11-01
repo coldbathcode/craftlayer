@@ -42,9 +42,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Duplicate execute submits one logical execution; CLI permissions match API; revoked creator cannot execute queued work.
 
-### [ ] CL-03-03 — Outbox and fair scheduler
+### [x] CL-03-03 — Outbox and fair scheduler
 
-**Depends on:** CL-03-02. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-02. **Size:** L. **Status:** verified; see build log.
 
 **Implementation:** Implement atomic state/audit/outbox writes, publisher retries, organization fairness, capacity quotas and missed-dispatch reconciliation. Make scheduler leadership/leases explicit.
 

@@ -4,6 +4,7 @@ import {
   appendFileSync,
   cpSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -12,6 +13,7 @@ import { join } from "node:path";
 
 const image = "craftlayer-postgres-test:local";
 const name = `craftlayer-test-${process.pid}`;
+const redisName = `craftlayer-redis-test-${process.pid}`;
 const password = randomBytes(24).toString("hex");
 const env = { ...process.env };
 const migrationFixture = mkdtempSync(join(tmpdir(), "craftlayer-migrations-"));
@@ -72,6 +74,48 @@ try {
   env.MIGRATION_DATABASE_URL = `postgres://craftlayer_migrator:${password}@127.0.0.1:${port}/craftlayer`;
   env.TEST_DATABASE_URL = `postgres://craftlayer_runtime:${password}@127.0.0.1:${port}/craftlayer`;
   env.TEST_IDENTITY_DATABASE_URL = `postgres://craftlayer_identity:${password}@127.0.0.1:${port}/craftlayer`;
+  const redisImage = JSON.parse(readFileSync("infra/images.lock.json", "utf8"))
+    .redis.image;
+  run("docker", [
+    "run",
+    "-d",
+    "--name",
+    redisName,
+    "--user",
+    "redis",
+    "--cap-drop",
+    "ALL",
+    "--read-only",
+    "--tmpfs",
+    "/tmp",
+    "--memory",
+    "128m",
+    "-e",
+    `REDISCLI_AUTH=${password}`,
+    "-p",
+    "127.0.0.1::6379",
+    redisImage,
+    "sh",
+    "-c",
+    'exec redis-server --save "" --appendonly no --requirepass "$REDISCLI_AUTH"',
+  ]);
+  let redisReady = false;
+  for (let i = 0; i < 60; i++) {
+    if (
+      spawnSync("docker", ["exec", redisName, "redis-cli", "ping"], {
+        stdio: "ignore",
+      }).status === 0
+    ) {
+      redisReady = true;
+      break;
+    }
+    await new Promise((accept) => setTimeout(accept, 500));
+  }
+  if (!redisReady) throw new Error("Test Redis readiness timed out");
+  const redisPort = run("docker", ["port", redisName, "6379/tcp"])
+    .split(":")
+    .at(-1);
+  env.TEST_REDIS_URL = `redis://:${password}@127.0.0.1:${redisPort}`;
   for (let i = 0; i < 2; i++)
     run("pnpm", ["db:migrate"], { env, stdio: "inherit" });
   run(
@@ -138,5 +182,6 @@ try {
   process.exitCode = 1;
 } finally {
   rmSync(migrationFixture, { recursive: true, force: true });
+  spawnSync("docker", ["rm", "-f", "-v", redisName], { stdio: "ignore" });
   spawnSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" });
 }

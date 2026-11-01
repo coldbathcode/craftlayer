@@ -419,3 +419,136 @@ export const runtimeIdempotency = pgTable(
     }),
   ],
 );
+
+export const runtimeInstance = pgTable("runtime_instance", {
+  id: boolean("id").primaryKey().default(true),
+  turn: bigint("turn", { mode: "bigint" }).notNull().default(0n),
+  activeMissions: integer("active_missions").notNull().default(0),
+  activeAgents: integer("active_agents").notNull().default(0),
+  storageBytes: bigint("storage_bytes", { mode: "bigint" })
+    .notNull()
+    .default(0n),
+});
+export const runtimeTenants = pgTable("runtime_tenants", {
+  organizationId: uuid("organization_id")
+    .primaryKey()
+    .references(() => organizations.id),
+  turn: bigint("turn", { mode: "bigint" }).notNull().default(0n),
+  active: boolean("active").notNull().default(true),
+});
+export const runtimeInstanceHours = pgTable("runtime_instance_hours", {
+  windowStart: time("window_start").primaryKey(),
+  toolCalls: integer("tool_calls").notNull().default(0),
+  runtimeMs: integer("runtime_ms").notNull().default(0),
+});
+export const runtimeQuotaScopes = pgTable(
+  "runtime_quota_scopes",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    kind: text("kind").notNull(),
+    scopeId: uuid("scope_id").notNull(),
+    limits: jsonb("limits").notNull(),
+    version: integer("version").notNull().default(1),
+    activeMissions: integer("active_missions").notNull().default(0),
+    activeAgents: integer("active_agents").notNull().default(0),
+    storageBytes: bigint("storage_bytes", { mode: "bigint" })
+      .notNull()
+      .default(0n),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.kind, t.scopeId] })],
+);
+export const runtimeQuotaHours = pgTable(
+  "runtime_quota_hours",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    kind: text("kind").notNull(),
+    scopeId: uuid("scope_id").notNull(),
+    windowStart: time("window_start").notNull(),
+    toolCalls: integer("tool_calls").notNull().default(0),
+    runtimeMs: integer("runtime_ms").notNull().default(0),
+  },
+  (t) => [
+    primaryKey({
+      columns: [t.organizationId, t.kind, t.scopeId, t.windowStart],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.kind, t.scopeId],
+      foreignColumns: [
+        runtimeQuotaScopes.organizationId,
+        runtimeQuotaScopes.kind,
+        runtimeQuotaScopes.scopeId,
+      ],
+    }),
+  ],
+);
+export const runtimeStorageReservations = pgTable(
+  "runtime_storage_reservations",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    resourceId: uuid("resource_id").notNull(),
+    bytes: bigint("bytes", { mode: "bigint" }).notNull(),
+    scopes: jsonb("scopes").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.organizationId, t.resourceId] })],
+);
+export const runtimeAdmissions = pgTable(
+  "runtime_admissions",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    missionId: uuid("mission_id").notNull(),
+    scopes: jsonb("scopes").notNull(),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.missionId] }),
+    foreignKey({
+      columns: [t.organizationId, t.missionId],
+      foreignColumns: [runtimeMissions.organizationId, runtimeMissions.id],
+    }),
+  ],
+);
+export const runtimeAttemptQuotas = pgTable(
+  "runtime_attempt_quotas",
+  {
+    organizationId: uuid("organization_id").notNull(),
+    attemptId: uuid("attempt_id").notNull(),
+    scopes: jsonb("scopes").notNull(),
+    active: boolean("active").notNull().default(true),
+    toolCalls: integer("tool_calls").notNull(),
+    runtimeMs: integer("runtime_ms").notNull(),
+    windowStart: time("window_start").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.attemptId] }),
+    foreignKey({
+      columns: [t.organizationId, t.attemptId],
+      foreignColumns: [runtimeAttempts.organizationId, runtimeAttempts.id],
+    }),
+  ],
+);
+export const runtimeOutbox = pgTable(
+  "runtime_outbox",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    missionId: uuid("mission_id").notNull(),
+    taskId: uuid("task_id").notNull(),
+    generation: integer("generation").notNull(),
+    createdAt: time("created_at").notNull(),
+    leaseId: uuid("lease_id"),
+    leaseExpiresAt: time("lease_expires_at"),
+    publishedAt: time("published_at"),
+    nextPublishAt: time("next_publish_at").notNull(),
+    attempts: integer("attempts").notNull().default(0),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.missionId, t.taskId],
+      foreignColumns: [
+        runtimeTasks.organizationId,
+        runtimeTasks.missionId,
+        runtimeTasks.id,
+      ],
+    }),
+  ],
+);

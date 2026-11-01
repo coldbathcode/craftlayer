@@ -108,31 +108,49 @@ export class RuntimeRepository {
   async close() {
     await this.#pool.end();
   }
-  protected async tx<T>(
-    org: string,
+  private async transaction<T>(
+    org: string | null,
     operation: (c: pg.PoolClient) => Promise<T>,
   ): Promise<T> {
-    z.uuid().parse(org);
+    if (org) z.uuid().parse(org);
     const c = await this.#pool.connect();
     try {
       await c.query("begin");
       await c.query("select pg_advisory_xact_lock(74618006)");
-      await c.query("select set_config('app.organization_id',$1,true)", [org]);
       await c.query("select set_config('app.runtime_internal','enabled',true)");
-      await c.query(
-        "select pg_advisory_xact_lock(hashtextextended($1,74618005))",
-        [org],
-      );
+      if (org) {
+        await c.query("select set_config('app.organization_id',$1,true)", [
+          org,
+        ]);
+        await c.query(
+          "select pg_advisory_xact_lock(hashtextextended($1,74618005))",
+          [org],
+        );
+      }
       const value = await operation(c);
       await c.query("commit");
       return value;
-    } catch (e) {
+    } catch (error) {
       await c.query("rollback");
-      throw e;
+      throw error;
     } finally {
       c.release();
     }
   }
+  protected tx<T>(org: string, operation: (c: pg.PoolClient) => Promise<T>) {
+    return this.transaction(org, operation);
+  }
+  protected maintenance<T>(operation: (c: pg.PoolClient) => Promise<T>) {
+    return this.transaction(null, operation);
+  }
+  protected async storage(
+    _c: pg.PoolClient,
+    _org: string,
+    _user: string,
+    _project: string,
+    _id: string,
+    _bytes: number,
+  ): Promise<void> {}
   protected async environment(
     c: pg.PoolClient,
     org: string,
