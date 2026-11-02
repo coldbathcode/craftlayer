@@ -100,3 +100,7 @@ The [management runbook](../development/minecraft-management.md) describes imple
 ## Implemented F2 pending prototype boundary
 
 Migration 0017 adds immutable pending name-resolution requests, canonical actor/session scope, current `player:enroll` and explicit `player:read`, durable operation receipts and atomic audit/reference-only outbox. No consumer promotes identity or grants access. `/servers/:id/identity-enrollments` GET/POST and typed SDK/UI expose pending/expired metadata only. The separate loopback prototype uses generated accounts and synthetic flagged snapshots; it cannot contact a real game server. [Prototype guide](../development/prototype.md) documents isolation and retained data; [ADR 0018](decisions/0018-game-identity-provenance.md) preserves authenticated-provenance/link-review requirements.
+
+### CL-F25-01/B implementation boundary
+
+The optional node-control Compose service holds only runtime DB/TLS/control-signing credentials and accepts mTLS enrollment/heartbeat on a loopback-published private interface. The separate operator-host agent alone reads the local Engine socket. `/nodes` projects timestamped inventory/credential health and canonical adult enrollment/rotation/revocation; it accepts public identity material only. Signed 30s time windows sample one instant to avoid millisecond rollover. Agent network retries retain sequence and never resume/change game state; credential failures stop. Native service ports, storage quotas, broker commands, physical leases/fences and provisioning remain unimplemented release gates.

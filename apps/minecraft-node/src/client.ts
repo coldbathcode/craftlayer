@@ -1,5 +1,4 @@
 import { request } from "node:https";
-import { isIP } from "node:net";
 import { checkServerIdentity } from "node:tls";
 import {
   type NodeAgentRequest,
@@ -10,26 +9,15 @@ import {
   assertNodeTime,
   certificateHash,
   nodeDigest,
+  privateNodeAddress,
   signNodeValue,
   verifyNodeValue,
 } from "@craftlayer/node-protocol";
 export function privateController(value: string) {
   const url = new URL(value),
     host = url.hostname.replace(/^\[|\]$/g, "");
-  let allowed = false;
-  if (isIP(host) === 4) {
-    const n = host.split(".").map(Number),
-      a = n[0] ?? 0,
-      b = n[1] ?? 0;
-    allowed =
-      a === 127 ||
-      a === 10 ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 100 && b >= 64 && b <= 127);
-  } else if (isIP(host) === 6) allowed = host === "::1" || /^f[cd]/i.test(host);
   if (
-    !allowed ||
+    !privateNodeAddress(host) ||
     url.protocol !== "https:" ||
     url.username ||
     url.password ||
@@ -48,6 +36,14 @@ export interface NodeConnection {
   server_certificate_sha256: string;
   control_public_key: string;
   private_key: string;
+}
+export class NodeTransportFailure extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
 }
 export class NodeTransport {
   constructor(private readonly config: NodeConnection) {
@@ -109,11 +105,12 @@ export class NodeTransport {
             try {
               const result = JSON.parse(Buffer.concat(chunks).toString("utf8"));
               if (res.statusCode !== 200) {
-                const e = new Error(
+                const e = new NodeTransportFailure(
                   res.statusCode === 409 &&
                     result?.error?.code === "NODE_ALREADY_ENROLLED"
                     ? "NODE_ALREADY_ENROLLED"
                     : "NODE_REQUEST_DENIED",
+                  res.statusCode === 429 || (res.statusCode ?? 500) >= 500,
                 );
                 reject(e);
               } else resolve(result);
@@ -124,7 +121,23 @@ export class NodeTransport {
         },
       );
       req.on("timeout", () => req.destroy());
-      req.on("error", () => reject(new Error("NODE_TRANSPORT_UNAVAILABLE")));
+      const deadline = setTimeout(
+        () => req.destroy(new Error("NODE_TRANSPORT_DEADLINE")),
+        3000,
+      );
+      req.once("close", () => clearTimeout(deadline));
+      req.on("error", (e) =>
+        reject(
+          new NodeTransportFailure(
+            "NODE_TRANSPORT_UNAVAILABLE",
+            !(
+              e.message.includes("CERT") ||
+              e.message.includes("certificate") ||
+              e.message.includes("NODE_SERVER_CERTIFICATE_MISMATCH")
+            ),
+          ),
+        ),
+      );
       req.end(body);
     });
     const response = signedNodeResponse.parse(raw),

@@ -44,6 +44,7 @@
     "prototype:up": "node scripts/prototype.mjs up",
     "prototype:down": "node scripts/prototype.mjs down",
     "prototype:refresh": "node scripts/prototype.mjs refresh",
+    "prototype:node:renew": "node scripts/prototype.mjs node-renew",
     "node:pki:fixture": "node --import tsx scripts/minecraft/node-fixtures.ts",
     "node:keygen": "node apps/minecraft-node/dist/main.js keygen",
     "node:run": "node apps/minecraft-node/dist/main.js run"

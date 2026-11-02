@@ -1,5 +1,10 @@
 import { execFileSync, spawn } from "node:child_process";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  X509Certificate,
+} from "node:crypto";
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -12,8 +17,13 @@ const root = resolve(import.meta.dirname, ".."),
   directory = resolve(root, ".craftlayer-prototype"),
   project = "craftlayer-family-prototype";
 const command = process.argv[2];
-if (!["up", "down", "refresh"].includes(command) || process.argv.length !== 3)
-  throw new Error("Use prototype:up, prototype:down or prototype:refresh");
+if (
+  !["up", "down", "refresh", "node-renew"].includes(command) ||
+  process.argv.length !== 3
+)
+  throw new Error(
+    "Use prototype:up, prototype:down, prototype:refresh or prototype:node:renew",
+  );
 const exists = async (path) => {
   try {
     await lstat(path);
@@ -119,6 +129,50 @@ Object.assign(
     CRAFTLAYER_HOST_GID: String(process.getgid()),
   },
 );
+const nodeTlsDirectory = resolve(directory, "node-pki");
+if (!(await exists(nodeTlsDirectory)))
+  await run(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      resolve(root, "scripts/minecraft/node-fixtures.ts"),
+      nodeTlsDirectory,
+    ],
+    { env },
+  );
+const nodePublic = JSON.parse(
+  await readFile(resolve(nodeTlsDirectory, "public.json"), "utf8"),
+);
+if (
+  ["up", "node-renew"].includes(command) &&
+  Date.parse(
+    new X509Certificate(await readFile(resolve(nodeTlsDirectory, "server.crt")))
+      .validTo,
+  ) <= Date.now()
+)
+  throw new Error(
+    "Local node PKI fixture expired; explicit fixture/credential rotation required",
+  );
+if (!state.node_port) {
+  const socket = createServer();
+  await new Promise((accept, reject) => {
+    socket.once("error", (e) =>
+      e.code === "EADDRINUSE"
+        ? socket.listen(0, "127.0.0.1", accept)
+        : reject(e),
+    );
+    socket.listen(9443, "127.0.0.1", accept);
+  });
+  state.node_port = socket.address().port;
+  await new Promise((accept) => socket.close(accept));
+  await save(statePath, state);
+}
+Object.assign(env, {
+  CRAFTLAYER_NODE_TLS_CONFIG_DIR: nodeTlsDirectory,
+  CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY: nodePublic.control_public_key,
+  CRAFTLAYER_NODE_HTTP_PORT: String(state.node_port),
+});
 const compose = [
   "compose",
   "-p",
@@ -129,6 +183,8 @@ const compose = [
   "docker-compose.yml",
   "-f",
   "infra/compose/minecraft-observation.yml",
+  "-f",
+  "infra/compose/node-control.yml",
 ];
 if (command === "down") {
   await run("docker", [...compose, "down"], { env });
@@ -192,7 +248,12 @@ if (command === "down") {
       "Simulated capture refreshed. Click Observe approved source in the dashboard to read it.",
     );
   } else {
-    await run("docker", [...compose, "up", "-d", "--build", "--wait"], { env });
+    if (command === "up")
+      await run("docker", [...compose, "up", "-d", "--build", "--wait"], {
+        env,
+      });
+    else if (!state.seeded || !state.node_id)
+      throw new Error("Start the prototype before renewing its node identity");
     const accountsPath = resolve(directory, "accounts.json");
     let accounts;
     if (await exists(accountsPath))
@@ -415,6 +476,78 @@ if (command === "down") {
       state.seeded = true;
       await save(statePath, state);
     }
+    let identityDirectory = state.node_identity_directory ?? nodeTlsDirectory;
+    if (command === "node-renew") {
+      identityDirectory = resolve(directory, `node-identity-${randomUUID()}`);
+      await run(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          resolve(root, "scripts/minecraft/node-identity-fixture.ts"),
+          identityDirectory,
+          nodeTlsDirectory,
+        ],
+        { env },
+      );
+      const old = await api(
+        owner,
+        "GET",
+        `/nodes/${state.node_id}`,
+        undefined,
+        state.organization_id,
+      );
+      if (old.state !== "revoked")
+        await api(
+          owner,
+          "POST",
+          `/nodes/${state.node_id}/revoke`,
+          { expected_version: old.version },
+          state.organization_id,
+        );
+    }
+    const identityPublic = JSON.parse(
+      await readFile(resolve(identityDirectory, "public.json"), "utf8"),
+    );
+    if (!state.node_id || command === "node-renew") {
+      const receipt = await api(
+        owner,
+        "POST",
+        "/nodes/enrollments",
+        {
+          project_id: state.project_id,
+          name: "Local Docker development host",
+          public_key: identityPublic.public_key,
+          certificate_sha256: identityPublic.certificate_sha256,
+        },
+        state.organization_id,
+      );
+      state.node_id = receipt.node_id;
+      state.node_identity_directory = identityDirectory;
+      await save(statePath, state);
+    }
+    const host = await api(
+      owner,
+      "GET",
+      `/nodes/${state.node_id}`,
+      undefined,
+      state.organization_id,
+    );
+    const agentConfig = {
+      organization_id: state.organization_id,
+      node_id: state.node_id,
+      credential_version: host.credential_version,
+      control_url: `https://127.0.0.1:${state.node_port}`,
+      control_public_key: nodePublic.control_public_key,
+      server_certificate_sha256: nodePublic.server_certificate_sha256,
+      ca_file: resolve(nodeTlsDirectory, "ca.crt"),
+      certificate_file: resolve(identityDirectory, "client.crt"),
+      tls_key_file: resolve(identityDirectory, "client.key"),
+      signing_key_file: resolve(identityDirectory, "agent.key"),
+      journal_directory: resolve(directory, `node-journal-${state.node_id}`),
+      docker_socket: env.DOCKER_HOST.slice("unix://".length),
+    };
+    await save(resolve(directory, "node-agent.json"), agentConfig);
     // Synthetic prototype only. Never copy cookies from the existing installation.
     const token = owner.cookie.slice("craftlayer_session=".length);
     await save(resolve(directory, "browser-state.json"), {
@@ -434,7 +567,7 @@ if (command === "down") {
     });
     await writeFile(
       resolve(directory, "START-HERE.md"),
-      `# Local family prototype\n\nOpen ${origin}/servers and sign in via ${origin}/account.\n\nParent: ${accounts.parent.login}\nPassword: ${accounts.parent.password}\n\nViewer: ${accounts.viewer.login}\nPassword: ${accounts.viewer.password}\n\nChild: ${accounts.child.login}\nPassword: ${accounts.child.password}\n\nThese generated credentials belong only to this synthetic local prototype. Do not reuse them. No Minecraft server is connected. Requests stay pending and grant no game access.\n\nStop: pnpm prototype:down (data retained). Restart: pnpm prototype:up. Refresh simulated capture: pnpm prototype:refresh then Observe approved source.\n`,
+      `# Local family prototype\n\nOpen ${origin}/servers and sign in via ${origin}/account.\n\nParent: ${accounts.parent.login}\nPassword: ${accounts.parent.password}\n\nViewer: ${accounts.viewer.login}\nPassword: ${accounts.viewer.password}\n\nChild: ${accounts.child.login}\nPassword: ${accounts.child.password}\n\nThese generated credentials belong only to this synthetic local prototype. Do not reuse them. No Minecraft server is connected. Requests stay pending and grant no game access.\n\nHosts: ${origin}/nodes\nRun the local inventory agent in another terminal: pnpm node:run ${resolve(directory, "node-agent.json")}\n\nStop: pnpm prototype:down (data retained). Restart: pnpm prototype:up. Refresh simulated capture: pnpm prototype:refresh then Observe approved source.\n`,
       { mode: 0o600 },
     );
     console.log(

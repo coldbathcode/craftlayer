@@ -11,6 +11,7 @@ it("uses fixed read requests, includes all workload reservations and omits secre
     socket = join(directory, "engine.sock"),
     requests: string[] = [];
   const id = "a".repeat(64);
+  let dynamic = false;
   const server = createServer((req, res) => {
     requests.push(`${req.method} ${req.url}`);
     res.setHeader("content-type", "application/json");
@@ -29,9 +30,23 @@ it("uses fixed read requests, includes all workload reservations and omits secre
                 HostConfig: {
                   Memory: 2 * 1024 ** 3,
                   PortBindings: {
-                    "25565/tcp": [{ HostIp: "0.0.0.0", HostPort: "25565" }],
+                    "25565/tcp": [
+                      { HostIp: "0.0.0.0", HostPort: dynamic ? "" : "25565" },
+                    ],
                   },
                 },
+                ...(dynamic
+                  ? {
+                      NetworkSettings: {
+                        Ports: {
+                          "25565/tcp": [
+                            { HostIp: "0.0.0.0", HostPort: "32768" },
+                            { HostIp: "0.0.0.0", HostPort: "32768" },
+                          ],
+                        },
+                      },
+                    }
+                  : {}),
                 Config: { Env: ["RCON_PASSWORD=NODE_SECRET_CANARY"] },
               },
       ),
@@ -53,6 +68,12 @@ it("uses fixed read requests, includes all workload reservations and omits secre
     expect(JSON.stringify(result)).not.toMatch(/CANARY|private-player/);
     expect(requests.every((r) => r.startsWith("GET /v1.50/"))).toBe(true);
     expect(requests).toHaveLength(3);
+    dynamic = true;
+    const assigned = await new DockerInventory(socket).read();
+    expect(assigned.occupied_ports).toEqual([
+      { host_ip: "0.0.0.0", port: 32768, protocol: "tcp" },
+    ]);
+    expect(assigned.network_inventory_complete).toBe(false);
   } finally {
     await new Promise<void>((done) => server.close(() => done()));
     await rm(directory, { recursive: true, force: true });
@@ -75,3 +96,23 @@ it("requires literal private HTTPS controller with no redirect/HTTP/metadata end
   ])
     expect(() => privateController(url)).toThrow();
 });
+
+it("bounds a slow Docker response even when it keeps sending bytes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "craftlayer-node-slow-")),
+    socket = join(directory, "engine.sock");
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.write(" ");
+    const trickle = setInterval(() => res.write(" "), 100);
+    res.once("close", () => clearInterval(trickle));
+  });
+  await new Promise<void>((done) => server.listen(socket, done));
+  try {
+    await expect(new DockerInventory(socket).read()).rejects.toThrow(
+      "DOCKER_INVENTORY_UNAVAILABLE",
+    );
+  } finally {
+    await new Promise<void>((done) => server.close(() => done()));
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 7000);

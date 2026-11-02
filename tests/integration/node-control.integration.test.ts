@@ -16,6 +16,7 @@ import {
 import {
   generateNodeKey,
   nodeDigest,
+  nodeTimeWindow,
   signNodeValue,
 } from "../../packages/node-protocol/src/index.js";
 import { createNodeFixture } from "../../scripts/minecraft/node-fixtures.js";
@@ -104,8 +105,7 @@ const proof = (
     organization_id: org,
     node_id: node,
     credential_version: version,
-    issued_at: new Date().toISOString(),
-    expires_at: new Date(Date.now() + 30000).toISOString(),
+    ...nodeTimeWindow(),
   };
   return purpose === "node.enroll.v1"
     ? { ...common, purpose, sequence: 0 }

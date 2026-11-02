@@ -1,6 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmod, rm, writeFile } from "node:fs/promises";
 import { type APIRequestContext, expect, test } from "@playwright/test";
+import { nodeFlow } from "./node-flow.js";
 
 test("isolated parent dashboard observes without game controls and clears revoked scope", async ({
   page,
@@ -268,6 +269,17 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     child.getByRole("button", { name: "Observe approved source" }),
   ).toHaveCount(0);
+  await child.goto("/nodes");
+  await expect(
+    child.getByRole("heading", { name: "Hosts are managed by your adult." }),
+  ).toBeVisible();
+  expect(
+    (
+      await child.request.get(`/api/v1/nodes?project_id=${project.id}`, {
+        headers: { "x-craftlayer-organization": org },
+      })
+    ).status(),
+  ).toBe(403);
   await childContext.close();
   // Viewer must receive explicit server/player grants and has no adoption or observation controls.
   const roles = await (
@@ -337,6 +349,13 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     viewer.getByText("Audit history requires an administrator’s permission."),
   ).toBeVisible();
+  await viewer.goto("/nodes");
+  await expect(
+    viewer.getByRole("heading", { name: "Host access needs permission." }),
+  ).toBeVisible();
+  await expect(
+    viewer.getByRole("button", { name: "Approve host enrollment" }),
+  ).toHaveCount(0);
   await viewerContext.close();
   const other = await post(
     page.request,
@@ -377,6 +396,7 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await page
     .getByRole("combobox", { name: "Organization", exact: true })
     .selectOption(org);
+  await nodeFlow(page, info, org, project.id, other.id);
   await expect(
     page.getByRole("heading", { name: "Family survival", exact: true }),
   ).toBeVisible();

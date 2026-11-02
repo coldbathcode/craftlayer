@@ -72,6 +72,12 @@ export function verifyNodeValue(
     return false;
   }
 }
+export function nodeTimeWindow(now = Date.now()) {
+  return {
+    issued_at: new Date(now).toISOString(),
+    expires_at: new Date(now + 30000).toISOString(),
+  };
+}
 export function assertNodeTime(issued: string, expires: string, now: number) {
   const start = Date.parse(issued),
     end = Date.parse(expires);
@@ -122,3 +128,4 @@ export function nodePrivateKey(input: string) {
       .toString("base64url"),
   };
 }
+export { privateNodeAddress } from "./network.js";

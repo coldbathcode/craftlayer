@@ -93,6 +93,8 @@ Each original chapter is a conservative dependency chain of seven reviewable tas
 | [CL-11-06](../chapters/11-cloud-implementation.md) | Optional hybrid beta | CL-11-05 | L | Not started |
 | [CL-11-07](../chapters/11-cloud-implementation.md) | Private beta and launch gate | CL-11-06 | L | Not started |
 
+CL-F25-01 checkpoints A/B now include private trust, Hosts UI and a real local inventory/reconnect prototype. Signed effect commands remain open; next local task is CL-F25-02 template plans and constrained broker, with F2/F25 release gates retained. See [Hosts handoff](handoffs/F25-hosts.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

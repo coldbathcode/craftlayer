@@ -385,6 +385,7 @@ export function ServerConsole() {
           <a aria-current="page" href="/servers">
             Servers
           </a>
+          <a href="/nodes">Hosts</a>
           <a href="/account">Account</a>
         </nav>
       </header>

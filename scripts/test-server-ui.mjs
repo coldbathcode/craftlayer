@@ -29,6 +29,10 @@ const socket = createServer();
 await new Promise((accept) => socket.listen(0, "127.0.0.1", accept));
 const port = socket.address().port;
 await new Promise((accept) => socket.close(accept));
+const nodeSocket = createServer();
+await new Promise((accept) => nodeSocket.listen(0, "127.0.0.1", accept));
+const nodePort = nodeSocket.address().port;
+await new Promise((accept) => nodeSocket.close(accept));
 const env = {
   ...process.env,
   CRAFTLAYER_HTTP_PORT: String(port),
@@ -44,6 +48,8 @@ const compose = [
   "docker-compose.yml",
   "-f",
   "infra/compose/minecraft-observation.yml",
+  "-f",
+  "infra/compose/node-control.yml",
 ];
 try {
   await run(process.execPath, [resolve(root, "scripts/setup-local.mjs")], {
@@ -57,6 +63,15 @@ try {
     CRAFTLAYER_PUBLIC_URL: `http://127.0.0.1:${port}`,
   });
   await mkdir(`${directory}/inventory`, { mode: 0o700 });
+  await run(process.execPath, [
+    "--import",
+    "tsx",
+    resolve(root, "scripts/minecraft/node-fixtures.ts"),
+    `${directory}/node-pki`,
+  ]);
+  const nodePublic = JSON.parse(
+    await readFile(`${directory}/node-pki/public.json`, "utf8"),
+  );
   await writeFile(
     `${directory}/inventory/inventory.json`,
     JSON.stringify({ schema_version: 1, targets: [] }),
@@ -66,12 +81,15 @@ try {
     CRAFTLAYER_MINECRAFT_CONFIG_DIR: `${directory}/inventory`,
     CRAFTLAYER_HOST_UID: String(process.getuid()),
     CRAFTLAYER_HOST_GID: String(process.getgid()),
+    CRAFTLAYER_NODE_TLS_CONFIG_DIR: `${directory}/node-pki`,
+    CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY: nodePublic.control_public_key,
+    CRAFTLAYER_NODE_HTTP_PORT: String(nodePort),
   });
   await run("docker", [...compose, "up", "-d", "--build", "--wait"], { env });
   // Inspect in memory: never print container environment or credentials.
   const inspect = (args) =>
     execFileSync("docker", args, { cwd: root, env, encoding: "utf8" });
-  for (const service of ["api", "web", "worker"]) {
+  for (const service of ["api", "web", "worker", "node-control"]) {
     const id = inspect([...compose, "ps", "-q", service]).trim();
     const [container] = JSON.parse(inspect(["inspect", id]));
     const inventory = container.Mounts.filter(
@@ -105,6 +123,32 @@ try {
       )
     )
       throw new Error("Server credentials leaked to web");
+    const nodeMounts = container.Mounts.filter((m) =>
+      m.Destination.startsWith("/run/secrets/node-control/"),
+    );
+    if (service === "node-control") {
+      if (
+        nodeMounts.length !== 4 ||
+        nodeMounts.some(
+          (m) => m.RW || /ca\.key|agent\.key|client\.key/.test(m.Destination),
+        ) ||
+        container.Config.Env.some((e) =>
+          /^(AUTH_DATABASE_URL|CRAFTLAYER_BOOTSTRAP_TOKEN|CRAFTLAYER_RECOVERY_TOKEN)=/.test(
+            e,
+          ),
+        )
+      )
+        throw new Error("Node gateway isolation failed");
+      const ports = container.NetworkSettings.Ports["9443/tcp"];
+      if (
+        !ports?.length ||
+        ports.some(
+          (p) => p.HostIp !== "127.0.0.1" || Number(p.HostPort) !== nodePort,
+        )
+      )
+        throw new Error("Node gateway port must be published on loopback only");
+    } else if (nodeMounts.length)
+      throw new Error("Node private keys leaked to a general service");
   }
   console.log("PASS: inventory mount and server credential isolation");
   await run(
@@ -117,6 +161,8 @@ try {
         CRAFTLAYER_SERVER_E2E: "1",
         CRAFTLAYER_E2E_INVENTORY_PATH: `${directory}/inventory/inventory.json`,
         CRAFTLAYER_E2E_BOOTSTRAP_TOKEN: credentials.CRAFTLAYER_BOOTSTRAP_TOKEN,
+        CRAFTLAYER_E2E_NODE_PKI: `${directory}/node-pki`,
+        CRAFTLAYER_E2E_NODE_PORT: String(nodePort),
       },
     },
   );

@@ -1,13 +1,29 @@
 import { signedNodeRequest } from "@craftlayer/contracts";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   assertNodeTime,
   canonical,
   generateNodeKey,
   nodeDigest,
+  nodeTimeWindow,
   signNodeValue,
   verifyNodeValue,
 } from "./index.js";
+
+it("samples a single clock instant so proof duration stays valid across millisecond rollover", () => {
+  const now = Date.now();
+  let calls = 0;
+  const clock = vi.spyOn(Date, "now").mockImplementation(() => now + calls++);
+  try {
+    const window = nodeTimeWindow();
+    expect(calls).toBe(1);
+    expect(() =>
+      assertNodeTime(window.issued_at, window.expires_at, now + 1),
+    ).not.toThrow();
+  } finally {
+    clock.mockRestore();
+  }
+});
 
 it("signs canonical payloads and rejects alteration, different keys and expired proofs", () => {
   const a = generateNodeKey(),
@@ -42,8 +58,7 @@ it("has no arbitrary commands, endpoints, environment, world path or credentials
       node_id: "00000000-0000-4000-8000-000000000002",
       credential_version: 1,
       sequence: 0,
-      issued_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30000).toISOString(),
+      ...nodeTimeWindow(),
     },
     signature: "A".repeat(86),
   };

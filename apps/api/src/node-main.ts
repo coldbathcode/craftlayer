@@ -1,5 +1,11 @@
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { networkInterfaces } from "node:os";
 import { NodeControl } from "@craftlayer/minecraft-control";
-import { protectedNodeFile } from "@craftlayer/node-protocol";
+import {
+  privateNodeAddress,
+  protectedNodeFile,
+} from "@craftlayer/node-protocol";
 import { buildNodeAgentApp } from "./node-agent-app.js";
 
 const url = process.env.DATABASE_URL,
@@ -25,10 +31,27 @@ try {
     await app.close();
     await control.close();
   };
-  await app.listen({
-    host: process.env.CRAFTLAYER_NODE_BIND_HOST ?? "127.0.0.1",
-    port: 9443,
-  });
+  let host = process.env.CRAFTLAYER_NODE_BIND_HOST ?? "127.0.0.1";
+  if (host === "container-private") {
+    if (!existsSync("/.dockerenv"))
+      throw new Error("NODE_PRIVATE_CONTAINER_REQUIRED");
+    // Published loopback traffic enters through the non-internal network.
+    // Docker's internal DB network intentionally has no default route.
+    const routes = (await readFile("/proc/net/route", "utf8")).split("\n"),
+      iface = routes
+        .map((line) => line.trim().split(/\s+/))
+        .find((row) => row[1] === "00000000")?.[0];
+    host =
+      (iface ? networkInterfaces()[iface] : [])?.find(
+        (v) =>
+          v &&
+          !v.internal &&
+          v.family === "IPv4" &&
+          privateNodeAddress(v.address),
+      )?.address ?? "";
+  }
+  if (!privateNodeAddress(host)) throw new Error("NODE_PRIVATE_BIND_REQUIRED");
+  await app.listen({ host, port: 9443 });
   console.log("NODE_CONTROL_READY: private mTLS inventory transport");
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {

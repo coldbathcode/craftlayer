@@ -4,10 +4,11 @@ import {
   certificateHash,
   generateNodeKey,
   nodeDigest,
+  nodeTimeWindow,
   protectedNodeFile,
 } from "@craftlayer/node-protocol";
 import { z } from "zod";
-import { NodeTransport } from "./client.js";
+import { NodeTransport, NodeTransportFailure } from "./client.js";
 import { DockerInventory } from "./docker.js";
 import { NodeJournal } from "./journal.js";
 
@@ -81,44 +82,65 @@ try {
       process.once(signal, () => {
         stopped = true;
       });
-    const base = () => ({
-      schema_version: 1 as const,
-      control_id: nodeDigest(config.control_public_key),
-      organization_id: config.organization_id,
-      node_id: config.node_id,
-      credential_version: config.credential_version,
-      issued_at: new Date().toISOString(),
-      expires_at: new Date(Date.now() + 30000).toISOString(),
-    });
+    const base = () => {
+      return {
+        schema_version: 1 as const,
+        control_id: nodeDigest(config.control_public_key),
+        organization_id: config.organization_id,
+        node_id: config.node_id,
+        credential_version: config.credential_version,
+        ...nodeTimeWindow(),
+      };
+    };
+    let enrolled = false,
+      backoff = 1000;
+    const wait = async (ms: number) => {
+      for (let elapsed = 0; elapsed < ms && !stopped; elapsed += 100)
+        await new Promise((done) => setTimeout(done, 100));
+    };
     try {
-      try {
-        await transport.send({
-          ...base(),
-          purpose: "node.enroll.v1",
-          sequence: 0,
-        });
-      } catch (e) {
-        if (!(e instanceof Error) || e.message !== "NODE_ALREADY_ENROLLED")
-          throw e;
-      }
-      console.log(
-        "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
-      );
       while (!stopped) {
-        let capacity = null;
         try {
-          capacity = await inventory.read();
-        } catch {
-          console.error("NODE_INVENTORY_UNAVAILABLE; values omitted");
+          if (!enrolled) {
+            try {
+              await transport.send({
+                ...base(),
+                purpose: "node.enroll.v1",
+                sequence: 0,
+              });
+            } catch (e) {
+              if (
+                !(e instanceof Error) ||
+                e.message !== "NODE_ALREADY_ENROLLED"
+              )
+                throw e;
+            }
+            enrolled = true;
+            console.log(
+              "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
+            );
+          }
+          let capacity = null;
+          try {
+            capacity = await inventory.read();
+          } catch {
+            console.error("NODE_INVENTORY_UNAVAILABLE; values omitted");
+          }
+          await transport.send({
+            ...base(),
+            purpose: "node.heartbeat.v1",
+            sequence: await journal.next(),
+            capacity,
+          });
+          backoff = 1000;
+          await wait(10000);
+        } catch (e) {
+          if (!(e instanceof NodeTransportFailure) || !e.retryable) throw e;
+          console.error("NODE_LINK_UNAVAILABLE: bounded retry; values omitted");
+          enrolled = false;
+          await wait(backoff);
+          backoff = Math.min(backoff * 2, 10000);
         }
-        await transport.send({
-          ...base(),
-          purpose: "node.heartbeat.v1",
-          sequence: await journal.next(),
-          capacity,
-        });
-        for (let i = 0; i < 100 && !stopped; i++)
-          await new Promise((done) => setTimeout(done, 100));
       }
     } finally {
       await journal.close();

@@ -3,7 +3,15 @@ import { type NodeCapacity, nodeCapacity } from "@craftlayer/contracts";
 import { z } from "zod";
 
 const id = z.string().regex(/^[a-f0-9]{64}$/),
-  maxBytes = 1024 * 1024;
+  maxBytes = 1024 * 1024,
+  bindings = z
+    .record(
+      z.string(),
+      z
+        .array(z.object({ HostIp: z.string(), HostPort: z.string() }))
+        .nullable(),
+    )
+    .nullable();
 /** This adapter exposes fixed reads only. Socket access still implies host compromise risk. */
 export class DockerInventory {
   constructor(private readonly socket: string) {
@@ -44,6 +52,11 @@ export class DockerInventory {
         },
       );
       req.on("timeout", () => req.destroy(new Error("DOCKER_TIMEOUT")));
+      const deadline = setTimeout(
+        () => req.destroy(new Error("DOCKER_TIMEOUT")),
+        2000,
+      );
+      req.once("close", () => clearTimeout(deadline));
       req.on("error", () => reject(new Error("DOCKER_INVENTORY_UNAVAILABLE")));
       req.end();
     });
@@ -81,36 +94,38 @@ export class DockerInventory {
           .object({
             HostConfig: z.object({
               Memory: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-              PortBindings: z
-                .record(
-                  z.string(),
-                  z
-                    .array(
-                      z.object({ HostIp: z.string(), HostPort: z.string() }),
-                    )
-                    .nullable(),
-                )
-                .nullable(),
+              PortBindings: bindings,
             }),
+            NetworkSettings: z.object({ Ports: bindings }).optional(),
           })
           .parse(raw);
         if (c.HostConfig.Memory === 0) unbounded++;
         else memory += c.HostConfig.Memory;
-        for (const [port, bindings] of Object.entries(
-          c.HostConfig.PortBindings ?? {},
-        )) {
+        const published = {
+          ...c.HostConfig.PortBindings,
+          ...c.NetworkSettings?.Ports,
+        };
+        for (const [port, entries] of Object.entries(published)) {
           const protocol = port.split("/")[1];
           if (protocol !== "tcp" && protocol !== "udp")
             throw new Error("UNSUPPORTED_PORT_PROTOCOL");
-          for (const b of bindings ?? []) {
+          for (const b of entries ?? []) {
+            // Dynamic bindings have no selected port until a container starts.
+            // This partial Docker inventory never qualifies network headroom.
+            if (b.HostPort === "" || b.HostPort === "0") continue;
             const number = Number(b.HostPort);
             if (!Number.isInteger(number) || number < 1 || number > 65535)
               throw new Error("UNRESOLVED_HOST_PORT");
-            ports.push({
-              host_ip: b.HostIp || "0.0.0.0",
-              port: number,
-              protocol,
-            });
+            const host_ip = b.HostIp || "0.0.0.0";
+            if (
+              !ports.some(
+                (p) =>
+                  p.host_ip === host_ip &&
+                  p.port === number &&
+                  p.protocol === protocol,
+              )
+            )
+              ports.push({ host_ip, port: number, protocol });
             if (ports.length > 128) throw new Error("DOCKER_PORT_LIMIT");
           }
         }

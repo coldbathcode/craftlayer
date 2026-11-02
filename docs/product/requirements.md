@@ -92,3 +92,5 @@ Minecraft private server hosting, provider inference, and hardware availability 
 ## Success evidence
 
 Record environment, versions, seed, policy configuration, anonymized event trace, verifier output and Stop All measurement. Demonstrations alone do not prove tenant isolation, restart recovery or budget correctness; those require automated negative tests. Keep all product tests mapped to PR/NFR IDs in [the testing plan](../testing/strategy.md).
+
+CL-F25-01/A–B implements the read-only portion of PR-030: adult-approved, certificate/key-bound enrollment, rotation/revocation, private signed heartbeat and Hosts UI. Actual local inventory/reconnect evidence does not satisfy signed physical commands, broker quotas, provisioning, F2 player controls/backups or production qualification. No release gate is relaxed by parallel local development.
