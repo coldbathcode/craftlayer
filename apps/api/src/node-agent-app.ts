@@ -1,8 +1,19 @@
 import { X509Certificate } from "node:crypto";
 import { TLSSocket } from "node:tls";
 import { AuthError } from "@craftlayer/auth";
-import { signedNodeRequest, signedNodeResponse } from "@craftlayer/contracts";
-import type { NodeControl } from "@craftlayer/minecraft-control";
+import {
+  deploymentJobView,
+  signedNodeCommand,
+  signedNodeCommandPermit,
+  signedNodeCommandReceipt,
+  signedNodeJobRequest,
+  signedNodeRequest,
+  signedNodeResponse,
+} from "@craftlayer/contracts";
+import type {
+  DeploymentJobs,
+  NodeControl,
+} from "@craftlayer/minecraft-control";
 import { certificateHash } from "@craftlayer/node-protocol";
 import Fastify from "fastify";
 import {
@@ -13,6 +24,7 @@ import {
 /** Separate private mTLS listener. No browser/cookie authentication or Docker access. */
 export async function buildNodeAgentApp(options: {
   control: Pick<NodeControl, "exchange">;
+  jobs?: Pick<DeploymentJobs, "exchange" | "recordReceipt">;
   key: Buffer | string;
   cert: Buffer | string;
   ca: Buffer | string;
@@ -49,6 +61,62 @@ export async function buildNodeAgentApp(options: {
       },
     });
   });
+  function peer(socket: unknown, cookie: unknown) {
+    if (
+      !(socket instanceof TLSSocket) ||
+      !socket.authorized ||
+      cookie !== undefined
+    )
+      throw new AuthError(
+        401,
+        "NODE_MTLS_REQUIRED",
+        "Mutually authenticated node transport required.",
+      );
+    const cert = socket.getPeerCertificate();
+    if (!cert.raw)
+      throw new AuthError(
+        401,
+        "NODE_MTLS_REQUIRED",
+        "Node certificate required.",
+      );
+    return {
+      certificate_sha256: certificateHash(cert.raw),
+      certificate_expires_at: Date.parse(new X509Certificate(cert.raw).validTo),
+    };
+  }
+  const jobs = options.jobs;
+  if (jobs) {
+    app.post(
+      "/node/v1/commands/exchange",
+      {
+        schema: {
+          body: signedNodeJobRequest,
+          response: { 200: signedNodeCommand.or(signedNodeCommandPermit) },
+        },
+      },
+      async (r) => {
+        const connection = peer(r.raw.socket, r.headers.cookie),
+          abort = new AbortController(),
+          cancel = () => abort.abort();
+        r.raw.once("aborted", cancel);
+        try {
+          return await jobs.exchange(r.body, connection, abort.signal);
+        } finally {
+          r.raw.off("aborted", cancel);
+        }
+      },
+    );
+    app.post(
+      "/node/v1/commands/receipt",
+      {
+        schema: {
+          body: signedNodeCommandReceipt,
+          response: { 200: deploymentJobView },
+        },
+      },
+      (r) => jobs.recordReceipt(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+  }
   for (const [path, purpose] of [
     ["/node/v1/enroll", "node.enroll.v1"],
     ["/node/v1/heartbeat", "node.heartbeat.v1"],

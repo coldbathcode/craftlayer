@@ -1,8 +1,15 @@
 import { request } from "node:https";
 import { checkServerIdentity } from "node:tls";
 import {
+  deploymentJobView,
   type NodeAgentRequest,
+  type NodeJobRequest,
   nodeAgentRequest,
+  nodeJobRequest,
+  type SignedNodeCommandReceipt,
+  signedNodeCommand,
+  signedNodeCommandPermit,
+  signedNodeCommandReceipt,
   signedNodeResponse,
 } from "@craftlayer/contracts";
 import {
@@ -61,11 +68,43 @@ export class NodeTransport {
           : "/node/v1/heartbeat",
         this.config.url,
       );
-    const raw = await new Promise<unknown>((resolve, reject) => {
+    const raw = await this.#post(
+      url.pathname as "/node/v1/enroll" | "/node/v1/heartbeat",
+      body,
+    );
+    const response = signedNodeResponse.parse(raw),
+      v = response.payload;
+    assertNodeTime(v.issued_at, v.expires_at, Date.now());
+    if (
+      !verifyNodeValue(v, response.signature, this.config.control_public_key) ||
+      v.control_id !== nodeDigest(this.config.control_public_key) ||
+      v.request_hash !== nodeDigest(payload) ||
+      v.organization_id !== payload.organization_id ||
+      v.node_id !== payload.node_id ||
+      v.credential_version !== payload.credential_version ||
+      v.sequence !== payload.sequence
+    )
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return v;
+  }
+  async #post(
+    path:
+      | "/node/v1/enroll"
+      | "/node/v1/heartbeat"
+      | "/node/v1/commands/exchange"
+      | "/node/v1/commands/receipt",
+    body: string,
+    signal?: AbortSignal,
+  ) {
+    if (signal?.aborted)
+      throw new NodeTransportFailure("NODE_TRANSPORT_ABORTED", false);
+    const url = new URL(path, this.config.url);
+    return new Promise<unknown>((resolve, reject) => {
       const req = request(
         url,
         {
           method: "POST",
+          ...(signal ? { signal } : {}),
           ca: this.config.ca,
           cert: this.config.cert,
           key: this.config.key,
@@ -140,19 +179,86 @@ export class NodeTransport {
       );
       req.end(body);
     });
-    const response = signedNodeResponse.parse(raw),
-      v = response.payload;
-    assertNodeTime(v.issued_at, v.expires_at, Date.now());
-    if (
-      !verifyNodeValue(v, response.signature, this.config.control_public_key) ||
-      v.control_id !== nodeDigest(this.config.control_public_key) ||
-      v.request_hash !== nodeDigest(payload) ||
-      v.organization_id !== payload.organization_id ||
-      v.node_id !== payload.node_id ||
-      v.credential_version !== payload.credential_version ||
-      v.sequence !== payload.sequence
-    )
-      throw new Error("NODE_RESPONSE_BINDING_DENIED");
-    return v;
+  }
+  /** Separate private command library only; inventory entrypoint never calls these methods. */
+  async job(input: NodeJobRequest, signal?: AbortSignal) {
+    const payload = nodeJobRequest.parse(input);
+    try {
+      const raw = await this.#post(
+          "/node/v1/commands/exchange",
+          JSON.stringify({
+            payload,
+            signature: signNodeValue(payload, this.config.private_key),
+          }),
+          signal,
+        ),
+        response =
+          payload.purpose === "node.command.fetch.v1"
+            ? signedNodeCommand.parse(raw)
+            : signedNodeCommandPermit.parse(raw),
+        v = response.payload;
+      assertNodeTime(v.issued_at, v.expires_at, Date.now());
+      if (
+        Date.parse(v.issued_at) > Date.now() ||
+        !verifyNodeValue(
+          v,
+          response.signature,
+          this.config.control_public_key,
+        ) ||
+        v.control_id !== nodeDigest(this.config.control_public_key) ||
+        v.organization_id !== payload.organization_id ||
+        v.project_id !== payload.project_id ||
+        v.node_id !== payload.node_id ||
+        v.credential_version !== payload.credential_version
+      )
+        throw new Error("DENIED");
+      if (v.purpose === "node.command.v1") {
+        if (
+          v.operation_id !== payload.job_id ||
+          nodeDigest(v) !== payload.command_hash
+        )
+          throw new Error("DENIED");
+      } else if (
+        v.command_hash !== payload.command_hash ||
+        v.request_nonce !== payload.permit_nonce
+      )
+        throw new Error("DENIED");
+      return response;
+    } catch {
+      throw new NodeTransportFailure(
+        "NODE_COMMAND_RESPONSE_UNAVAILABLE_OR_DENIED",
+        false,
+      );
+    }
+  }
+  async submitReceipt(input: SignedNodeCommandReceipt, signal?: AbortSignal) {
+    const receipt = signedNodeCommandReceipt.parse(input),
+      v = receipt.payload;
+    try {
+      const view = deploymentJobView.parse(
+        await this.#post(
+          "/node/v1/commands/receipt",
+          JSON.stringify(receipt),
+          signal,
+        ),
+      );
+      if (
+        view.operation_id !== v.operation_id ||
+        view.command_hash !== v.command_hash ||
+        view.deployment_id !== v.deployment_id ||
+        view.server_id !== v.server_id ||
+        view.world_id !== v.world_id ||
+        view.project_id !== v.project_id ||
+        view.node_id !== v.node_id ||
+        view.receipt_state !== v.state
+      )
+        throw new Error("DENIED");
+      return view;
+    } catch {
+      throw new NodeTransportFailure(
+        "NODE_RECEIPT_ACK_UNAVAILABLE_OR_DENIED",
+        false,
+      );
+    }
   }
 }

@@ -1,5 +1,19 @@
+import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, it } from "vitest";
+import { buildNodeAgentApp } from "../../apps/api/src/node-agent-app.js";
+import { ConstrainedDockerBroker } from "../../apps/minecraft-node/src/broker.js";
+import { BrokerEngine } from "../../apps/minecraft-node/src/broker-engine.js";
+import {
+  type BrokerPlan,
+  BrokerPolicy,
+} from "../../apps/minecraft-node/src/broker-policy.js";
+import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
+import { CommandTransport } from "../../apps/minecraft-node/src/command-transport.js";
+import { NodeCommandExecutor } from "../../apps/minecraft-node/src/executor.js";
 import {
   signedNodeCommand,
   signedNodeCommandPermit,
@@ -11,10 +25,12 @@ import {
 import {
   generateNodeKey,
   nodeDigest,
+  nodePrivateKey,
   nodeTimeWindow,
   signNodeValue,
   verifyNodeValue,
 } from "../../packages/node-protocol/src/index.js";
+import { createNodeFixture } from "../../scripts/minecraft/node-fixtures.js";
 import { reservationHarness } from "./fixtures/reservations.js";
 
 const url = process.env.TEST_DEPLOYMENT_JOBS_DATABASE_URL ?? "",
@@ -32,8 +48,8 @@ async function fixture(
     await f.ledger.close();
   }
 }
-async function setup() {
-  const f = await h.setup(),
+async function setup(binding?: Parameters<typeof h.setup>[0]) {
+  const f = await h.setup(binding),
     r = await f.ledger.reserve(f.adult, f.org, f.input(), randomUUID());
   f.config.approval = "b".repeat(64);
   const dispatch = await f.ledger.change(
@@ -684,3 +700,282 @@ it("refuses stale/future/changed qualification bindings before storing a command
       ).rowCount,
     ).toBe(0);
   }));
+
+it("provisions a real scratch-only Docker fixture through DB leases, outbound mTLS, current permits and signed settlement", async () => {
+  const endpoint = process.env.DOCKER_HOST;
+  if (!endpoint || !/^unix:\/\/\/[^\r\n]+$/.test(endpoint))
+    throw new Error("Pinned local Unix Docker required");
+  const root = await mkdtemp(join(tmpdir(), "craftlayer-command-e2e-")),
+    pki = join(root, "pki"),
+    info = await createNodeFixture(pki),
+    read = (name: string) => readFile(join(pki, name), "utf8"),
+    f = await setup({
+      fingerprint: info.certificate_sha256,
+      control: nodePrivateKey(await read("control.key")),
+      agent: nodePrivateKey(await read("agent.key")),
+    });
+  const options = {
+      ...f.options,
+      clock: Date.now,
+      qualifier: {
+        inspect: async (c: DeploymentQualificationContext) => {
+          const now = Date.now();
+          return {
+            qualified: true,
+            request_hash: c.request_hash,
+            policy_hash: c.policy_hash,
+            template_hash: c.template_hash,
+            approval_hash: "b".repeat(64),
+            issued_at: new Date(now).toISOString(),
+            expires_at: new Date(now + 5000).toISOString(),
+          };
+        },
+      },
+    },
+    jobs = new DeploymentJobs(options),
+    app = await buildNodeAgentApp({
+      control: f.nodes,
+      jobs,
+      key: await read("server.key"),
+      cert: await read("server.crt"),
+      ca: await read("ca.crt"),
+    });
+  let executor: NodeCommandExecutor | undefined,
+    broker: ConstrainedDockerBroker | undefined,
+    clean = false;
+  const resources: {
+    kind: "container" | "network";
+    id: string;
+    plan: BrokerPlan;
+  }[] = [];
+  const record = async (
+    kind: "container" | "network",
+    id: string,
+    plan: BrokerPlan,
+  ) => {
+    resources.push({ kind, id, plan });
+    await writeFile(
+      join(root, "fixture-ownership.json"),
+      JSON.stringify(
+        resources.map((r) => ({
+          kind: r.kind,
+          id: r.id,
+          manifest: r.plan.manifest,
+          owner_nonce: r.plan.owner_nonce,
+        })),
+      ),
+      { mode: 0o600 },
+    );
+  };
+  class FixtureEngine extends BrokerEngine {
+    override async createNetwork(
+      plan: BrokerPlan,
+      guard: () => Promise<void>,
+      signal: AbortSignal,
+    ) {
+      const id = await super.createNetwork(plan, guard, signal);
+      await record("network", id, plan);
+      return id;
+    }
+    override async createContainer(
+      plan: BrokerPlan,
+      guard: () => Promise<void>,
+      signal: AbortSignal,
+    ) {
+      const id = await super.createContainer(plan, guard, signal);
+      await record("container", id, plan);
+      return id;
+    }
+  }
+  const native = new BrokerEngine(endpoint.slice("unix://".length));
+  try {
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string")
+      throw new Error("Private listener missing");
+    const connection = {
+        url: `https://127.0.0.1:${address.port}/`,
+        ca: await read("ca.crt"),
+        cert: await read("client.crt"),
+        key: await read("client.key"),
+        server_certificate_sha256: info.server_certificate_sha256,
+        control_public_key: f.control.public_key,
+        private_key: f.agent.private_key,
+      },
+      policy = {
+        schema_version: 1,
+        organization_id: f.org,
+        project_id: f.project,
+        node_id: f.node,
+        credential_version: 1,
+        control_id: nodeDigest(f.control.public_key),
+        control_public_key: f.control.public_key,
+        node_public_key: f.agent.public_key,
+        policy_revision: 1,
+        policy_hash: f.config.policy,
+        enabled: true,
+        allowed_actions: ["provision"],
+      },
+      transport = new CommandTransport({ connection, policy });
+    const job = await jobs.prepare(
+      f.adult,
+      f.org,
+      { intent_id: f.intent.operation_id },
+      randomUUID(),
+    );
+    for (const wrong of [
+      { ...connection, cert: "", key: "" },
+      {
+        ...connection,
+        cert: await read("other.crt"),
+        key: await read("other.key"),
+      },
+      { ...connection, server_certificate_sha256: "0".repeat(64) },
+    ])
+      await expect(
+        new CommandTransport({ connection: wrong, policy }).fetch(
+          job.operation_id,
+          job.command_hash,
+        ),
+      ).rejects.toThrow();
+    const command = await transport.fetch(job.operation_id, job.command_hash),
+      v = command.payload,
+      image = JSON.parse(
+        await readFile(
+          new URL("../../infra/images.lock.json", import.meta.url),
+          "utf8",
+        ),
+      ).redis.image as string;
+    execFileSync("docker", ["image", "inspect", "--format", "{{.Id}}", image], {
+      stdio: "ignore",
+      timeout: 5000,
+    });
+    const manifest = {
+      organization_id: f.org,
+      project_id: f.project,
+      node_id: f.node,
+      deployment_id: v.deployment_id,
+      server_id: v.server_id,
+      world_id: v.world_id,
+      reservation_id: v.reservation_id,
+      plan_hash: v.plan_hash,
+      template_hash: v.template_hash,
+      policy_hash: v.policy_hash,
+      profile: "disposable_fixture",
+      image,
+      cpu_milli: 100,
+      memory_mb: 64,
+      disk_mb: 1,
+      identity_proof_hash: null,
+      restore_proof_hash: null,
+      eula_acceptance_hash: null,
+      quota_proof_hash: null,
+    };
+    broker = new ConstrainedDockerBroker({
+      directory: join(root, "ownership"),
+      executionPolicy: policy,
+      policy: new BrokerPolicy({
+        organization_id: f.org,
+        project_id: f.project,
+        node_id: f.node,
+        policy_hash: f.config.policy,
+        policy_revision: 1,
+        allowed_images: [image],
+        allowed_profiles: ["disposable_fixture"],
+        max_cpu_milli: 100,
+        max_memory_mb: 64,
+        max_disk_mb: 1,
+      }),
+      catalog: { resolve: async () => manifest },
+      engine: new FixtureEngine(endpoint.slice("unix://".length)),
+    });
+    await broker.open();
+    executor = new NodeCommandExecutor({
+      directory: join(root, "execution"),
+      policy,
+      signingKey: f.agent.private_key,
+      authority: transport,
+      broker,
+    });
+    await executor.open();
+    const receipt = await executor.execute(command);
+    expect(receipt.payload.state).toBe("succeeded");
+    expect(resources).toHaveLength(2);
+    const resource = resources.find((r) => r.kind === "container");
+    if (!resource) throw new Error("Fixture container missing");
+    expect(
+      await native.container(
+        resource.plan,
+        new AbortController().signal,
+        resource.id,
+      ),
+    ).toEqual({
+      id: resource.id,
+      owned: true,
+      specification_matches: true,
+      running: false,
+    });
+    expect(await executor.execute(command)).toEqual(receipt);
+    expect(resources).toHaveLength(2);
+    const ack = await transport.submitReceipt(receipt);
+    expect(ack).toMatchObject({
+      state: "succeeded",
+      receipt_state: "succeeded",
+    });
+    expect(await transport.submitReceipt(receipt)).toEqual(ack);
+    expect(await jobs.get(f.adult, f.org, job.operation_id)).toEqual(ack);
+    const retained = await f.ledger.get(f.adult, f.org, f.r.reservation_id);
+    expect(retained.state).toBe("allocated");
+    await expect(
+      transport.fetch(job.operation_id, job.command_hash),
+    ).rejects.toThrow();
+    const disabled = await buildNodeAgentApp({
+      control: f.nodes,
+      key: await read("server.key"),
+      cert: await read("server.crt"),
+      ca: await read("ca.crt"),
+    });
+    try {
+      await disabled.listen({ host: "127.0.0.1", port: 0 });
+      const a = disabled.server.address();
+      if (!a || typeof a === "string") throw new Error("Listener missing");
+      const readOnlyTransport = new NodeTransport({
+        ...connection,
+        url: `https://127.0.0.1:${a.port}/`,
+      });
+      await expect(
+        readOnlyTransport.job(
+          f.request(job).payload as Parameters<NodeTransport["job"]>[0],
+        ),
+      ).rejects.toThrow();
+    } finally {
+      await disabled.close();
+    }
+    clean = true;
+  } finally {
+    await executor?.close();
+    await broker?.close();
+    await app.close();
+    await jobs.close();
+    await f.jobs.close();
+    await f.nodes.close();
+    await f.ledger.close();
+    // Harness-only exact-ID disposal, separate from product settlement/reconciliation.
+    const signal = AbortSignal.timeout(15000);
+    for (const r of [...resources].reverse()) {
+      if (r.kind === "container") {
+        const c = await native.container(r.plan, signal, r.id);
+        if (c) {
+          expect(c.running).toBe(false);
+          await native.removeStopped(r.plan, r.id, async () => {}, signal);
+        }
+        expect(await native.container(r.plan, signal, r.id)).toBe(null);
+      } else {
+        if (await native.network(r.plan, signal, r.id))
+          await native.removeEmptyNetwork(r.plan, r.id, async () => {}, signal);
+        expect(await native.network(r.plan, signal, r.id)).toBe(null);
+      }
+    }
+    if (clean) await rm(root, { recursive: true });
+  }
+}, 30000);

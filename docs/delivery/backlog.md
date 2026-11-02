@@ -111,6 +111,8 @@ CL-F25-03 checkpoint A adds immutable disabled deployment intake, current adult 
 
 CL-F25-03 checkpoint B adds private durable first-provision commands/leases, current dual-grant/qualifier checks, one-use node-signed fetch/permits and signed receipt/expiry settlement retaining uncertainty. No installed effect path or production qualifier exists. Next: outbound mTLS command transport and end-to-end disposable composition, with gateway/API key isolation retained. See [controller runbook](../development/deployment-jobs.md).
 
+CL-F25-03 checkpoint C adds pinned outbound command/permit/receipt transport and optional gateway injection, verified with actual disposable DB/TLS/Redis Engine composition. Installed gateway/agent stays inventory-only. Next: remote current-authority adapter, independently verified approval and real host/world qualification, followed by production composition. See [controller runbook](../development/deployment-jobs.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

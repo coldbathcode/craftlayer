@@ -61,7 +61,11 @@ export function reservationHarness(url: string, identityUrl: string) {
       await f.ledger.close();
     }
   }
-  async function setup() {
+  async function setup(binding?: {
+    fingerprint?: string;
+    control?: ReturnType<typeof generateNodeKey>;
+    agent?: ReturnType<typeof generateNodeKey>;
+  }) {
     const org = randomUUID(),
       project = randomUUID(),
       environment = randomUUID(),
@@ -132,8 +136,8 @@ export function reservationHarness(url: string, identityUrl: string) {
     const adult = await member("org_admin"),
       viewer = await member("viewer"),
       child = await member("org_admin", "child"),
-      control = generateNodeKey(),
-      agent = generateNodeKey();
+      control = binding?.control ?? generateNodeKey(),
+      agent = binding?.agent ?? generateNodeKey();
     let now = Date.now(),
       sequence = 0;
     const nodes = new NodeControl({
@@ -149,7 +153,7 @@ export function reservationHarness(url: string, identityUrl: string) {
         project_id: project,
         name: "Fixture host",
         public_key: agent.public_key,
-        certificate_sha256: nodeDigest(randomUUID()),
+        certificate_sha256: binding?.fingerprint ?? nodeDigest(randomUUID()),
       },
       randomUUID(),
     );

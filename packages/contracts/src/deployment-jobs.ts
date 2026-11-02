@@ -65,3 +65,5 @@ export const deploymentQualification = z.strictObject({
   expires_at: z.iso.datetime(),
 });
 export type DeploymentJobState = z.infer<typeof deploymentJobState>;
+
+export type NodeJobRequest = z.infer<typeof nodeJobRequest>;
