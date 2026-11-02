@@ -112,3 +112,5 @@ The optional node-control Compose service holds only runtime DB/TLS/control-sign
 CL-F25-01/C implements the private local execution boundary under [ADR 0020](decisions/0020-node-execution-journal.md): signed reference-only jobs, fresh current permits, durable local intent/fence/stop/receipt and conservative uncertainty. No inventory protocol or public execution endpoint changes. Actual current-authority transport, broker, reservation/reconciliation and host qualification remain pending.
 
 CL-F25-02/B adds the private [reservation ledger](../development/node-reservations.md) under [ADR 0021](decisions/0021-node-reservation-ledger.md). Expiring undispatched metadata holds are distinct from allocated/uncertain capacity retained until evidence-bound recovery. No qualified production adapter or public dispatch path exists yet.
+
+CL-F25-02/C adds private fixed Engine policy/helpers under [ADR 0022](decisions/0022-constrained-engine-policy.md). They require the forthcoming durable ownership runner, real quota and current-authority composition before exposure; guarded methods/labels are not host isolation or provenance by themselves.

@@ -96,3 +96,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Node execution boundary](development/node-execution.md) records the private signed-command library, crash journal and remaining dispatch/host gates.
 
 [Node reservation ledger](development/node-reservations.md) records private qualified admission, atomic resource/port holds and non-expiring uncertain allocations.
+
+[Constrained broker](development/node-broker.md) records private compiler/Engine primitives, owned-resource requirements and unsupported persistent quota gates.

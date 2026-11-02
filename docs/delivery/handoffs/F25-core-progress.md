@@ -4,7 +4,7 @@
 
 ## Current state
 
-CL-F25-01/C implements the private signed local executor, online nonce permits, durable intent/fences/stop/receipts and conservative uncertainty. It is not wired to inventory transport or an effect endpoint. CL-F25-02/B adds private SQL 0020/Drizzle reservation service, current dual adult scope, qualified-admission port, atomic port/capacity/operation/audit/outbox, expiry only before dispatch and retained allocated/uncertain claims. The admission/independent approval/host qualification adapter defaults unavailable and has no production implementation. [Execution](../../development/node-execution.md), [reservation runbook](../../development/node-reservations.md), ADRs 0020/0021 and status are current. F2 real identity/backup/recovery remains open.
+CL-F25-01/C implements the private signed local executor, online nonce permits, durable intent/fences/stop/receipts and conservative uncertainty. It is not wired to inventory transport or an effect endpoint. CL-F25-02/B adds private SQL 0020/Drizzle reservation service, current dual adult scope, qualified-admission port, atomic port/capacity/operation/audit/outbox, expiry only before dispatch and retained allocated/uncertain claims. The admission/independent approval/host qualification adapter defaults unavailable and has no production implementation. CL-F25-02/C adds the fixed private Engine policy/helpers and fourteen recording tests; no host effect or public path yet. [Execution](../../development/node-execution.md), [reservation runbook](../../development/node-reservations.md), ADRs 0020/0021 and status are current. F2 real identity/backup/recovery remains open.
 
 ## Working tree
 
@@ -20,4 +20,4 @@ No public effect path is enabled. Journal metadata bounds (128/512 KiB), archiva
 
 ## Next action
 
-Implement the constrained private Docker broker with fixed approved manifests/images/resources/networks/mounts, ownership/intent receipts and retained-world rollback. Use a recording Engine for fault coverage, then an explicitly disposable local non-Minecraft fixture for real create/start/stop/rollback proof; no EULA or real world. Actual persistent quota/host qualifier and production command dispatch stay blocked until qualified. Continue authorized local checkpoints and publish each; do not substitute a test fake for the production authority/admission adapter.
+Implement the durable ownership runner around the new fixed Engine helpers: persist absence/creation intent/immutable IDs, verify postconditions and retain-world rollback. Use a recording Engine for fault coverage, then an explicitly disposable local non-Minecraft fixture for real create/start/stop/rollback proof; no EULA or real world. Actual persistent quota/host qualifier and production command dispatch stay blocked until qualified. Continue authorized local checkpoints and publish each; do not substitute a test fake for the production authority/admission adapter.

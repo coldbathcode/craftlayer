@@ -100,3 +100,5 @@ CL-F25-02/A adds a strict Family Survival template and effect-free placement pre
 PR-030 local signed execution primitives now exist at CL-F25-01/C. Fake authority/broker and process-kill evidence prove local ordering/replay/stop refusal, not production command dispatch, actual Docker fencing, Minecraft readiness or verified recovery.
 
 PR-031 reservation primitives now have real PostgreSQL race/tenant/current-authority evidence at CL-F25-02/B. This proves controller metadata exclusion, not physical quotas, full host qualification or Minecraft provisioning; production admission/approval and broker remain unimplemented.
+
+CL-F25-02/C implements fixed private image/resource/mount/network policy and selected Engine methods for PR-030–032. Recording fixtures prove protocol/policy negatives only; public dispatch, ownership recovery, real persistent quota and Minecraft/restore qualification remain gated.
