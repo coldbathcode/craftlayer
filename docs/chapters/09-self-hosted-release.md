@@ -4,6 +4,8 @@
 
 **Milestone:** M4. **Requirements:** PR-001, PR-017–018, PR-021–022; NFR-01–10.
 
+Unified priority amendment: F2 delivers family-world backup/recovery before this release chapter; F2.5/F3 deliver provisioning/lifecycle. Reuse those services/runbooks and qualify full Core database/artifact/key/upgrade recovery here. All claimed F-track gates also apply to release. See [track](../delivery/minecraft-track.md).
+
 ## Objective
 
 Ship a documented, measured and recoverable self-hosted Core release that remains useful without CraftLayer Cloud.

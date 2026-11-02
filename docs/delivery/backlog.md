@@ -1,8 +1,10 @@
 # Engineering backlog
 
-**Chapters 00–02 are implemented and locally verified; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
+**Chapters 00–02 are implemented and accepted for advancement; CL-03-01–06 verified, CL-03-07 open; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
-Each chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
+This table preserves the original 84 numbered chapter tasks. The [16-task Minecraft management track](minecraft-track.md) adds F0 → F1 → F2 → F2.5 → F3 before new CL-04 bot work; all F tasks are unimplemented and need explicit authorization. F1 depends on 00–01/F0, not bots or model routing. See [reconciliation](unified-reconciliation.md) for reuse and exact scope.
+
+Each original chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
 
 | Task | Work item | Dependency | Size | State |
 | --- | --- | --- | --- | --- |
@@ -34,7 +36,7 @@ Each chapter is a conservative dependency chain of seven reviewable tasks. Depen
 | [CL-03-05](../chapters/03-fleet-engine.md) | Pause, cancel and emergency stop | CL-03-04 | L | Verified |
 | [CL-03-06](../chapters/03-fleet-engine.md) | Authorized event projection and recovery | CL-03-05 | L | Verified |
 | [CL-03-07](../chapters/03-fleet-engine.md) | Runtime fault suite and review | CL-03-06 | L | Not started |
-| [CL-04-01](../chapters/04-minecraft-adapter.md) | Server, protocol and authentication spike | Chapter 03 gate | L | Not started |
+| [CL-04-01](../chapters/04-minecraft-adapter.md) | Server, protocol and authentication spike | Chapter 03 + F3 gates; explicit Chapter 04 authorization | L | Not started |
 | [CL-04-02](../chapters/04-minecraft-adapter.md) | Private world Compose profile | CL-04-01 | M | Not started |
 | [CL-04-03](../chapters/04-minecraft-adapter.md) | Bot lifecycle and single-session ownership | CL-04-02 | L | Not started |
 | [CL-04-04](../chapters/04-minecraft-adapter.md) | Observation and navigation primitives | CL-04-03 | L | Not started |

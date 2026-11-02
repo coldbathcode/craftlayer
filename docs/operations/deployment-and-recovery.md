@@ -73,3 +73,7 @@ Announce compatibility, back up, enter maintenance, drain, apply schema with mig
 | Child sees forbidden UI/data | Disable affected access and treat as security defect | Rely solely on hiding a menu |
 
 Detailed executable runbooks are Chapter 09 deliverables and must identify commands for the pinned release.
+
+## Unified family management scope
+
+The opening planning-only description is historical: current Core Compose and local account/provider/simulation services exist as recorded in [status](../delivery/status.md). [Minecraft preservation/recovery](minecraft-preservation.md) is the planned F0–F3 procedure for in-place adoption, separately approved backup capture, daily/14-day/weekly off-host policy, isolated restore, save-on failure cleanup and ownership-safe rollback. Keep existing game Compose and world storage separate from CraftLayer. Never run installation/recovery commands on Contabo without explicit authorization, and never infer that adding server metadata starts or owns its container. Production network/TLS/MFA and recovery remain unverified. Chapter 09 extends these F-track runbooks for full Core DB/artifact/key upgrades instead of deferring family recovery until then.

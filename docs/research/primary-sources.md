@@ -26,3 +26,12 @@ The Supabase Postgres best-practices skill informed index, transaction and RLS r
 - Chapter 10/11: provider commercial permissions, subscription/payment behavior, privacy/tax obligations and hybrid runner threat model; specialist review where needed.
 
 Do not claim domain availability, trademark clearance, guaranteed capacity, legal compliance or provider resale permission from this document. Those remain unresolved launch decisions.
+
+## Unified management planning references — 2026-11-02
+
+Read-only official documentation consulted for REC-01. These support the planned boundaries; they do not qualify installed Contabo versions. At F0/F2 pin the actual Paper/Geyser/Floodgate build and verify its behavior before selecting commands.
+
+- [Docker Engine security](https://docs.docker.com/engine/security/): daemon access is highly privileged; restrict the node trust domain.
+- [Docker packet filtering/firewalls](https://docs.docker.com/engine/network/packet-filtering-firewalls/): inspect effective Docker networking/firewall rules rather than treating a host firewall summary as sufficient.
+- [Floodgate features](https://geysermc.org/wiki/floodgate/features/): Floodgate documents edition-aware whitelist support and UUID input; qualify the installed version and identity provenance before any access change.
+- [MCP authorization](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization): plan resource/audience-bound OAuth for HTTP transport; pin SDK/protocol at F25 implementation. CraftLayer requires remote authentication regardless of generic optional protocol support.

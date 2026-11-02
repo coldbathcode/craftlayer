@@ -1,6 +1,6 @@
 # Risks, assumptions and unresolved decisions
 
-Status: maintained through Chapter 02, 2026-11-01. Owners below are proposed responsibilities, not named people or completed reviews. Defaults let engineering proceed safely within an authorized chapter; they do not imply user approval for commercial or irreversible actions.
+Status: reconciled through CL-03-06 and REC-01 documentation, 2026-11-02. Owners below are proposed responsibilities, not named people or completed reviews. Defaults let engineering proceed safely within an authorized chapter; they do not imply user approval for commercial or irreversible actions.
 
 ## Decisions to resolve
 
@@ -19,7 +19,7 @@ Status: maintained through Chapter 02, 2026-11-01. Owners below are proposed res
 | D-11 | Sandbox implementation | Narrow broker; restricted local runner, hosted isolation separately reviewed | 08 / security/runtime engineer | Egress/process/filesystem/isolation tests on supported platform |
 | D-12 | Telemetry and error collection | Foundation implemented: disabled Next telemetry, local redacted logs and network-disabled tests; full monitoring remains 09 | 00/09 / operator | Network deny and log-secret tests |
 | D-13 | Retention defaults | Events 7d, audit 90d, artifacts 30d; configurable | 01/08/09 / owner/operator | Privacy/resource review and purge/backup behavior |
-| D-14 | First release scope | Full Core 00–09; earlier Minecraft preview labeled separately | Before preview/release / owner | Written scope ADR, feature matrix and evidence |
+| D-14 | First release scope | ADR 0015: F1 observation preview, F2 access/backup family gate, F3 lifecycle; full Core 00–09 + applicable F gates | Before preview/release / owner | Written scope ADR, feature matrix and evidence |
 | D-15 | GitHub ownership/visibility | User creates empty craftlayer repository | Resolved: coldbathcode/craftlayer, standing build-step push authorization / owner | Remote and commits verified in Git |
 | D-16 | Domains and trademark | Working name only; availability not verified | Before launch / owner | Registrar/trademark review; no claim from this plan |
 | D-17 | Security disclosure and maintainers | No fabricated email/maintainers | 09 / owner | Monitored channel, response ownership and policy |
@@ -33,6 +33,18 @@ Status: maintained through Chapter 02, 2026-11-01. Owners below are proposed res
 | D-24 | Provider runtime and operability boundary | ADR 0013: canonical mission/task/lease/outcome plumbing starts 03; reports bounded to 100, retention/restore in 09 | 03/05/09 / runtime/operator | Replay-safe outcomes, canonical scope, complete key inventory, cursor reports and restore drills |
 
 | D-25 | Runtime scope and worker authority | ADR 0014: explicit adult-only simulation, trusted API coordinator, org/environment-bound workers, persisted fence/stop and bounded SSE | 03 / runtime/security | Claim/replay races, current authority, queue tampering, partition watchdog and event isolation |
+
+## Unified management decisions
+
+| ID | Decision | Working default | Resolve by / responsible role | Evidence required |
+| --- | --- | --- | --- | --- |
+| D-26 | Paper/Geyser/Floodgate identity compatibility | Inspect actual pinned versions; verified immutable UUID/XUID provenance, unresolved identity pending, no auth/allowlist-off bypass | F0 inventory/F2 / adapter-security engineer | Real Java/Bedrock denial/admission/rename/revoke and safe first-time enrollment |
+| D-27 | Remote privileged entry and MFA | Private HTTPS, MFA covering every privileged path, direct origin blocked; local accounts/recovery stay standalone | F1 before remote use / operator-security | UI/REST/SSE and later MCP access/expiry/MFA/bypass tests; chosen optional proxy recipe |
+| D-28 | Consistent backups, keys and off-host target | Daily ≥14d, weekly encrypted off-host, separate protected keys; no destination transfer without approval | F0 plan/F2 / operator | Actual save behavior, disk/headroom, retention/failure and isolated restore; RPO/RTO measured |
+| D-29 | Node isolation, signing and enforceable disk quotas | ADR 0016: dedicated/rootless where compatible, outbound mTLS + signed expiring jobs; deny unsupported hard storage limits | F2.5 / node-security engineer | Privilege review, local replay journal, rotate/revoke, resource/port/mount and crash proofs |
+| D-30 | Independent approval availability | Preserve existing no-self-approval semantics; second authorized adult required for high-risk jobs; surface unavailable actions | F2/F25 / owner-security | Requester/agent cannot self-approve; changed plan/policy/target expires approval. No single-parent bypass inferred |
+| D-31 | Unified naming and repo sketches | ADR 0015/management architecture canonical colon permissions, routes/tool names; preserve existing package/API names | F1/F25 / lead engineer | Schema/SDK compatibility, no duplicate auth/audit/runtime, documented backup alias shares operation identity |
+| D-32 | Delivery versus production authority | F phases planned only; existing CL-03-07 authorization persists; Contabo read/backup/write separate | Every boundary / operator-owner | Exact task/host authorization and environment-specific acceptance; no prompt-as-approval |
 
 ## Engineering risk register
 
@@ -52,6 +64,20 @@ Status: maintained through Chapter 02, 2026-11-01. Owners below are proposed res
 | Cloud work delays useful Core | Medium / plausible | Explicit M4 gate and separate repo/authorization | Defer Cloud design/implementation |
 | Unbounded events/blackboard exhaust storage | Medium / likely | TTL/byte limits, cursor pagination, retention and monitoring | Pause ingestion/mission safely; retain essential audit/ledger |
 | Plan diverges from implementation across sessions | Medium / likely | Stable IDs, chapter review, status/handoff and ADR changes | Reconcile docs/code before next gate |
+
+## Minecraft preservation and infrastructure risks
+
+| Risk | Impact / likelihood assumption | Mitigation / gate |
+| --- | --- | --- |
+| Historical Contabo paths/state/backup assumptions wrong | Critical / plausible | Approved read-only inventory; unknown blocks readiness; never start/recreate to discover |
+| Read-only access mistaken for backup/save or deployment approval | Critical / plausible | Distinct approval scopes in preservation runbook; scripts make no mutation by default |
+| Floodgate identity spoof/name/link drift | Critical / plausible | D-26, pinned real-client gate, immutable provenance, fail closed |
+| Docker agent compromise affects unrelated host services | Critical / plausible | Dedicated host where possible, typed broker + local policy, no socket in apps; document host-level residual risk |
+| Save-off stranded after backup crash or last good backup pruned | Critical / plausible | Bounded save-on cleanup/watchdog, protected verified sets, failure injection and off-host isolated restore |
+| Port/capacity race or unsafe cleanup destroys existing world | Critical / plausible | Transactional reservations + host recheck, immutable ownership journal, retain all data volumes, fault/preservation suite |
+| Private-entry proxy leaves REST/SSE/MCP bypass or no MFA | Critical / plausible | Test every route/direct origin, keep remote access unavailable until D-27 proof |
+| Parent dashboard falsely declares family-ready from fakes | High / plausible | Real client/restore/network gates; F1 observation and F2/F3 capability labels distinct |
+| High-risk workflow unusable for one adult | Medium / plausible | D-30 explicit availability limit; no weakening of independent approval without separately reviewed scope change |
 
 ## Decision workflow
 

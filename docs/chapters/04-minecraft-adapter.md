@@ -4,6 +4,8 @@
 
 **Milestone:** M2. **Requirements:** PR-009–010; NFR-03–04.
 
+Unified priority amendment: new bot work follows F0–F3 management and the Chapter 03 gate, then explicit Chapter 04 authorization. Reuse approved server/auth/plugin fixtures and registry; never recreate the adopted production server. See [track](../delivery/minecraft-track.md).
+
 ## Objective
 
 Connect a bounded Mineflayer agent to a private Java world and execute deterministic safe movement and inventory/build primitives.

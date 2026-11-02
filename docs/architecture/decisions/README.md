@@ -1,6 +1,6 @@
 # Architecture decision records
 
-These ten records are proposed engineering defaults derived from the blueprint. They are ready for review; none is represented as a measured/approved implementation. Add a new numbered record for material design changes and cross-link superseded decisions.
+Records 0001–0010 are proposed engineering defaults derived from the blueprint; later records state their own adopted/planned status and implementation evidence. None implies independent security certification. Add a new numbered record for material design changes and cross-link superseded decisions.
 
 | ADR | Decision |
 | --- | --- |
@@ -24,3 +24,7 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0013 — Provider gateway boundary](0013-provider-gateway-boundary.md) records Chapter 02 provider contracts, strict cost eligibility, operator endpoint trust and durable accounting decisions.
 
 [ADR 0014 — Runtime authority and recovery](0014-runtime-authority-and-recovery.md) records Chapter 03 simulation scope, worker/coordinator trust, leases, truthful cancellation and durable queue/events.
+
+[ADR 0015 — Unified control plane and management delivery order](0015-unified-control-plane.md) adopts documentation reconciliation and F0–F3 ordering, preserving original task IDs and chapter evidence; it grants no implementation scope.
+
+[ADR 0016 — Privileged node/provisioning boundary](0016-node-provisioning-boundary.md) records the planned outbound node identity, signed commands, fixed broker policy and ownership-safe recovery contract; implementation remains gated.

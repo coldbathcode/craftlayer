@@ -1,6 +1,6 @@
 # Verification, fault injection and release quality
 
-Status: Chapter 00 tests are implemented and executed; see [foundation review](../reviews/00-foundation.md) and [current status](../delivery/status.md). The remaining chapter suites below are planned and have not run. Original planning-only validation remains separate historical evidence.
+Status: Chapters 00–02 and CL-03-01–06 have recorded executed evidence in [current status](../delivery/status.md) and reviews; CL-03-07 remains open. Later chapter and Minecraft management suites are planned. Original planning-only validation remains historical evidence.
 
 ## Test pyramid and environments
 
@@ -63,3 +63,7 @@ A flaky safety test blocks the gate until understood. Quarantining a non-safety 
 ## Performance acceptance
 
 Keep a versioned benchmark script with warmup, duration, concurrency and host profile. Report p50/p95/p99 and errors, not averages alone. Measure stop request acceptance separately from physical quiescence, model latency separately from API latency, and resource use with/without Ollama. Record results against NFR targets and document justified adjustments before release.
+
+## Unified Minecraft gates
+
+[MC-01–12 acceptance matrix](minecraft-management.md) maps PR-023–035 to F0/F1/F2/F25/F3 and all unified §16.9 cases, with mock-engine, actual Docker, real Java/Bedrock client and isolated restore requirements. [Deployment checklist](../security/DEPLOYMENT_CHECKLIST.md) tracks live/manual evidence. No Minecraft gate has been executed by REC-01. Documentation checks prove structure only. Existing simulation tests cannot qualify physical game access, world preservation, public-port isolation, backup recovery or node host security.

@@ -1,6 +1,6 @@
 # Chapter 02 — Provider gateway
 
-**Status:** implemented and locally verified; owner review pending. Chapter 03 requires authorization. **Implementation evidence:** [build log](../delivery/build-log.md).
+**Status:** implemented and locally verified; accepted for advancement; Chapter 03 authorized. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M1. **Requirements:** PR-004–007, PR-021; NFR-09.
 

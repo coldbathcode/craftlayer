@@ -1,6 +1,6 @@
 # Chapter 00 — Foundation
 
-**Status:** implemented and verified; owner acceptance review pending. **Implementation evidence:** [chapter review](../reviews/00-foundation.md) and [build log](../delivery/build-log.md).
+**Status:** implemented and verified; accepted for advancement; not independent security certification. **Implementation evidence:** [chapter review](../reviews/00-foundation.md) and [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-001, PR-003, PR-017; NFR-09.
 

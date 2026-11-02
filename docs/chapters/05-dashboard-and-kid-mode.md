@@ -4,6 +4,8 @@
 
 **Milestone:** M2. **Requirements:** PR-011–012, PR-021; NFR-02, NFR-08.
 
+Unified priority amendment: F1/F2 implement the parent management dashboard before bot-focused Chapter 05. Extend its account shell, scoped SDK/cache and design system here; do not rebuild setup/identity or mark F-track work as completed Chapter 05. See [track](../delivery/minecraft-track.md).
+
 ## Objective
 
 Give adults a clear control dashboard and children a three-step approved Minecraft mission launch with visible, accurate stop behavior.

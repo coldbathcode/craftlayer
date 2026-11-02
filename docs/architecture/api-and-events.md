@@ -1,6 +1,6 @@
 # API, event stream, CLI and extension contracts
 
-Status: Chapters 00–02 identity and provider-administration routes are implemented; later routes remain design contracts. Strict Zod response projections are shared by Fastify/OpenAPI and the browser SDK; request schemas live in explicit Fastify route definitions. SDK transport validates the shared schema rather than duplicating DTO types. See the [identity runbook](../development/identity-and-recovery.md) and [provider runbook](../development/providers-and-budgets.md). A generated endpoint-method SDK can extend this transport in Chapter 03.
+Status: Chapters 00–02 identity/provider routes and Chapter 03 simulation runtime through CL-03-06 are implemented; Minecraft management/MCP routes remain planned. Strict Zod response projections are shared by Fastify/OpenAPI and the browser SDK; request schemas live in explicit Fastify route definitions. SDK transport validates the shared schema rather than duplicating DTO types. See the [identity runbook](../development/identity-and-recovery.md) and [provider runbook](../development/providers-and-budgets.md). A generated endpoint-method SDK can extend this transport in Chapter 03.
 
 ## HTTP conventions
 
@@ -95,4 +95,8 @@ Adapters advertise contract version, supported task/tool schemas, idempotency cl
 
 ## Chapter 03 command checkpoint
 
-Scoped simulation agents/groups, immutable environment-bound templates, mission draft/list/get/execute and typed SDK/CLI are implemented in CL-03-02. Mission create/execute require UUID `Idempotency-Key`; changes use `expected_version`. Only original authorized response snapshots replay, and execution workers must revalidate session-bound grants. Streaming/stop/worker protocol remain later Chapter 03 checkpoints. See [runtime runbook](../development/runtime.md) and ADR 0014.
+Scoped simulation agents/groups, immutable environment-bound templates, mission draft/list/get/execute and typed SDK/CLI are implemented in CL-03-02. Mission create/execute require UUID `Idempotency-Key`; changes use `expected_version`. Only original authorized response snapshots replay, and execution workers must revalidate session-bound grants. Registered worker RPC, model/approval checks, durable stop, recovery and scoped replay/SSE are implemented through CL-03-06; final restart/fault qualification remains CL-03-07. See [runtime runbook](../development/runtime.md) and ADR 0014.
+
+## Unified management contract extension
+
+Canonical planned `/servers`, `/nodes`, `/operations`, backup/restore and MCP resources, colon permissions and input naming resolutions are in [management architecture](minecraft-management.md). All management writes return durable operation IDs and require current scope, UUID idempotency, audit and reconciliation. No raw RCON/shell/Docker endpoint. Extend event types/cursors for server scope; current mission-only envelopes do not automatically cover server operations. Preserve implemented error envelope, `/audit`, SSE and CLI cookie/session transport; the planned CLI exchange routes in the table are not implemented machine credentials. OpenAPI 3.1 and generated endpoint coverage must be qualified in F1/F25, not inferred from current Swagger registration.

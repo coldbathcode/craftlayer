@@ -44,3 +44,9 @@ Staged whitespace check: **PASS**. Initial commit is recorded in Git history on 
 ## Limits of this evidence
 
 No application lint, typecheck, build, unit/integration/browser tests, provider contract tests, Compose validation, game connection, sandbox isolation, security scan, restore drill or performance benchmark has run: those implementations do not exist. No claim is made that the proposed design already meets its operational targets. Structural documentation checks cannot prove software correctness, security, usability or commercial/legal suitability.
+
+## REC-01 structural validation extension — 2026-11-02
+
+The original counts/results above are historical. The current checker preserves the twelve original chapters and 84 original tasks, and additionally requires five F-track chapters, sixteen ordered F tasks matching their dedicated track index, required phase sections including rollback/backup, known dependency targets and unified security/recovery/architecture entry points. Original blueprint SHA remains unchanged.
+
+REC-01 verification: `pnpm docs:check` and `git diff --check` passed (exit 0). A temporary-copy checker harness passed its positive baseline and rejected six independent corruptions: duplicate F task, missing rollback section, unknown F dependency, mismatched track ID, altered source, and missing original chapter (all expected failure exit 1). Restoring each modified fixture returned success. No fixture mutation touched repository documents. This verifies the checker behavior, not Minecraft functionality. Environment: macOS arm64, Node 22.23.3, pnpm 10.23.0, Python 3.15.2.

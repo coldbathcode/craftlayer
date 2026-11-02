@@ -1,10 +1,12 @@
 # Dashboard, onboarding and family experience
 
-Status: interaction requirements, not a visual implementation. Chapter 05 chooses and documents a coherent design system, then tests it with keyboard and child-role journeys.
+Status: interaction requirements; the existing /account console is implemented. F1–F2 extend it for family management before the bot-focused Chapter 05, which reuses that shell/design rather than rebuilding it. See [management track](../delivery/minecraft-track.md).
 
 ## Information architecture
 
-Adult navigation: Overview, Worlds/Environments, Agents & Groups, Missions, Templates, Usage, Settings. Settings contains Members & Roles, Providers, Budgets, Audit and instance administration only where authorized. Show the selected organization/world clearly in all execution views.
+Adult management navigation: Servers, Players & Access, Backups, Operations, Audit, Settings. Adopt Existing and Create New are separate flows; Create New is unavailable until F2.5. F1 shows observation/freshness/connection guidance; F2 adds verified access and backups; F3 adds approved lifecycle/update controls. No premature family-ready badge.
+
+Later agent navigation: Overview, Worlds/Environments, Agents & Groups, Missions, Templates, Usage, Settings. Settings contains Members & Roles, Providers, Budgets, Audit and instance administration only where authorized. Show the selected organization/world clearly in all execution views.
 
 Child navigation: Play (world → army → preset), My Agents, Current Mission. No generic admin links, raw logs, arbitrary chat prompt, coding/research navigation or provider metadata. API denial remains mandatory when routes are manually entered.
 
@@ -12,10 +14,10 @@ Child navigation: Play (world → army → preset), My Agents, Current Mission. 
 
 1. Owner proves local setup authority and creates installation/admin identity.
 2. Create first organization/project and set safe resource ceilings.
-3. Connect a local Ollama endpoint or optional hosted provider; show current free-only eligibility and uncertainty without requiring a paid key.
-4. Connect/create private test world with explicit server prerequisites and consent to any third-party license terms.
-5. Create 2 bots, a group and approved shelter preset. Test connection and stop.
-6. Optionally create a child account and assign world/group/preset access.
+3. Review approved preflight, preservation/recovery and private TLS/MFA entry. Register existing server read-only in place; never silently start it.
+4. See observed security/backup gaps. After F2 and separate live-write approval, verify Java/Bedrock identity, enforce allowlist and test denied/admitted/revoked access.
+5. Set daily backups/retention/off-host destination and verify isolated restore. Show actual readiness and unresolved gates.
+6. Optionally create a child account with assigned safe world views. Bot/provider/group/preset setup is a separate later flow and cannot block family management.
 
 Wizard steps are resumable and server-validated. Unavailable providers do not prevent identity/world setup. Missing dependencies receive actionable explanations, not endless spinners. An already bootstrapped instance cannot expose owner setup again.
 

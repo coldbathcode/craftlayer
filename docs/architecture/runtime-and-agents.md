@@ -78,3 +78,7 @@ Transient transport/429 → bounded exponential backoff with jitter and eligible
 Record redacted prompt/template version, model ID, price/policy snapshot, sampling parameters, context references, tool decisions, latency and verifier outcomes. Raw prompt/response retention is opt-in, protected and bounded; child/private data stays minimized. Do not store chain-of-thought; store short decisions and observable evidence.
 
 Maintain fixtures for valid/invalid plans, prompt injection, unreachable resources, conflicting reservations, insufficient materials and fabricated research claims. Evaluate schema success, completion, tool violations, paid dispatch count, cost/tokens, latency and human review quality. Deterministic mode is the CI baseline; real model evaluations are separately authorized and never overwrite stable fixtures silently.
+
+## Reconciled implementation and management boundary
+
+ADR 0014 and migrations 0008–0015 are authoritative for current simulation states (including `cancelling`), API-coordinator ownership, bearer-only workers, stops, approvals and scoped SSE through CL-03-06. The diagrams above retain the original conceptual model; final runtime qualification remains CL-03-07. Server-management operations reuse reliability principles through separate domain ports, not arbitrary mission tools. No Minecraft/Docker/RCON capability exists in the simulation registry. [Management architecture](minecraft-management.md) defines its own operation/backup grants, current-authority guards and privileged node protocol; no LLM is required.

@@ -1,6 +1,6 @@
 # Relational data model and tenant isolation
 
-Status: logical design for the full product. Chapters 00–02 have authoritative SQL migrations for organizations/projects, identity/RBAC/recovery/audit and provider configuration/budget ledgers; later runtime entities remain planned. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
+Status: logical design for the full product. Chapters 00–02 have authoritative SQL migrations for organizations/projects, identity/RBAC/recovery/audit and provider configuration/budget ledgers; runtime migrations 0008–0015 implement simulation orchestration through CL-03-06. Minecraft management tables remain planned. Use ordinary PostgreSQL; no Supabase-hosted dependency is introduced.
 
 ## Conventions
 
@@ -106,3 +106,7 @@ Migrations `0002_identity.sql` through `0004_recovery_outbox.sql` define restric
 ## Implemented provider boundary
 
 Migrations `0005_provider_connections.sql` through `0007_provider_budget_ledger.sql` introduce encrypted connections, catalog snapshots, policy/stop/cooldown state, hierarchical budget windows, request replay identities, reservations/links and an append-only usage ledger. SQL migrations are authoritative for forced RLS, checks, roles and grants; Drizzle metadata describes the same relationships. Global instance counters require the internal transaction flag and are not exposed in tenant reports. Numeric counters are integer decimal strings at the API. Mission/task labels do not yet reference canonical runtime entities; Chapter 03 must establish that boundary. See ADR 0013 for conservative settlement and the operator runbook for recovery.
+
+## Unified server-management additions
+
+[Management architecture](minecraft-management.md) defines staged nodes/enrollment/credentials, server/environment mappings, verified player identities/access, separate durable operations/attempts/receipts/outbox, schedules/backup policy/manifests, deployments and resource/port reservations. These are unimplemented F1/F2/F2.5 aggregates, not aliases for simulation missions. Extend tenant composite FKs, forced RLS, restricted roles and scoped repositories; do not edit applied migrations or duplicate users/memberships/audit. Stable server/world identity and edition/issuer provenance are required; display names/paths/queued org IDs are never authority. No cascade world/backup deletion. Existing `runtime_*` tables and provider ledger remain authoritative for their implemented domains; old prospective mission/task-label notes above describe their Chapter 02 entry state, superseded by ADR 0014 canonical runtime dispatch guards.

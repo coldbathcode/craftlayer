@@ -29,3 +29,7 @@ The original [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md) is unchan
 - Strict free-only paths must account for provider-side pricing/feature/fallback behavior. Catalog metadata alone cannot absolutely guarantee an upstream invoice.
 - License, domains, real model selection, exact versions, sandbox runtime, dates and Cloud prices remain decisions with explicit gates.
 - This task produces a planning repository. The blueprint's embedded request to implement Chapter 00 is preserved as source text and scoped to a later explicit build request.
+
+## Unified v0.4 coverage amendment
+
+The source remains unchanged. [REC-01](../delivery/unified-reconciliation.md) maps implemented reuse and input conflicts. PR-023–035 cover management/adoption/player access/backup/node/provisioning/MCP. [F0–F3 track](../delivery/minecraft-track.md), [management architecture](../architecture/minecraft-management.md), ADRs 0015–0016, [threat model](../security/THREAT_MODEL.md), [acceptance](../testing/minecraft-management.md) and [preservation](../operations/minecraft-preservation.md) derive the unified inputs into independently testable work. Original 84 tasks remain; 16 F tasks are added, unimplemented and separately gated. The bot build is no longer the first preview; F2 is the earliest family-ready access/backup dashboard, F3 the full initial lifecycle scope. Historical planning-only statements above describe the original pass, not current delivery state.

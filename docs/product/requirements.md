@@ -1,12 +1,12 @@
 # Product requirements and traceable outcomes
 
-Status: proposed implementation specification. Source: [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md). Requirement IDs are stable and referenced by chapters and acceptance tests.
+Status: unified product contract reconciled 2026-11-02. Sources: unchanged [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md), [unified v0.4](../CRAFTLAYER_UNIFIED_SPEC.md) and [build prompt](../BUILD_PROMPT.md). IDs are stable; implementation evidence lives in [status](../delivery/status.md), not in these requirement tables. PR-023–035 are planned additions; completed invariants remain binding.
 
 ## Product purpose
 
-A family can deploy a private instance, create safe accounts, select a Minecraft world and army, launch an approved mission, and watch coordinated progress. A developer can use their own models and implement adapters. A future managed service can host Core without making self-hosted users migrate.
+One open-source self-hosted Core combines safe Minecraft server management, registered Docker hosts and the preserved agent runtime, identity/RBAC, audit, dashboard, REST, jobs/events and later secured MCP. Core works without Cloud, internet entitlement checks or an LLM. Developers can connect models and build adapters; optional Cloud remains separately implemented.
 
-The first demonstrable outcome is a bounded small Minecraft structure completed by two bots, with visible progress and a reliable stop control. A fully autonomous open-ended civilization is outside the first release.
+Immediate outcome: preserve the existing family world, adopt its server read-only, then provide verified Java/Bedrock access control and recoverable backups in a parent dashboard. Docker provisioning follows family safety. Two-bot construction remains a later outcome, with reliable Stop All; no completed orchestration work is rebuilt.
 
 ## Personas and jobs
 
@@ -46,12 +46,27 @@ The first demonstrable outcome is a bounded small Minecraft structure completed 
 | PR-020 | Optional commercial Cloud includes BYOK isolation, hosting subscriptions, metering and abuse controls | 11 only; separate repository gates |
 | PR-021 | Audit history records actor, policy decision and state changes without raw secrets or private prompt logs by default | 01 onward; redaction and audit atomicity |
 | PR-022 | Extension authors receive examples, contracts, documented errors and compatibility policy | 07–09; third-party adapter fixture |
+| PR-023 | Inventory/preserve the existing deployment; adoption binds it in place read-only without start/recreate/migration/world or unrelated-workload changes | F0–F1; MC-02/11 |
+| PR-024 | Multi-server registry and private capability-based observation adapter expose status/players/freshness and security gaps without bots/models | F1; MC-02/12 |
+| PR-025 | Management mutations return durable operation IDs; current scoped permissions, UUID idempotency, atomic audit/outbox, leases/fences and uncertain-effect reconciliation apply at every surface | F1–F3; MC-01/06 |
+| PR-026 | Verify Java UUID and Bedrock/Floodgate immutable identity/provenance; online auth and strict allowlists deny unknown/spoofed identities without an onboarding join window | F2; MC-03 |
+| PR-027 | Adult-only desired/actual player access shows pending/applied/failed/drifted; verified revoke/expiry, separate kick, no implicit OP or web/game identity equivalence | F2; MC-04 |
+| PR-028 | Private management plane only: no public RCON/Docker/DB/Redis/node listener; no socket/RCON secrets in API/web/MCP/bot workers; TLS/private access and remote privileged MFA | F0–F3; MC-05/10 |
+| PR-029 | Daily consistent encrypted backups, ≥14-day retention, weekly off-host copy, separate keys, disk/health alerts and successful isolated restore; approved staged restore protects original world | F2; MC-08 |
+| PR-030 | One-use expiring node enrollment, outbound mTLS, rotation/revocation and signed expiring target-bound jobs; no arbitrary shell/RCON/Docker passthrough or caller-selected host paths | F2.5; MC-06/10 |
+| PR-031 | Adult-approved template dry-run/EULA, pinned vetted image/plugins, CPU/RAM/disk quotas, capacity/ports across all workloads, reserved resources and private networking before provision | F2.5; MC-07 |
+| PR-032 | Idempotent deployment/readiness/crash reconciliation and ownership-proven rollback; retain worlds/backups, preserve manual stops; approved update/restore never assume image downgrade undoes world changes | F2.5–F3; MC-09/11 |
+| PR-033 | REST/UI/MCP share domain policy, audit and operations; secured Streamable HTTP validates OAuth audience/resource/scopes; human approval for machine provisioning; high-risk automatic tools disabled | F2.5–F3; MC-01/10 |
+| PR-034 | Typed start/stop/restart, redacted bounded logs/metrics, staged updates and retained decommission across scoped servers; adopted lifecycle enabled only by explicit approval | F3; MC-11 |
+| PR-035 | Mobile/keyboard parent dashboard supports observation then verified access/backups/audit with providers absent; child has assigned safe views only, no infrastructure/access/backup administration | F1–F2; MC-12 |
 
 ## Release scope
 
-First vertical slice (M2): local accounts, tenant boundaries, provider policy, scheduler, Minecraft connection, adult dashboard, child presets, cooperative small build, Stop All. Use a 5×5 shelter fixture with explicit terrain/material requirements; distinguish prepared-world cooperation from later survival gathering.
+First management previews: F1 observation-only dashboard, then F2 family-ready access/backups after applicable [acceptance gates](../testing/minecraft-management.md). Lifecycle arrives in F3, after F2.5 secure provisioning. No feature is Contabo-ready without explicit authorized preflight/remediation and real evidence. See [ADR 0015](../architecture/decisions/0015-unified-control-plane.md) and [track](../delivery/minecraft-track.md).
 
-Core v0.1 candidate (M4): all Core chapters 00–09 accepted, including coding/research examples, install/restore/upgrade documentation, CLI, provider contracts and security gates. Shipping a smaller Minecraft-only preview is allowed if clearly labeled and documented in a new scope decision. It must not be advertised as the full Core release.
+Preserved agent vertical slice (M2), after the management track: local accounts, tenant boundaries, provider policy, scheduler, Minecraft connection, adult dashboard, child presets, cooperative small build, Stop All. Use a 5×5 shelter fixture with explicit terrain/material requirements; distinguish prepared-world cooperation from later survival gathering.
+
+Core v0.1 candidate (M4): all Core chapters 00–09 and applicable F-track gates accepted, including coding/research examples, install/restore/upgrade documentation, CLI, provider contracts and security gates. Shipping a smaller Minecraft-only preview is allowed if clearly labeled and documented in a new scope decision. It must not be advertised as the full Core release.
 
 Excluded until separately designed: arbitrary plugin uploads, Kubernetes requirement, unrestricted internet agents, public child signup, payments in Core, provider token resale, public Minecraft servers by default, SSO as a local-auth replacement, autonomous production deployment, multi-region HA, general-purpose distributed consensus, and unbounded multi-agent chat.
 

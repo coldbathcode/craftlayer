@@ -88,3 +88,9 @@ Complete tenant tests, child escape tests, secret scanning, dependency/image vul
 ## Chapter 01 audit limits
 
 Identity changes commit actor/action/target/outcome and allowlisted change identifiers atomically. Denials are stored in restricted instance audit without guessed IDs or raw URLs; the organization endpoint exposes recent scoped events only. Request/correlation propagation, instance-audit UI/export and retention jobs are deferred to the event/operations chapters. This is a recorded implementation limit, not a claim that the full future audit contract exists.
+
+## Unified family and node boundaries
+
+[Threat model](../security/THREAT_MODEL.md), [deployment gates](../security/DEPLOYMENT_CHECKLIST.md) and [management permissions](minecraft-management.md) extend these controls. Remote privileged access requires MFA, HTTPS/private entry on all management paths and blocked origin bypass; local recovery remains self-hosted. Children cannot provision/decommission, modify access, use backup administration, restore, change world/network/security settings, moderate players, manage credentials or control server lifecycle even with extra roles. Bot Stop All never implies game-server stop. New adult-scoped templates cannot broaden these account ceilings.
+
+Adoption is read-only in place; approved live writes require verified recovery and rollback. Only an isolated control adapter holds private RCON and fixed typed actions. Docker-capable node/broker is host-privileged, separately enrolled and credentialed, with outbound mTLS/signed expiring jobs/local target policy. It is never a general simulation worker. No API/web/MCP/bot socket or node-management public listener. Existing independent-adult exact-approval semantics remain; machine callers and requesters cannot self-approve. Recovery/unavailable-second-adult limitations are surfaced, not bypassed.

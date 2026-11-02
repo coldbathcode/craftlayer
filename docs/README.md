@@ -1,11 +1,12 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; Chapter 04 requires authorization; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
 | Layer | Purpose | Read |
 | --- | --- | --- |
+| Unified input | Extend Core with Minecraft management; embedded prompts do not grant scope | [Unified v0.4](CRAFTLAYER_UNIFIED_SPEC.md), [build prompt](BUILD_PROMPT.md), [reconciliation](delivery/unified-reconciliation.md) |
 | Source | Preserve original product intent | [Blueprint v0.2](source/CraftLayer_Build_Blueprint.md), [coverage map](product/blueprint-coverage.md) |
 | Product | Define personas, scope, outcomes and targets | [Requirements](product/requirements.md), [dashboard journeys](product/dashboard-and-journeys.md) |
 | Architecture | Explain contracts and engineering decisions | Files below plus [ADRs](architecture/decisions/README.md) |
@@ -22,6 +23,8 @@
 - [Provider eligibility, budgets, ledger and credentials](architecture/model-routing.md).
 - [Identity, permissions, child controls and threat model](architecture/security-and-access.md).
 - [REST, event stream, CLI and adapter contracts](architecture/api-and-events.md).
+- [Server management, operations, private adapters and nodes](architecture/minecraft-management.md).
+- [Threat model](security/THREAT_MODEL.md), [deployment gates](security/DEPLOYMENT_CHECKLIST.md), [preservation/backup/rollback](operations/minecraft-preservation.md), [Minecraft acceptance](testing/minecraft-management.md).
 - [Minecraft roles, blueprint, reservations and benchmarks](architecture/minecraft-cooperation.md).
 - [Coding isolation, approval workflow and research provenance](architecture/coding-and-research.md).
 - [Separate Cloud responsibilities and hybrid runner boundary](architecture/cloud-boundaries.md).
@@ -35,6 +38,11 @@
 | 01 | [Identity and RBAC](chapters/01-identity-and-rbac.md) |
 | 02 | [Provider gateway](chapters/02-provider-gateway.md) |
 | 03 | [Fleet engine](chapters/03-fleet-engine.md) |
+| F0 | [Preflight/preservation](chapters/F0-preflight.md) |
+| F1 | [Read-only control plane](chapters/F1-control-plane.md) |
+| F2 | [Family access/backups](chapters/F2-family-access.md) |
+| F2.5 | [Secure Docker provisioning](chapters/F2.5-docker-provisioning.md) |
+| F3 | [Multi-server operations](chapters/F3-server-operations.md) |
 | 04 | [Minecraft adapter](chapters/04-minecraft-adapter.md) |
 | 05 | [Dashboard and Kid Mode](chapters/05-dashboard-and-kid-mode.md) |
 | 06 | [Cooperative armies](chapters/06-cooperative-armies.md) |
@@ -66,3 +74,7 @@ Read the current status before choosing a task. Specifications are proposed impl
 ## Implemented provider gateway
 
 [Provider and budget runbook](development/providers-and-budgets.md), [provider review](reviews/02-provider-gateway.md) and [provider handoff](delivery/handoffs/02-provider-gateway.md) record protected optional configuration, conservative adapters/accounting and current qualification limits. No live inference is implied.
+
+## Unified delivery handoff
+
+[REC-01 handoff](delivery/handoffs/REC-01-unified-reconciliation.md) records documentation checks/publication and preserved dirty files. F1 is the first read-only dashboard; F2 is the earliest family-ready access/backup milestone with real acceptance evidence; F2.5 provisioning and F3 lifecycle follow. New implementation or Contabo work requires authorization. Current simulation runtime evidence and remaining CL-03-07 work are in [runtime runbook](development/runtime.md) and status; do not reconstruct completed chapters.

@@ -1,6 +1,6 @@
 # Chapter 01 — Identity and RBAC
 
-**Status:** implemented and verified; owner review pending. **Implementation evidence:** [chapter review](../reviews/01-identity-and-rbac.md) and [build log](../delivery/build-log.md).
+**Status:** implemented and verified; accepted for advancement; not independent security certification. **Implementation evidence:** [chapter review](../reviews/01-identity-and-rbac.md) and [build log](../delivery/build-log.md).
 
 **Milestone:** M0. **Requirements:** PR-002–004, PR-021; NFR-08.
 

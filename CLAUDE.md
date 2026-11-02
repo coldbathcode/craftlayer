@@ -14,7 +14,7 @@ Chapters 00–02 foundation, identity and provider gateway are implemented; cons
 
 ## Default implementation workflow
 
-When the user asks to start building without a different scope, execute Chapter 00, using task IDs `CL-00-01` onward. Explain any design deviation, implement tests alongside behavior, run the established checks, and prepare the chapter review. Stop at the chapter checkpoint unless the user authorizes further chapters. Existing authorization always takes precedence over this default.
+For an unspecified implementation request, inspect current authorization/status and continue the next authorized task; do not reset to Chapter 00 or infer F-track implementation permission from the unified inputs. Explain any design deviation, implement tests alongside behavior, run the established checks, and prepare the chapter review. Stop at the chapter checkpoint unless the user authorizes further chapters. Existing authorization always takes precedence over this default.
 
 For a continuation, read the handoff and status first. Verify which files and checks exist; do not regenerate completed work or invent test results. Use [the handoff template](docs/templates/agent-handoff.md) to leave a reproducible next action.
 

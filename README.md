@@ -1,8 +1,8 @@
 # CraftLayer
 
-A private home for coordinated AI agents. Open-source first and self-hostable; Minecraft is the first planned working example, followed by coding and research teams.
+One self-hostable Core for safe family Minecraft management and coordinated AI agents. The immediate plan is preserving/adopting the existing server, verified player access/backups, then secure Docker provisioning; agent, coding and research capabilities remain on the roadmap.
 
-**Chapters 00–02 are implemented and verified locally.** This preview includes private local accounts, owner setup/recovery, organization roles and scoped access, adult invitations, child accounts, sessions/audit, an account console, typed API contracts and the private Docker stack. The server provider gateway adds encrypted connections, conservative routing, persistent stop and durable budgets. Agent missions remain planned.
+**Chapters 00–02 are implemented and verified locally.** This preview includes private local accounts, owner setup/recovery, organization roles and scoped access, adult invitations, child accounts, sessions/audit, an account console, typed API contracts and the private Docker stack. The server provider gateway adds encrypted connections, conservative routing, persistent stop and durable budgets. Simulation fleet/runtime tasks CL-03-01–06 are implemented with recorded evidence; final runtime qualification is open. Minecraft management, provisioning and bots remain unimplemented.
 
 Core must work without CraftLayer Cloud, an entitlement service or required telemetry. Cloud remains a separate future service consuming public Core interfaces.
 
@@ -18,7 +18,7 @@ pnpm setup:local
 pnpm stack:up
 ```
 
-Open **http://127.0.0.1:3000**. Only the web edge is published, on loopback. Setup generates local random credentials; no provider key or cloud account is needed. Follow the [developer quickstart](docs/development/quickstart.md) for prerequisites, commands, host development and troubleshooting. Open **http://127.0.0.1:3000/account** for first-owner setup and administration. Follow the [identity/recovery runbook](docs/development/identity-and-recovery.md). The installation is left unclaimed for your own account. Production release hardening remains Chapter 09.
+Open **http://127.0.0.1:3000**. Only the web edge is published, on loopback. Setup generates local random credentials; no provider key or cloud account is needed. Follow the [developer quickstart](docs/development/quickstart.md) for prerequisites, commands, host development and troubleshooting. Open **http://127.0.0.1:3000/account** for first-owner setup and administration. Follow the [identity/recovery runbook](docs/development/identity-and-recovery.md). New installations require owner setup; preserve existing account state. Production release hardening remains Chapter 09.
 
 ## Build and check
 
@@ -40,11 +40,11 @@ The browser/stack checks require the running stack. Database tests create a disp
 
 - [Documentation map](docs/README.md): requirements, architecture, schema, security, API, UI, AI runtime and operational plans.
 - [Current status](docs/delivery/status.md) and [build log](docs/delivery/build-log.md): exact stopping point and evidence.
-- [Roadmap](docs/delivery/roadmap.md) and [84-task backlog](docs/delivery/backlog.md): twelve chapter specifications with dependencies and acceptance criteria.
+- [Roadmap](docs/delivery/roadmap.md) and [original chapter backlog](docs/delivery/backlog.md): twelve chapter specifications with dependencies and acceptance criteria.
 - [AGENTS.md](AGENTS.md): shared Codex/Claude Code instructions; Claude Code also reads [CLAUDE.md](CLAUDE.md).
 - [Provider handoff](docs/delivery/handoffs/02-provider-gateway.md): how to resume safely.
 
-**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. Chapter 02 review records the current evidence; the next chapter is [Fleet engine](docs/chapters/03-fleet-engine.md), starting with CL-03-01. Chapter 03 requires authorization.
+**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; their implementation and all Contabo operations need separate authorization.
 
 ## Milestones
 
@@ -52,8 +52,9 @@ The browser/stack checks require the running stack. Database tests create a disp
 | --- | --- | --- |
 | Foundation | 00 | Implemented and verified; review evidence available |
 | Secure accounts | 01 | Implemented and verified; accepted for advancement |
-| Provider gateway | 02 | Implemented and verified; owner review pending |
-| Fleet runtime | 03 | Planned: finite DAGs, worker recovery and wider stop |
+| Provider gateway | 02 | Implemented and verified; accepted for advancement |
+| Fleet runtime | 03 | Six tasks verified; final fault/restart review remains |
+| Family management | F0–F3 | Planned: observation dashboard → verified access/backups → provisioning → lifecycle |
 | Minecraft vertical slice | 04–06 | Planned: dashboard/Kid Mode and 2–3 cooperating bots |
 | Extensible Core | 07–08 | Planned: more providers, isolated coding and cited research |
 | Self-hosted release | 09 | Planned: backups, upgrades, release images and security review |

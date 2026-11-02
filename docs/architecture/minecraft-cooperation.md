@@ -66,3 +66,7 @@ Offline authentication, if used for an isolated local fixture, is not a producti
 ## Benchmark evidence
 
 For each run record game/protocol/adapter versions, world seed/snapshot, anchor/region, hardware, bots/roles, provider mode, initial inventory, elapsed time, verified blocks, failures/retries, transfer receipts, CPU/RAM, token/tool counts and stop latency. Store only synthetic/private-safe traces in the repo; worlds and login secrets stay ignored. Three consecutive prepared-world runs must pass the Chapter 06 gate; survival and scaling results are separately labeled.
+
+## Family management precedes new bot work
+
+This document covers in-game agents only. [Management architecture](minecraft-management.md) and [F track](../delivery/minecraft-track.md) cover preservation/adoption/access/backups/provisioning before Chapter 04. Reuse approved version fixtures, world registry and dashboard later without giving bots RCON/Docker/node or web-owner credentials. A child/bot Stop All stops assigned bot actions; server lifecycle needs a distinct adult operation. Production online authentication/strict allowlist is mandatory; any isolated offline bot fixture is never a production deployment path.

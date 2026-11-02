@@ -1,6 +1,6 @@
 # System design and package boundaries
 
-Status: proposed; see [ADRs](decisions/README.md). Exact package/runtime versions are selected in Chapter 00 using supported releases and compatibility probes.
+Status: implemented foundation/identity/providers and simulation runtime through CL-03-06; later adapters and management are planned. Use existing pins/packages; [management architecture](minecraft-management.md) and ADRs 0015–0016 add F-track contracts without rebuilding earlier chapters.
 
 ## Runtime topology
 
@@ -15,18 +15,24 @@ flowchart LR
   DB --> Outbox[Outbox publisher]
   Outbox --> Queue[(Redis / BullMQ)]
   Queue --> Worker[Worker runtime]
-  Worker --> DB
-  Worker --> Router[Model router]
+  Worker --> API
+  API --> Router[Model router]
   Router --> Providers[Configured providers / local Ollama]
   Worker --> Adapter[Environment adapters]
   Adapter --> MC[Private Minecraft server]
   Adapter --> Isolated[Isolated coding / research runner]
   Events --> Browser
+  MCP[Future secured MCP] --> API
+  API --> Management[Planned server management services]
+  Management --> DB
+  Node[Planned outbound privileged node] --> Management
+  Node --> Docker[Scoped Docker broker]
+  Management --> Control[Private Minecraft control adapter]
 ```
 
 PostgreSQL is authoritative. Redis accelerates dispatch, cooldowns and notifications; losing Redis must not erase missions, budget reservations, stops, approvals or audit history. No distributed transaction spans PostgreSQL and Redis: the outbox and reconciliation process close that gap.
 
-Deploy distinct API, web and worker processes from the monorepo. The scheduler/outbox relay may initially run as worker process roles, with database leases for safe multiple instances. Keep interfaces separate so they can split later without rewriting domain logic. A web process never imports database or provider credentials.
+Deploy distinct API, web and worker processes from the monorepo. The current trusted API coordinator owns scheduler/outbox/database authority; the simulation worker uses private API/Redis only (ADR 0014). Future process splits must retain those credential boundaries. Keep interfaces separate so they can split later without rewriting domain logic. A web process never imports database or provider credentials.
 
 ## Planned repository layout
 
@@ -114,3 +120,7 @@ Migration strategy is expand → compatible deploy → backfill → contract. Re
 ## Failure domains
 
 API down: workers obey previously bounded leases; no new user commands. Redis down: durable state survives, dispatch pauses and reconciles. PostgreSQL down: stop new actions/model calls because current leases/policy cannot be proven. Model provider down: bounded fallback through eligible models only. Minecraft down: bounded reconnect and world reconciliation. Browser down: missions continue within granted limits. Runner partition: heartbeat expiry stops effects; reconnect cannot clear a stop latch.
+
+## Unified management extension
+
+The layout above is the original logical plan. Current `packages/runtime` owns orchestration and `packages/providers` owns routing/adapters; do not rename them into the proposed package sketch. Audit stays in existing identity/database services. F1 adds management contracts/services, operations and dashboard to the same Core; F2.5 introduces a distinct privileged node. Read [management architecture](minecraft-management.md) for additive packages, scope, permission vocabulary, durable operations and planned REST/MCP. No Docker socket/RCON secret in API/web/MCP/general workers, no mission/LLM dependency for management, no Cloud requirement. Game and control connections remain separate.
