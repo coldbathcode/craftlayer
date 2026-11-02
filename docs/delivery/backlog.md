@@ -95,6 +95,8 @@ Each original chapter is a conservative dependency chain of seven reviewable tas
 
 CL-F25-01 checkpoints A/B now include private trust, Hosts UI and a real local inventory/reconnect prototype. Signed effect commands remain open; next local task is CL-F25-02 template plans and constrained broker, with F2/F25 release gates retained. See [Hosts handoff](handoffs/F25-hosts.md).
 
+CL-F25-02 checkpoint A now exposes the Family Survival template and scoped effect-free placement preview; reservations, signed execution and constrained broker are next. See [planning handoff](handoffs/F25-plans.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

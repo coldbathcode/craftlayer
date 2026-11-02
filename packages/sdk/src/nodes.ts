@@ -5,6 +5,9 @@ import {
   nodePage,
   type nodeRotationRequest,
   nodeView,
+  provisionPlan,
+  type provisionPlanRequest,
+  serverTemplatePage,
 } from "@craftlayer/contracts";
 import type { z } from "zod";
 import { identityRequest } from "./index.js";
@@ -15,6 +18,18 @@ export function nodeClient(
 ) {
   const context = { organization, csrf, ...(signal ? { signal } : {}) };
   return {
+    templates: (node: string) =>
+      identityRequest(
+        `/api/v1/server-templates?node_id=${encodeURIComponent(node)}`,
+        serverTemplatePage,
+        context,
+      ),
+    plan: (input: z.infer<typeof provisionPlanRequest>) =>
+      identityRequest("/api/v1/servers/provision/plan", provisionPlan, {
+        ...context,
+        method: "POST",
+        json: input,
+      }),
     list: (project: string, cursor?: string) =>
       identityRequest(
         `/api/v1/nodes?project_id=${encodeURIComponent(project)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,

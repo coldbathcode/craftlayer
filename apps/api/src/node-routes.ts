@@ -7,6 +7,9 @@ import {
   nodePage,
   nodeRotationRequest,
   nodeView,
+  provisionPlan,
+  provisionPlanRequest,
+  serverTemplatePage,
 } from "@craftlayer/contracts";
 import type { NodeControl } from "@craftlayer/minecraft-control";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -14,7 +17,13 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 export type NodeApi = Pick<
   NodeControl,
-  "enroll" | "get" | "list" | "change" | "operation"
+  | "enroll"
+  | "get"
+  | "list"
+  | "change"
+  | "operation"
+  | "templates"
+  | "provisionPlan"
 >;
 export async function registerNodes(
   app: FastifyInstance,
@@ -29,7 +38,9 @@ export async function registerNodes(
     const path = r.routeOptions.url ?? r.url.split("?")[0] ?? "";
     if (
       path.startsWith("/api/v1/nodes") ||
-      path.startsWith("/api/v1/node-operations")
+      path.startsWith("/api/v1/node-operations") ||
+      path === "/api/v1/server-templates" ||
+      path === "/api/v1/servers/provision/plan"
     ) {
       reply.header("Cache-Control", "no-store");
       reply.header("X-Request-Id", r.id);
@@ -131,5 +142,25 @@ export async function registerNodes(
     "/api/v1/node-operations/:id",
     { schema: { params, response: { 200: nodeOperationView, ...errors } } },
     (r) => nodes.operation(token(r), org(r), r.params.id),
+  );
+  api.get(
+    "/api/v1/server-templates",
+    {
+      schema: {
+        querystring: z.strictObject({ node_id: z.uuid() }),
+        response: { 200: serverTemplatePage, ...errors },
+      },
+    },
+    (r) => nodes.templates(token(r), org(r), r.query.node_id),
+  );
+  api.post(
+    "/api/v1/servers/provision/plan",
+    {
+      schema: {
+        body: provisionPlanRequest,
+        response: { 200: provisionPlan, ...errors },
+      },
+    },
+    (r) => nodes.provisionPlan(token(r), org(r), r.body),
   );
 }

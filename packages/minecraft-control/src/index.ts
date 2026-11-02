@@ -1010,3 +1010,4 @@ export {
 export { InventoryFileSource } from "./inventory.js";
 
 export { NodeControl } from "./nodes.js";
+export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";

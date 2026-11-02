@@ -90,3 +90,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Runnable family prototype](development/prototype.md): separate local stack, generated parent/viewer/child accounts and a test journey with synthetic servers and persistent pending requests.
 
 [Secure node runbook](development/minecraft-nodes.md) records mTLS/key-bound enrollment, read-only inventory and unimplemented provisioning/effect gates.
+
+[Provisioning preview runbook](development/minecraft-provisioning.md) records Family Survival planning, current dual permissions, conflict/freshness checks and outstanding executor/recovery gates.

@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { ProvisionPlanner } from "./provision-planner";
 
 type Project = { id: string; name: string };
 const when = (v: string | null) =>
@@ -631,6 +632,15 @@ export function NodeConsole() {
                         or stops a game server.
                       </p>
                     </article>
+                    {selected.can_plan ? (
+                      <ProvisionPlanner
+                        key={`${org}:${selected.id}:${selected.version}`}
+                        node={selected}
+                        organization={org}
+                        csrf={me.csrf_token}
+                        onSessionFailure={failure}
+                      />
+                    ) : null}
                     <div className="server-actions">
                       <button
                         type="button"

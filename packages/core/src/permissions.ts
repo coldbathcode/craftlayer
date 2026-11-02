@@ -1,4 +1,6 @@
 export const organizationPermissions = [
+  "node:deploy",
+  "server:provision",
   "node:read",
   "node:enroll",
   "node:rotate",
@@ -44,6 +46,8 @@ export const instancePermissions = [
 ] as const;
 export const rolePermissions = {
   org_admin: [
+    "node:deploy",
+    "server:provision",
     "node:read",
     "node:enroll",
     "node:rotate",

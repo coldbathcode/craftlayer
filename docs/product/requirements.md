@@ -1,6 +1,6 @@
 # Product requirements and traceable outcomes
 
-Status: unified product contract reconciled 2026-11-02. Sources: unchanged [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md), [unified v0.4](../CRAFTLAYER_UNIFIED_SPEC.md) and [build prompt](../BUILD_PROMPT.md). IDs are stable; implementation evidence lives in [status](../delivery/status.md), not in these requirement tables. PR-023–035 are new requirements: F0 local preflight/preservation is implemented with synthetic evidence; management services, live adoption/access/backup/node gates remain planned/unverified. Completed invariants remain binding.
+Status: unified product contract reconciled 2026-11-02. Sources: unchanged [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md), [unified v0.4](../CRAFTLAYER_UNIFIED_SPEC.md) and [build prompt](../BUILD_PROMPT.md). IDs are stable; implementation evidence lives in [status](../delivery/status.md), not in these requirement tables. PR-023–035 are new requirements: F0/F1 are locally implemented; F2 pending identity requests and F2.5 node trust/Hosts/deployment previews are partial implementations. Actual game access, backups, provisioning and production gates remain unverified. Completed invariants remain binding.
 
 ## Product purpose
 
@@ -94,3 +94,5 @@ Minecraft private server hosting, provider inference, and hardware availability 
 Record environment, versions, seed, policy configuration, anonymized event trace, verifier output and Stop All measurement. Demonstrations alone do not prove tenant isolation, restart recovery or budget correctness; those require automated negative tests. Keep all product tests mapped to PR/NFR IDs in [the testing plan](../testing/strategy.md).
 
 CL-F25-01/A–B implements the read-only portion of PR-030: adult-approved, certificate/key-bound enrollment, rotation/revocation, private signed heartbeat and Hosts UI. Actual local inventory/reconnect evidence does not satisfy signed physical commands, broker quotas, provisioning, F2 player controls/backups or production qualification. No release gate is relaxed by parallel local development.
+
+CL-F25-02/A adds a strict Family Survival template and effect-free placement preview for PR-031. It checks current adult `node:deploy`/`server:provision`, canonical same-project Minecraft scope, report freshness, declared memory and Docker port conflicts. Pinned unqualified artifacts, EULA false and open image/identity/recovery/storage/network/broker gates prevent dispatch; preview never creates a reservation or approval.

@@ -93,7 +93,98 @@
 .node-rotation label {
   margin-bottom: 15px;
 }
+.provision-planner {
+  margin-top: 24px;
+}
+.provision-template {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  background: #e6edda;
+  border: 1px solid #c8d5b8;
+  padding: 22px;
+  margin: 20px 0;
+}
+.provision-template h4,
+.provision-result h4 {
+  font:
+    28px Georgia,
+    serif;
+  margin: 8px 0;
+  letter-spacing: -0.7px;
+}
+.provision-template > div:last-child {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  justify-content: center;
+}
+.provision-template strong {
+  font:
+    24px Georgia,
+    serif;
+}
+.provision-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+.provision-form button {
+  justify-self: start;
+  grid-column: 1 / -1;
+}
+.provision-form label {
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.provision-checks {
+  list-style: none;
+  padding: 0;
+}
+.provision-check {
+  display: flex;
+  gap: 12px;
+  padding: 15px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.provision-check > span {
+  min-width: 18px;
+  color: #947d4f;
+}
+.provision-check strong {
+  display: block;
+}
+.provision-check div > span {
+  font: 10px monospace;
+  color: var(--muted);
+}
+.provision-check p {
+  color: var(--muted);
+  margin: 6px 0 0;
+}
+.provision-check.failed > span {
+  color: #a4442c;
+}
+.provision-check.passed > span {
+  color: #38663d;
+}
+.provision-result details {
+  border-top: 1px solid var(--line);
+  padding-top: 20px;
+  font-size: 12px;
+}
 @media (max-width: 700px) {
+  .provision-template {
+    flex-direction: column;
+  }
+  .provision-form {
+    grid-template-columns: 1fr;
+  }
   .node-illustration {
     display: none;
   }

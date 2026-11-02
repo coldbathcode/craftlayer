@@ -13,6 +13,8 @@ import {
   nodePage,
   nodeRotationRequest,
   nodeView,
+  provisionPlanRequest,
+  serverTemplatePage,
   signedNodeRequest,
   signedNodeResponse,
 } from "@craftlayer/contracts";
@@ -28,6 +30,7 @@ import {
 } from "@craftlayer/node-protocol";
 import pg from "pg";
 import { z } from "zod";
+import { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
 
 interface NodeRow {
   id: string;
@@ -185,6 +188,7 @@ export class NodeControl {
       capacity: row.capacity ? nodeCapacity.parse(row.capacity) : null,
       can_rotate: row.state === "active" && canAccess(a, "node:rotate", scope),
       can_revoke: row.state !== "revoked" && canAccess(a, "node:revoke", scope),
+      can_plan: canAccess(a, "node:deploy", scope),
       control_public_key: this.#public,
     });
   }
@@ -498,6 +502,57 @@ export class NodeControl {
       this.#op(located),
     );
   }
+  async templates(token: string, org: string, id: string) {
+    const node = await this.#locate(token, org, id);
+    return this.#scope(token, org, node.project_id, "node:deploy", async () =>
+      serverTemplatePage.parse({ items: [familyTemplate()] }),
+    );
+  }
+  async provisionPlan(token: string, org: string, input: unknown) {
+    const v = provisionPlanRequest.parse(input),
+      node = await this.#locate(token, org, v.node_id);
+    return this.#scope(
+      token,
+      org,
+      node.project_id,
+      "node:deploy",
+      async (c, p, a) => {
+        const environment = (
+          await c.query<{ project_id: string; type: string }>(
+            "select project_id,type from environments where organization_id=$1 and id=$2",
+            [org, v.environment_id],
+          )
+        ).rows[0];
+        if (!environment) deny("NOT_FOUND", 404);
+        if (
+          environment.project_id !== node.project_id ||
+          environment.type !== "minecraft" ||
+          !canAccess(a, "server:provision", {
+            kind: "environment",
+            id: v.environment_id,
+            projectId: environment.project_id,
+            environmentType: environment.type,
+          })
+        )
+          deny("PROVISION_PLACEMENT_DENIED", 403);
+        const current = await this.#row(c, org, node.id);
+        return calculateProvisionPlan({
+          organization: org,
+          project: current.project_id,
+          authorizationHash: nodeDigest({
+            actor_id: p.user.id,
+            session_id: p.sessionId,
+            user_version: p.userVersion,
+            authority: a,
+          }),
+          node: this.#view(current, a),
+          input: v,
+          now: this.#now(),
+        });
+      },
+    );
+  }
+
   /** Only a TLS adapter may supply peer identity; HTTP headers/cookies never do. */
   async exchange(
     input: unknown,

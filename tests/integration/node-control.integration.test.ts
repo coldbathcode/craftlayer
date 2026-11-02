@@ -34,6 +34,10 @@ const identity = new pg.Pool({ connectionString: identityUrl, max: 2 }),
   });
 const org = randomUUID(),
   project = randomUUID(),
+  environment = randomUUID(),
+  otherProject = randomUUID(),
+  otherEnvironment = randomUUID(),
+  codingEnvironment = randomUUID(),
   foreignOrg = randomUUID(),
   keypair = generateNodeKey(),
   agentKey = generateNodeKey();
@@ -125,6 +129,22 @@ beforeAll(async () => {
     await c.query(
       "insert into projects(id,organization_id,name) values($1,$2,'Node fixture')",
       [project, org],
+    );
+    await c.query(
+      "insert into projects(id,organization_id,name) values($1,$2,'Other placement')",
+      [otherProject, org],
+    );
+    for (const [id, projectId] of [
+      [environment, project],
+      [otherEnvironment, otherProject],
+    ])
+      await c.query(
+        "insert into environments(id,organization_id,project_id,name,type) values($1,$2,$3,'Placement fixture','minecraft')",
+        [id, org, projectId],
+      );
+    await c.query(
+      "insert into environments(id,organization_id,project_id,name,type) values($1,$2,$3,'Non-game placement','coding')",
+      [codingEnvironment, org, project],
     );
     const roles = (
       await c.query<{ role_name: string }>(
@@ -480,9 +500,174 @@ describe("node principal and mTLS boundary", () => {
         await app.inject({ method: "GET", url: "/api/v1/openapi.json" })
       ).json();
       expect(schema.paths["/api/v1/nodes/enrollments"]).toBeDefined();
+      expect(schema.paths["/api/v1/servers/provision/plan"]).toBeDefined();
+      const preview = {
+          node_id: node,
+          environment_id: environment,
+          template_id: "family-survival-v1",
+          name: "HTTP planning fixture",
+          java_port: 25566,
+          bedrock_port: 19133,
+        },
+        writeHeaders = {
+          ...headers,
+          origin: "http://127.0.0.1:3000",
+          "x-csrf-token": auth.csrfToken(adult),
+        };
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/v1/servers/provision/plan",
+            headers,
+            payload: preview,
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/v1/servers/provision/plan",
+            headers: writeHeaders,
+            payload: preview,
+          })
+        ).json(),
+      ).toMatchObject({
+        effects: "none",
+        dispatch_available: false,
+        reservations_created: false,
+      });
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/v1/server-templates?node_id=${node}`,
+            headers,
+          })
+        ).json().items[0].id,
+      ).toBe("family-survival-v1");
+      for (const forbidden of [
+        "host_path",
+        "image",
+        "eula_accepted",
+        "approved",
+        "commands",
+      ])
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: "/api/v1/servers/provision/plan",
+              headers: writeHeaders,
+              payload: { ...preview, [forbidden]: true },
+            })
+          ).statusCode,
+        ).toBe(400);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/v1/servers/provision",
+            headers: writeHeaders,
+            payload: preview,
+          })
+        ).statusCode,
+      ).toBe(404);
     } finally {
       await app.close();
     }
+  });
+  it("plans only current adult canonical node/world placement, never reserves or dispatches resources", async () => {
+    const input = {
+      node_id: node,
+      environment_id: environment,
+      template_id: "family-survival-v1",
+      name: "New separate world",
+      java_port: 25566,
+      bedrock_port: 19133,
+    };
+    const result = await nodes.provisionPlan(adult, org, input);
+    expect(result).toMatchObject({
+      project_id: project,
+      organization_id: org,
+      dispatch_available: false,
+      effects: "none",
+      reservations_created: false,
+    });
+    expect(result.gates.find((g) => g.id === "node_connection")?.state).toBe(
+      "failed",
+    ); // Previously revoked node.
+    expect(
+      (await nodes.templates(adult, org, node)).items[0]?.qualification,
+    ).toBe("unqualified");
+    await expect(nodes.provisionPlan(viewer, org, input)).rejects.toMatchObject(
+      { status: 403 },
+    );
+    await expect(nodes.provisionPlan(child, org, input)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(
+      nodes.provisionPlan(adult, foreignOrg, input),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      nodes.provisionPlan(adult, org, {
+        ...input,
+        environment_id: otherEnvironment,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      nodes.provisionPlan(adult, org, {
+        ...input,
+        environment_id: codingEnvironment,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      nodes.provisionPlan(adult, org, { ...input, node_id: randomUUID() }),
+    ).rejects.toMatchObject({ status: 404 });
+    await tx(runtime, org, async (c) => {
+      expect((await c.query("select 1 from minecraft_servers")).rowCount).toBe(
+        0,
+      );
+      expect(
+        (
+          await c.query(
+            "select 1 from pg_policies where policyname='provision_plan_migration_discovery'",
+          )
+        ).rowCount,
+      ).toBe(0);
+    });
+    // Role/permission changes also deny a repeated identical preview.
+    await tx(identity, org, (c) =>
+      c.query(
+        "delete from role_permissions where organization_id=$1 and permission='node:deploy'",
+        [org],
+      ),
+    );
+    await expect(nodes.provisionPlan(adult, org, input)).rejects.toMatchObject({
+      status: 403,
+    });
+    await tx(identity, org, (c) =>
+      c.query(
+        "insert into role_permissions(organization_id,role_id,permission) select $1,id,'node:deploy' from roles where organization_id=$1 and name='org_admin'",
+        [org],
+      ),
+    );
+    await tx(identity, org, (c) =>
+      c.query(
+        "delete from role_permissions where organization_id=$1 and permission='server:provision'",
+        [org],
+      ),
+    );
+    await expect(nodes.provisionPlan(adult, org, input)).rejects.toMatchObject({
+      status: 403,
+    });
+    await tx(identity, org, (c) =>
+      c.query(
+        "insert into role_permissions(organization_id,role_id,permission) select $1,id,'server:provision' from roles where organization_id=$1 and name='org_admin'",
+        [org],
+      ),
+    );
   });
 });
 

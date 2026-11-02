@@ -57,6 +57,7 @@ export const nodeView = z.strictObject({
   capacity: nodeCapacity.nullable(),
   can_rotate: z.boolean(),
   can_revoke: z.boolean(),
+  can_plan: z.boolean().default(false),
   control_public_key: nodePublicKey.nullable(),
 });
 export const nodePage = z.strictObject({

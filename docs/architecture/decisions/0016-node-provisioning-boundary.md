@@ -1,6 +1,6 @@
 # ADR 0016 — Privileged node operations and non-destructive provisioning
 
-Status: planned implementation contract, recorded 2026-11-02. F2.5 implementation requires authorization; host enrollment and production changes require explicit operator approval.
+Status: planned implementation contract, recorded 2026-11-02. Local F2.5 development is now authorized under ADR 0019; production host enrollment and changes still require explicit operator approval.
 
 ## Context
 

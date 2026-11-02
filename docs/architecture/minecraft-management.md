@@ -104,3 +104,7 @@ Migration 0017 adds immutable pending name-resolution requests, canonical actor/
 ### CL-F25-01/B implementation boundary
 
 The optional node-control Compose service holds only runtime DB/TLS/control-signing credentials and accepts mTLS enrollment/heartbeat on a loopback-published private interface. The separate operator-host agent alone reads the local Engine socket. `/nodes` projects timestamped inventory/credential health and canonical adult enrollment/rotation/revocation; it accepts public identity material only. Signed 30s time windows sample one instant to avoid millisecond rollover. Agent network retries retain sequence and never resume/change game state; credential failures stop. Native service ports, storage quotas, broker commands, physical leases/fences and provisioning remain unimplemented release gates.
+
+### CL-F25-02/A planning boundary
+
+[Provisioning runbook](../development/minecraft-provisioning.md) describes the implemented candidate template and effect-free dry-run. Canonical same-project environment plus node placement/provision authority is checked under current membership; child/viewer/cross-tenant and changed-permission denial applies. The digest is a short-lived preview identity, not an approval or reservation. Every actual execution gate remains closed; no job, image pull, EULA acceptance, Docker mutation or new world is dispatched by preview.

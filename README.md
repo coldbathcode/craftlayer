@@ -8,7 +8,7 @@ Core must work without CraftLayer Cloud, an entitlement service or required tele
 
 ## Try the family prototype
 
-Run `pnpm prototype:up`, then open **http://127.0.0.1:3001/servers** (the command prints a different loopback URL if that port is occupied). Private parent/viewer/child sign-in details are generated in `.craftlayer-prototype/START-HERE.md`. Try simulated servers, players, activity and persistent pending identity requests. `pnpm prototype:down` stops the separate prototype while retaining its data. [Prototype guide](docs/development/prototype.md).
+Run `pnpm prototype:up`, then open **http://127.0.0.1:3001/servers** (the command prints a different loopback URL if that port is occupied). Private parent/viewer/child sign-in details are generated in `.craftlayer-prototype/START-HERE.md`. Try simulated servers, players, activity and persistent pending identity requests. Open **http://127.0.0.1:3001/nodes** for host enrollment, real local Docker inventory and the Family Survival deployment preview; the prototype guide explains the foreground inventory agent. `pnpm prototype:down` stops the separate prototype while retaining its data. [Prototype guide](docs/development/prototype.md).
 
 This prototype uses synthetic server data, grants no game access, and leaves the existing installation/Contabo/worlds untouched. F2 authenticated identities, allowlists and backups remain in progress.
 
@@ -51,7 +51,7 @@ Foundation browser/stack checks require the running stack. Database, identity UI
 - [AGENTS.md](AGENTS.md): shared Codex/Claude Code instructions; Claude Code also reads [CLAUDE.md](CLAUDE.md).
 - [F1 handoff](docs/delivery/handoffs/F1-control-plane.md) and [management runbook](docs/development/minecraft-management.md): local dashboard/API, approved sources, evidence and the next F2 authorization boundary.
 
-**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; F0 local tooling is now verified ([review](docs/reviews/F0-preflight.md)); F1 local implementation is complete with review prepared; F2 onward and all Contabo operations need separate authorization.
+**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. Chapter 03’s remaining authorized task is CL-03-07, whose existing work remains preserved. The Minecraft implementation sequence is in the current status; the next node task is signed execution/journal/fencing before transactional reservations and a constrained broker. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; F0 local tooling is now verified ([review](docs/reviews/F0-preflight.md)); F1 local implementation is complete with review prepared; F2/F2.5/F3 local capability development is now authorized; current work includes node trust, Hosts and deployment previews. All Contabo operations still need separate authorization; signed physical commands, actual provisioning and family security/recovery remain open.
 
 ## Milestones
 

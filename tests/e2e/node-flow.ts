@@ -112,6 +112,32 @@ export async function nodeFlow(
       name: /^(Provision server|Start server|Stop server)$/,
     }),
   ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Preview deployment", exact: true })
+    .click();
+  const preview = page.getByRole("region", { name: "Deployment preview" });
+  await expect(
+    preview.getByRole("heading", { name: "Server creation is blocked." }),
+  ).toBeVisible();
+  await expect(
+    preview.getByText("Conflicts: 25565/tcp. Choose other ports.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByLabel("Java TCP port", { exact: true }).fill("25566");
+  await expect(preview).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Preview deployment", exact: true })
+    .click();
+  await expect(preview.getByRole("status")).toHaveText(
+    "Preview calculated. No resources created or reserved.",
+  );
+  await expect(
+    preview.getByText(
+      "No reported Docker binding conflicts; native services, firewall and transactional reservations still require checks.",
+      { exact: true },
+    ),
+  ).toBeVisible();
   await page.screenshot({
     path: info.outputPath("nodes-desktop.png"),
     fullPage: true,
