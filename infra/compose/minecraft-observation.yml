@@ -1,0 +1,11 @@
+# Optional operator-owned inventory only; no Docker socket/world/RCON mounts.
+services:
+  api:
+    user: "${CRAFTLAYER_HOST_UID:?Set the inventory owner UID}:${CRAFTLAYER_HOST_GID:?Set the inventory owner GID}"
+    environment:
+      CRAFTLAYER_MINECRAFT_INVENTORY_FILE: /run/secrets/minecraft/inventory.json
+    volumes:
+      - type: bind
+        source: ${CRAFTLAYER_MINECRAFT_CONFIG_DIR:?Select an approved protected inventory directory}
+        target: /run/secrets/minecraft
+        read_only: true

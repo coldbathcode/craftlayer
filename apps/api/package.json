@@ -23,7 +23,8 @@
     "@craftlayer/auth": "workspace:*",
     "@craftlayer/core": "workspace:*",
     "@craftlayer/providers": "workspace:*",
-    "@craftlayer/runtime": "workspace:*"
+    "@craftlayer/runtime": "workspace:*",
+    "@craftlayer/minecraft-control": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"

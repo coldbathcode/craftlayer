@@ -7,10 +7,12 @@ export const gameAddress = z.strictObject({
   host: z
     .string()
     .max(253)
-    .regex(/^[a-zA-Z0-9][a-zA-Z0-9.:-]{0,252}$/),
+    .regex(/^[a-zA-Z0-9:][a-zA-Z0-9.:-]{0,252}$/),
   port: z.number().int().min(1).max(65535),
 });
 export const capturedObservation = z.strictObject({
+  source: z.enum(["captured_inventory", "java_status"]).optional(),
+  reported_player_count: z.number().int().min(0).max(10000).optional(),
   observed_at: z.iso.datetime(),
   state: z.enum(["online", "offline", "unknown", "unavailable"]),
   java: gameAddress.nullable(),
@@ -38,6 +40,16 @@ export const inventoryTarget = z.strictObject({
   label: title,
   binding_hash: hash,
   observation: capturedObservation,
+  java_status: z
+    .strictObject({
+      address: z
+        .string()
+        .max(45)
+        .regex(/^[a-fA-F0-9:.]+$/),
+      port: z.number().int().min(1024).max(65535),
+      protocol_version: z.number().int().min(1).max(100000),
+    })
+    .optional(),
 });
 export const inventorySchema = z
   .strictObject({
@@ -63,7 +75,7 @@ export const targetView = z.strictObject({
   id: targetKey,
   label: title,
   binding_hash: hash,
-  source: z.literal("captured_inventory"),
+  source: z.enum(["captured_inventory", "java_status"]),
   observed_at: z.iso.datetime(),
 });
 export const adoptionPlan = z.strictObject({
@@ -77,9 +89,9 @@ export const adoptionPlan = z.strictObject({
 export const observationView = capturedObservation
   .omit({ players: true })
   .extend({
-    source: z.literal("captured_inventory"),
+    source: z.enum(["captured_inventory", "java_status"]),
     freshness: z.enum(["fresh", "stale", "unavailable"]),
-    player_count: z.number().int().min(0).max(100).nullable(),
+    player_count: z.number().int().min(0).max(10000).nullable(),
     family_ready: z.literal(false),
   });
 export const serverView = z.strictObject({
@@ -130,3 +142,22 @@ export type InventoryTarget = z.infer<typeof inventoryTarget>;
 export type CapturedObservation = z.infer<typeof capturedObservation>;
 export type ServerView = z.infer<typeof serverView>;
 export type OperationView = z.infer<typeof operationView>;
+
+export const serverActivity = z.strictObject({
+  items: z
+    .array(
+      z.strictObject({
+        action: z.enum([
+          "server.adopted_read_only",
+          "server.observation_requested",
+          "server.observation_recorded",
+          "server.observation_failed",
+          "server.unregistered",
+        ]),
+        occurred_at: z.iso.datetime(),
+        operation_id: z.uuid(),
+        outcome: z.enum(["allowed", "denied"]),
+      }),
+    )
+    .max(30),
+});

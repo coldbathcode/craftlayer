@@ -1,6 +1,6 @@
 # F1 — Read-only control plane and parent dashboard
 
-**Status:** F1 locally authorized by the user’s “go to the next steps” after F0; CL-F1-01 verified, CL-F1-02 next. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
+**Status:** F1 locally authorized by the user’s “go to the next steps” after F0; CL-F1-01–02 locally verified; CL-F1-03 next. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
 
 ## Objective
 
@@ -22,9 +22,9 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 **Required evidence:** MC-01/06: actual restricted-role migrations and A/B server/project scope, child/viewer denial, current membership/revocation, same-key replay/conflict, atomic audit/outbox. No external mutable adapter capability.
 
-### [ ] CL-F1-02 — In-place adoption and private observation adapter
+### [x] CL-F1-02 — In-place adoption and private observation adapter
 
-**Depends on:** CL-F1-01. **Status:** not started. **Size:** L.
+**Depends on:** CL-F1-01. **Status:** locally verified; observation runbook and build log. **Size:** L.
 
 **Implementation:** Implement adopt plan/register and bounded read-only status/player observations through capability-based mock/private RCON or query adapter. Credentials stay isolated, no arbitrary verbs, Docker control or game/world mounts in apps. Unsupported/stale/offline states explicit; extend typed REST/SDK and scoped projections.
 

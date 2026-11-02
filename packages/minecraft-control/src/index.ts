@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash, randomUUID } from "node:crypto";
 import {
   AuthError,
@@ -11,10 +12,12 @@ import {
   type CapturedObservation,
   capturedObservation,
   type InventoryTarget,
+  inventoryTarget,
   observationView,
   operationAccepted,
   operationView,
   playersView,
+  serverActivity,
   serverView,
   targetView,
 } from "@craftlayer/contracts";
@@ -22,8 +25,18 @@ import { type Authority, canAccess, type Permission } from "@craftlayer/core";
 import pg from "pg";
 import { z } from "zod";
 
+const requestContext = new AsyncLocalStorage<string>();
+export function withManagementRequest<T>(id: string, fn: () => Promise<T>) {
+  return requestContext.run(z.uuid().parse(id), fn);
+}
+
 export interface ObservationSource {
   list(organization: string, environment: string): Promise<InventoryTarget[]>;
+  observe?(
+    organization: string,
+    environment: string,
+    targetId: string,
+  ): Promise<InventoryTarget>;
 }
 const emptySource: ObservationSource = { list: async () => [] };
 export function managementHash(value: unknown) {
@@ -193,9 +206,12 @@ export class MinecraftControl {
       observation: o
         ? observationView.parse({
             ...fields,
-            source: "captured_inventory",
+            source: o.source ?? "captured_inventory",
             freshness: this.#freshness(o),
-            player_count: o.players?.length ?? null,
+            player_count:
+              o.state === "unavailable"
+                ? null
+                : (o.reported_player_count ?? o.players?.length ?? null),
             family_ready: false,
           })
         : null,
@@ -227,7 +243,19 @@ export class MinecraftControl {
   ) {
     await c.query(
       "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,$2,$3,$4,'allowed',$5)",
-      [org, p.user.id, action, server, { operation_id: id }],
+      [
+        org,
+        p.user.id,
+        action,
+        server,
+        {
+          operation_id: id,
+          source: requestContext.getStore() ? "rest" : "internal",
+          ...(requestContext.getStore()
+            ? { request_id: requestContext.getStore() }
+            : {}),
+        },
+      ],
     );
     await c.query(
       "insert into management_outbox(id,organization_id,operation_id,schema_version) values($1,$2,$3,1)",
@@ -253,60 +281,55 @@ export class MinecraftControl {
       denied("IDEMPOTENCY_CONFLICT");
     return op;
   }
-  async #target(org: string, environment: string, id: string) {
-    let targets: InventoryTarget[];
+  async #bounded<T>(read: () => Promise<T>): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      targets = await Promise.race([
-        this.#source.list(org, environment),
+      return await Promise.race([
+        read(),
         new Promise<never>((_, reject) => {
-          const timer = setTimeout(
-            () => reject(new Error("SOURCE_TIMEOUT")),
-            2000,
-          );
+          timer = setTimeout(() => reject(new Error("SOURCE_TIMEOUT")), 2000);
           timer.unref();
         }),
       ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  async #load(org: string, environment: string) {
+    try {
+      return z
+        .array(inventoryTarget)
+        .max(100)
+        .parse(await this.#bounded(() => this.#source.list(org, environment)))
+        .filter(
+          (t) => t.organization_id === org && t.environment_id === environment,
+        );
     } catch {
       denied("SOURCE_UNAVAILABLE", 503);
     }
-    const target = targets.find(
-      (t) =>
-        t.id === id &&
-        t.organization_id === org &&
-        t.environment_id === environment,
+  }
+  async #target(org: string, environment: string, id: string) {
+    const target = (await this.#load(org, environment)).find(
+      (t) => t.id === id,
     );
     if (!target) denied("TARGET_NOT_AVAILABLE", 404);
-    const parsed = capturedObservation.safeParse(target.observation);
-    if (
-      !parsed.success ||
-      Date.parse(parsed.data.observed_at) > this.#now() + 5000
-    )
+    if (Date.parse(target.observation.observed_at) > this.#now() + 5000)
       denied("SOURCE_UNAVAILABLE", 503);
-    return { ...target, observation: parsed.data };
+    return target;
   }
   async targets(token: string, org: string, environment: string) {
     await this.#scope(token, org, environment, "server:adopt", async () => {});
-    let targets: InventoryTarget[];
-    try {
-      targets = await this.#source.list(org, environment);
-    } catch {
-      denied("SOURCE_UNAVAILABLE", 503);
-    }
+    const targets = await this.#load(org, environment);
     return this.#scope(token, org, environment, "server:adopt", async () =>
-      targets
-        .filter(
-          (t) => t.organization_id === org && t.environment_id === environment,
-        )
-        .slice(0, 100)
-        .map((t) =>
-          targetView.parse({
-            id: t.id,
-            label: t.label,
-            binding_hash: t.binding_hash,
-            source: "captured_inventory",
-            observed_at: t.observation.observed_at,
-          }),
-        ),
+      targets.map((t) =>
+        targetView.parse({
+          id: t.id,
+          label: t.label,
+          binding_hash: t.binding_hash,
+          source: t.java_status ? "java_status" : "captured_inventory",
+          observed_at: t.observation.observed_at,
+        }),
+      ),
     );
   }
   async plan(token: string, org: string, input: unknown) {
@@ -327,7 +350,7 @@ export class MinecraftControl {
           id: t.id,
           label: t.label,
           binding_hash: t.binding_hash,
-          source: "captured_inventory",
+          source: t.java_status ? "java_status" : "captured_inventory",
           observed_at: t.observation.observed_at,
         },
         plan_hash: managementHash([
@@ -379,31 +402,42 @@ export class MinecraftControl {
             operation_id: replay.id,
             server_id: replay.server_id,
           });
+        const existing = (
+          await c.query<ServerRow>(
+            "select * from minecraft_servers where organization_id=$1 and environment_id=$2 and (target_id=$3 or binding_hash=$4)",
+            [org, v.environment_id, v.target_id, t.binding_hash],
+          )
+        ).rows[0];
         if (
-          (
-            await c.query(
-              "select id from minecraft_servers where organization_id=$1 and environment_id=$2 and (target_id=$3 or binding_hash=$4)",
-              [org, v.environment_id, v.target_id, t.binding_hash],
-            )
-          ).rowCount
+          existing &&
+          (existing.registered ||
+            existing.target_id !== v.target_id ||
+            existing.binding_hash !== t.binding_hash)
         )
           denied("ALREADY_REGISTERED");
-        const server = randomUUID(),
+        await this.#admit(c, org, v.environment_id, p.user.id);
+        const server = existing?.id ?? randomUUID(),
           id = randomUUID(),
           now = new Date(this.#now());
-        await c.query(
-          "insert into minecraft_servers(id,organization_id,project_id,environment_id,name,target_id,binding_hash,observation) values($1,$2,$3,$4,$5,$6,$7,$8)",
-          [
-            server,
-            org,
-            project,
-            v.environment_id,
-            v.name,
-            v.target_id,
-            t.binding_hash,
-            t.observation,
-          ],
-        );
+        if (existing)
+          await c.query(
+            "update minecraft_servers set registered=true,name=$3,observation=$4,version=version+1,observation_fence=observation_fence+1 where organization_id=$1 and id=$2",
+            [org, server, v.name, t.observation],
+          );
+        else
+          await c.query(
+            "insert into minecraft_servers(id,organization_id,project_id,environment_id,name,target_id,binding_hash,observation) values($1,$2,$3,$4,$5,$6,$7,$8)",
+            [
+              server,
+              org,
+              project,
+              v.environment_id,
+              v.name,
+              v.target_id,
+              t.binding_hash,
+              t.observation,
+            ],
+          );
         await c.query(
           "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) values($1,$2,$3,$4,$5,$6,$7,'adopt',$8,$9,'succeeded',0,$10,$10,$10)",
           [
@@ -486,6 +520,290 @@ export class MinecraftControl {
       },
     );
   }
+  async #admit(
+    c: pg.PoolClient,
+    org: string,
+    environment: string,
+    actor: string,
+  ) {
+    const count = (
+      await c.query<{ total: number; recent: number }>(
+        "select count(*)::int total,count(*) filter(where actor_id=$3 and created_at>$4)::int recent from management_operations where organization_id=$1 and environment_id=$2",
+        [org, environment, actor, new Date(this.#now() - 60000)],
+      )
+    ).rows[0];
+    if (!count || count.total >= 10000 || count.recent >= 12)
+      denied("MANAGEMENT_LIMIT", 429);
+  }
+  async observe(
+    token: string,
+    org: string,
+    id: string,
+    expected: number,
+    key: string,
+  ) {
+    z.number().int().positive().parse(expected);
+    const located = await this.#locate(token, org, id);
+    const prepared = await this.#scope(
+      token,
+      org,
+      located.environment_id,
+      "server:observe",
+      async (c, p) => {
+        const old = await this.#replay(c, org, p.user.id, "observe", key, {
+          id,
+          expected,
+        });
+        if (old) return { op: old, p, replay: true, row: located };
+        const row = await this.#server(c, org, id);
+        if (!row.registered || row.version !== expected)
+          denied("VERSION_CONFLICT");
+        await this.#admit(c, org, row.environment_id, p.user.id);
+        const expired = (
+          await c.query<{ id: string }>(
+            "update management_operations set state='failed',failure_code='interrupted',finished_at=$3 where organization_id=$1 and server_id=$2 and state='running' and deadline<=$3 returning id",
+            [org, id, new Date(this.#now())],
+          )
+        ).rows;
+        for (const previous of expired)
+          await this.#event(
+            c,
+            org,
+            p,
+            previous.id,
+            "server.observation_failed",
+            id,
+          );
+        const fence = row.observation_fence + 1,
+          opId = randomUUID(),
+          now = new Date(this.#now());
+        await c.query(
+          "update minecraft_servers set observation_fence=$3 where organization_id=$1 and id=$2",
+          [org, id, fence],
+        );
+        const op = (
+          await c.query<OperationRow>(
+            "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at) values($1,$2,$3,$4,$5,$6,$7,'observe',$8,$9,'running',$10,$11,$12) returning *",
+            [
+              opId,
+              org,
+              row.project_id,
+              row.environment_id,
+              id,
+              p.user.id,
+              p.sessionId,
+              key,
+              managementHash({ id, expected }),
+              fence,
+              new Date(this.#now() + 5000),
+              now,
+            ],
+          )
+        ).rows[0];
+        if (!op) denied();
+        await this.#event(c, org, p, opId, "server.observation_requested", id);
+        return {
+          op,
+          p,
+          replay: false,
+          row: { ...row, observation_fence: fence },
+        };
+      },
+    );
+    const receipt = operationAccepted.parse({
+      operation_id: prepared.op.id,
+      server_id: id,
+    });
+    if (prepared.replay) return receipt;
+    let target: InventoryTarget;
+    try {
+      target = this.#source.observe
+        ? inventoryTarget.parse(
+            await this.#bounded(
+              () =>
+                this.#source.observe?.(
+                  org,
+                  located.environment_id,
+                  prepared.row.target_id,
+                ) as Promise<InventoryTarget>,
+            ),
+          )
+        : await this.#target(
+            org,
+            located.environment_id,
+            prepared.row.target_id,
+          );
+      if (
+        target.organization_id !== org ||
+        target.environment_id !== located.environment_id ||
+        target.id !== prepared.row.target_id ||
+        target.binding_hash !== prepared.row.binding_hash ||
+        Date.parse(target.observation.observed_at) > this.#now() + 5000
+      )
+        throw new Error("SOURCE_CHANGED");
+    } catch {
+      await this.#finishFailed(
+        org,
+        prepared.op.id,
+        id,
+        prepared.p,
+        "source_unavailable",
+      );
+      return receipt;
+    }
+    try {
+      await this.#scope(
+        token,
+        org,
+        located.environment_id,
+        "server:observe",
+        async (c, p) => {
+          const row = await this.#server(c, org, id);
+          const op = (
+            await c.query<OperationRow>(
+              "select * from management_operations where organization_id=$1 and id=$2 for update",
+              [org, prepared.op.id],
+            )
+          ).rows[0];
+          if (
+            op?.state !== "running" ||
+            op.deadline.getTime() <= this.#now() ||
+            row.observation_fence !== prepared.row.observation_fence ||
+            !row.registered
+          )
+            denied("OBSERVATION_FENCED");
+          await c.query(
+            "update minecraft_servers set observation=$3,version=version+1 where organization_id=$1 and id=$2",
+            [org, id, target.observation],
+          );
+          await c.query(
+            "update management_operations set state='succeeded',finished_at=$3 where organization_id=$1 and id=$2",
+            [org, op.id, new Date(this.#now())],
+          );
+          await this.#event(
+            c,
+            org,
+            p,
+            op.id,
+            "server.observation_recorded",
+            id,
+          );
+        },
+      );
+    } catch {
+      await this.#finishFailed(
+        org,
+        prepared.op.id,
+        id,
+        prepared.p,
+        "authority_changed",
+      );
+    }
+    return receipt;
+  }
+  async #finishFailed(
+    org: string,
+    op: string,
+    server: string,
+    p: Principal,
+    code: "source_unavailable" | "authority_changed",
+  ) {
+    // Settlement records only the already-admitted canonical failed operation;
+    // it grants no authority to update observations after actor revocation.
+    await this.#tx(org, async (c) => {
+      const changed = await c.query(
+        "update management_operations set state='failed',failure_code=$3,finished_at=$4 where organization_id=$1 and id=$2 and state='running' returning id",
+        [org, op, code, new Date(this.#now())],
+      );
+      if (changed.rowCount)
+        await this.#event(c, org, p, op, "server.observation_failed", server);
+    });
+  }
+  async unregister(
+    token: string,
+    org: string,
+    id: string,
+    expected: number,
+    key: string,
+  ) {
+    z.number().int().positive().parse(expected);
+    const located = await this.#locate(token, org, id);
+    return this.#scope(
+      token,
+      org,
+      located.environment_id,
+      "server:adopt",
+      async (c, p) => {
+        const old = await this.#replay(c, org, p.user.id, "unregister", key, {
+          id,
+          expected,
+        });
+        if (old)
+          return operationAccepted.parse({
+            operation_id: old.id,
+            server_id: id,
+          });
+        const row = await this.#server(c, org, id);
+        if (!row.registered || row.version !== expected)
+          denied("VERSION_CONFLICT");
+        await this.#admit(c, org, row.environment_id, p.user.id);
+        const op = randomUUID(),
+          now = new Date(this.#now());
+        await c.query(
+          "update minecraft_servers set registered=false,version=version+1,observation_fence=observation_fence+1 where organization_id=$1 and id=$2",
+          [org, id],
+        );
+        await c.query(
+          "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) values($1,$2,$3,$4,$5,$6,$7,'unregister',$8,$9,'succeeded',$10,$11,$11,$11)",
+          [
+            op,
+            org,
+            row.project_id,
+            row.environment_id,
+            id,
+            p.user.id,
+            p.sessionId,
+            key,
+            managementHash({ id, expected }),
+            row.observation_fence + 1,
+            now,
+          ],
+        );
+        await this.#event(c, org, p, op, "server.unregistered", id);
+        return operationAccepted.parse({ operation_id: op, server_id: id });
+      },
+    );
+  }
+  async activity(token: string, org: string, id: string) {
+    const row = await this.#locate(token, org, id);
+    return this.#scope(
+      token,
+      org,
+      row.environment_id,
+      "audit:read",
+      async (c) => {
+        const rows = (
+          await c.query<{
+            action: string;
+            created_at: Date;
+            outcome: string;
+            details: { operation_id: string };
+          }>(
+            "select action,created_at,outcome,details from audit_events where organization_id=$1 and target_id=$2 and action in ('server.adopted_read_only','server.observation_requested','server.observation_recorded','server.observation_failed','server.unregistered') order by id desc limit 30",
+            [org, id],
+          )
+        ).rows;
+        return serverActivity.parse({
+          items: rows.map((r) => ({
+            action: r.action,
+            occurred_at: r.created_at.toISOString(),
+            outcome: r.outcome,
+            operation_id: r.details.operation_id,
+          })),
+        });
+      },
+    );
+  }
   async operation(token: string, org: string, id: string) {
     const row = await this.#auth.guardOrganization(
       token,
@@ -521,3 +839,4 @@ export class MinecraftControl {
     );
   }
 }
+export { InventoryFileSource } from "./inventory.js";

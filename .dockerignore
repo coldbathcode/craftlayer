@@ -18,3 +18,5 @@ playwright-report
 .github
 
 .worker-secrets
+
+.minecraft-secrets

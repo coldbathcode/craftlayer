@@ -82,3 +82,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Implemented read-only Minecraft preflight](development/minecraft-preflight.md) documents local usage and explicit production/identity/recovery limits.
 
 [F0 local review](reviews/F0-preflight.md) and [handoff](delivery/handoffs/F0-preflight.md) record preflight/preservation tools and synthetic recovery evidence; production gates remain unverified.
+
+[F1 observation-service runbook](development/minecraft-management.md) documents captured/live status semantics, protected configuration, typed routes and unverified remote/game gates.

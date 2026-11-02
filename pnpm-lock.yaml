@@ -60,6 +60,9 @@ importers:
       '@craftlayer/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@craftlayer/minecraft-control':
+        specifier: workspace:*
+        version: link:../../packages/minecraft-control
       '@craftlayer/providers':
         specifier: workspace:*
         version: link:../../packages/providers

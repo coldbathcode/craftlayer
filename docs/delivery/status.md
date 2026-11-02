@@ -42,3 +42,9 @@ Next management task: CL-F1-01 after **F1 authorization**; build registry/operat
 F1 authorized locally after F0 review. New strict contracts, scoped server/operation/outbox schema, permission seeds and management domain service implemented; no new HTTP routes/adapter/UI at this checkpoint. Registration is metadata-only with immutable target fingerprint, current guard, UUID replay/conflict and atomic audit/outbox. Viewer/Operator reads require explicit new scoped grants; children denied even with extra admin role. ADR 0017 records session-lock/FK and migration-upgrade decisions.
 
 `pnpm check` passed 241 unit tests; `pnpm test:db` passed 95 integration cases including six new management cases and prior-tenant permission upgrade, plus repeat/rollback/checksum proofs. Database migrations ran only in disposable fixtures. Five pre-existing runtime/test files remain unchanged/excluded; Chapter 03 final review is still open. Next authorized task: CL-F1-02 protected read-only sources, observations, API/SDK. No Contabo/world/infrastructure operation performed.
+
+## F1 checkpoint — CL-F1-02
+
+Protected captured-inventory source and bounded literal-private-IP Java status adapter implemented; only fixed status handshake/request, no login/RCON/Docker/commands. Scoped REST/OpenAPI 3.1 and typed SDK expose target plans/adoption/status/players/activity, durable observations and unregister/reactivation metadata. Observations revalidate current authority and fence after I/O; expired attempts need explicit authorized refresh. Remote management fails closed pending private entry/MFA qualification. Optional Compose mounts only protected inventory into API; no actual main stack deployment or Contabo connection.
+
+CL-F1-03 parent dashboard/browser review is next within authorized F1. Exact local check evidence is in the build log and [service runbook](../development/minecraft-management.md). Real identity/access/backup/world/remote/network gates remain unverified.

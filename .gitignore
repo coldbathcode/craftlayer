@@ -38,3 +38,5 @@ logs/
 next-env.d.ts
 
 .worker-secrets
+
+.minecraft-secrets/

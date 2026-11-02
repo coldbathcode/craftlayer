@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { buildApp } from "../../apps/api/src/app.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import type { InventoryTarget } from "../../packages/contracts/src/minecraft.js";
 import { MinecraftControl } from "../../packages/minecraft-control/src/index.js";
@@ -29,10 +30,17 @@ let adult = "",
   server = "",
   operation = "";
 let target: InventoryTarget;
+let sourceHook: (() => Promise<void>) | undefined;
 const service = new MinecraftControl({
   databaseUrl: runtimeUrl,
   auth,
-  source: { list: async () => [target] },
+  source: {
+    list: async () => [target],
+    observe: async () => {
+      await sourceHook?.();
+      return target;
+    },
+  },
 });
 async function tx<T>(
   pool: pg.Pool,
@@ -326,5 +334,261 @@ describe("Minecraft registry tenant and operation boundary", () => {
     await expect(service.get(token, org, server)).rejects.toMatchObject({
       status: 401,
     });
+  });
+});
+
+describe("Minecraft HTTP and observation boundary", () => {
+  it("serves typed 3.1 routes with session/CSRF/scope and no arbitrary commands", async () => {
+    const app = await buildApp({
+      auth,
+      minecraft: service,
+      publicUrl: "http://127.0.0.1:3000",
+      readiness: async () => true,
+    });
+    const headers = {
+      cookie: `craftlayer_session=${adult}`,
+      "x-craftlayer-organization": org,
+    };
+    try {
+      const schema = (
+        await app.inject({ method: "GET", url: "/api/v1/openapi.json" })
+      ).json();
+      expect(schema.openapi).toBe("3.1.0");
+      expect(schema.paths["/api/v1/servers/{id}/start"]).toBeUndefined();
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/v1/servers?environment_id=${environment}`,
+            headers: { "x-craftlayer-organization": org },
+          })
+        ).statusCode,
+      ).toBe(401);
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/v1/servers/${server}`,
+        headers,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json().management_mode).toBe("adopted_read_only");
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/v1/servers/${server}/observe`,
+            headers,
+            payload: { expected_version: 1 },
+          })
+        ).statusCode,
+      ).toBe(403);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/v1/servers/${server}/observe`,
+            headers: {
+              ...headers,
+              origin: "http://127.0.0.1:3000",
+              "x-csrf-token": auth.csrfToken(adult),
+              "idempotency-key": randomUUID(),
+            },
+            payload: { expected_version: 1, command: "start" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `/api/v1/servers/${server}/start`,
+            headers: {
+              ...headers,
+              origin: "http://127.0.0.1:3000",
+              "x-csrf-token": auth.csrfToken(adult),
+            },
+            payload: {},
+          })
+        ).statusCode,
+      ).toBe(404);
+    } finally {
+      await app.close();
+    }
+    const requestApp = await buildApp({
+      auth,
+      minecraft: service,
+      publicUrl: "http://127.0.0.1:3000",
+      readiness: async () => true,
+    });
+    try {
+      const response = await requestApp.inject({
+        method: "POST",
+        url: `/api/v1/servers/${server}/observe`,
+        headers: {
+          ...headers,
+          origin: "http://127.0.0.1:3000",
+          "x-csrf-token": auth.csrfToken(adult),
+          "idempotency-key": randomUUID(),
+        },
+        payload: {
+          expected_version: (await service.get(adult, org, server)).version,
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      await tx(runtime, org, async (c) =>
+        expect(
+          (
+            await c.query(
+              "select count(*)::int n from audit_events where organization_id=$1 and details->>'request_id'=$2 and details->>'operation_id'=$3",
+              [
+                org,
+                response.headers["x-request-id"],
+                response.json().operation_id,
+              ],
+            )
+          ).rows[0].n,
+        ).toBe(2),
+      );
+    } finally {
+      await requestApp.close();
+    }
+    const remote = await buildApp({
+      auth,
+      minecraft: service,
+      publicUrl: "https://management.example.invalid",
+      readiness: async () => true,
+    });
+    try {
+      expect(
+        (
+          await remote.inject({
+            method: "GET",
+            url: `/api/v1/servers?environment_id=${environment}`,
+            headers,
+          })
+        ).statusCode,
+      ).toBe(503);
+    } finally {
+      await remote.close();
+    }
+  });
+  it("updates captured observations with a durable fenced operation and replay", async () => {
+    const current = await service.get(adult, org, server);
+    const key = randomUUID();
+    target = {
+      ...target,
+      observation: {
+        ...target.observation,
+        observed_at: new Date().toISOString(),
+        players: [{ name: "FixturePlayer", edition: "java" }],
+        state: "online",
+      },
+    };
+    const op = await service.observe(adult, org, server, current.version, key);
+    expect((await service.operation(adult, org, op.operation_id)).state).toBe(
+      "succeeded",
+    );
+    expect(
+      await service.observe(adult, org, server, current.version, key),
+    ).toEqual(op);
+    expect(
+      (await service.players(viewer, org, server)).players?.[0]?.name,
+    ).toBe("FixturePlayer");
+    expect(
+      (await service.activity(adult, org, server)).items.some(
+        (e) => e.action === "server.observation_recorded",
+      ),
+    ).toBe(true);
+    await expect(
+      service.observe(viewer, org, server, current.version, randomUUID()),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("does not commit observation data after session revocation during source I/O", async () => {
+    const actor = await member("org_admin");
+    const current = await service.get(adult, org, server);
+    let release: () => void = () => {};
+    let enter: () => void = () => {};
+    const entered = new Promise<void>((done) => {
+      enter = done;
+    });
+    const block = new Promise<void>((done) => {
+      release = done;
+    });
+    sourceHook = async () => {
+      enter();
+      await block;
+    };
+    const pending = service.observe(
+      actor,
+      org,
+      server,
+      current.version,
+      randomUUID(),
+    );
+    await entered;
+    await auth.logout(actor);
+    release();
+    const op = await pending;
+    sourceHook = undefined;
+    expect((await service.operation(adult, org, op.operation_id)).state).toBe(
+      "failed",
+    );
+    expect((await service.get(adult, org, server)).version).toBe(
+      current.version,
+    );
+  });
+  it("unregisters metadata only and fences an in-flight observation", async () => {
+    const current = await service.get(adult, org, server);
+    let release: () => void = () => {};
+    let enter: () => void = () => {};
+    const entered = new Promise<void>((done) => {
+      enter = done;
+    });
+    const block = new Promise<void>((done) => {
+      release = done;
+    });
+    sourceHook = async () => {
+      enter();
+      await block;
+    };
+    const pending = service.observe(
+      adult,
+      org,
+      server,
+      current.version,
+      randomUUID(),
+    );
+    await entered;
+    const removed = await service.unregister(
+      adult,
+      org,
+      server,
+      current.version,
+      randomUUID(),
+    );
+    release();
+    const old = await pending;
+    sourceHook = undefined;
+    expect((await service.operation(adult, org, old.operation_id)).state).toBe(
+      "failed",
+    );
+    expect(
+      (await service.operation(adult, org, removed.operation_id)).state,
+    ).toBe("succeeded");
+    expect((await service.get(adult, org, server)).registered).toBe(false);
+    expect(target.binding_hash).toBe("a".repeat(64));
+    const input = {
+      environment_id: environment,
+      target_id: targetId,
+      name: "Re-adopted family",
+    };
+    const plan = await service.plan(adult, org, input);
+    const restored = await service.adopt(
+      adult,
+      org,
+      { ...input, plan_hash: plan.plan_hash },
+      randomUUID(),
+    );
+    expect(restored.server_id).toBe(server);
+    expect((await service.get(adult, org, server)).registered).toBe(true);
   });
 });

@@ -11,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { registerAuth } from "./auth-routes.js";
+import { type MinecraftApi, registerMinecraft } from "./minecraft-routes.js";
 import { type ConnectionApi, registerProviders } from "./provider-routes.js";
 import { type RuntimeApi, registerRuntime } from "./runtime-routes.js";
 export async function buildApp(options: {
@@ -19,6 +20,7 @@ export async function buildApp(options: {
   auth?: IdentityService;
   providers?: ConnectionApi;
   runtime?: RuntimeApi;
+  minecraft?: MinecraftApi;
   publicUrl?: string;
 }) {
   const app = Fastify({
@@ -32,7 +34,10 @@ export async function buildApp(options: {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
   await app.register(swagger, {
-    openapi: { info: { title: "CraftLayer Core", version: "0.0.0" } },
+    openapi: {
+      openapi: "3.1.0",
+      info: { title: "CraftLayer Core", version: "0.0.0" },
+    },
     transform: jsonSchemaTransform,
   });
   app.addHook("onResponse", async (request, reply) => {
@@ -148,6 +153,12 @@ export async function buildApp(options: {
     await registerRuntime(
       app,
       options.runtime,
+      options.publicUrl ?? "http://127.0.0.1:3000",
+    );
+  if (options.minecraft && options.auth)
+    await registerMinecraft(
+      app,
+      options.minecraft,
       options.publicUrl ?? "http://127.0.0.1:3000",
     );
   await app.ready();

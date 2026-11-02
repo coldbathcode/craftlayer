@@ -37,6 +37,7 @@ export function parseOwnerRecoveryConfig(
 }
 const schema = z
   .strictObject({
+    CRAFTLAYER_MINECRAFT_INVENTORY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_KEY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_POLICY_FILE: z.string().startsWith("/").optional(),
     NODE_ENV: z
@@ -253,6 +254,7 @@ export function parseWorkerConfig(env: Record<string, string | undefined>) {
     "CRAFTLAYER_RECOVERY_TOKEN",
     "CRAFTLAYER_CSRF_SECRET",
     "CRAFTLAYER_SMTP_URL",
+    "CRAFTLAYER_MINECRAFT_INVENTORY_FILE",
     "CRAFTLAYER_PROVIDER_KEY_FILE",
     "CRAFTLAYER_PROVIDER_POLICY_FILE",
   ];

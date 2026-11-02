@@ -6,6 +6,10 @@ import {
   within,
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
+import {
+  InventoryFileSource,
+  MinecraftControl,
+} from "@craftlayer/minecraft-control";
 import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
 import { RuntimeService, redisPublisher } from "@craftlayer/runtime";
 import { createClient } from "redis";
@@ -61,6 +65,11 @@ try {
     providers,
     cursorSecret: config.CRAFTLAYER_CSRF_SECRET,
   });
+  const minecraft = new MinecraftControl({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    source: new InventoryFileSource(config.CRAFTLAYER_MINECRAFT_INVENTORY_FILE),
+  });
   let scheduling = false;
   const publish = redisPublisher(config.REDIS_URL);
   const runtimeTimer = setInterval(() => {
@@ -115,6 +124,7 @@ try {
     await auth.close();
     await providers.close();
     await runtime.close();
+    await minecraft.close();
   };
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
@@ -125,12 +135,13 @@ try {
     auth,
     providers,
     runtime,
+    minecraft,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
     readiness: async () => {
       const [db, pong] = await within(
         Promise.all([
           pool.query(
-            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null as migrated",
+            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null and to_regclass('public.minecraft_servers') is not null as migrated",
           ),
           redis.isReady ? redis.ping() : Promise.resolve(null),
         ]),
@@ -147,6 +158,7 @@ try {
     await auth.close();
     await providers.close();
     await runtime.close();
+    await minecraft.close();
   };
   installShutdown(() => close(), log);
   await app.listen({

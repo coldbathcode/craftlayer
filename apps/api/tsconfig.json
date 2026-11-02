@@ -30,6 +30,9 @@
     },
     {
       "path": "../../packages/runtime"
+    },
+    {
+      "path": "../../packages/minecraft-control"
     }
   ]
 }
