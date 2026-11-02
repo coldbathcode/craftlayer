@@ -18,6 +18,7 @@ const record = z.strictObject({
     "prepared",
     "dispatching",
     "succeeded",
+    "rolled_back",
     "not_dispatched",
     "uncertain",
   ]),

@@ -8,9 +8,13 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"],
+  "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
-    { "path": "../../packages/contracts" },
-    { "path": "../../packages/node-protocol" }
+    {
+      "path": "../../packages/contracts"
+    },
+    {
+      "path": "../../packages/node-protocol"
+    }
   ]
 }

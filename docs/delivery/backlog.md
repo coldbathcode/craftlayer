@@ -103,6 +103,8 @@ CL-F25-02 checkpoint B adds private transactional reservations/port claims, curr
 
 CL-F25-02 checkpoint C adds fixed approved image/resource/mount/network policy and guarded Engine verbs; no public execution path. Next: durable ownership/rollback runner and disposable host test. See [broker runbook](../development/node-broker.md).
 
+CL-F25-02 checkpoint D adds durable broker creation provenance, lifecycle, retained-world rollback and truthful signed outcomes. Unknown effects stay blocked after restart/rotation. Next: disposable real Engine exercise, then controller jobs/authority integration. See [ownership ADR](../architecture/decisions/0023-node-broker-ownership.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

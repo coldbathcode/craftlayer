@@ -1,0 +1,15 @@
+# ADR 0023 — Durable ownership before Docker lifecycle effects
+
+Status: adopted for local F2.5 development, 2026-11-02. Extends [ADR 0022](0022-constrained-engine-policy.md); no public effect transport or production qualification.
+
+## Decision
+
+Compose the fixed Engine helpers behind a separate private `ConstrainedDockerBroker` port for the signed executor. Resolve immutable manifests through an operator-private catalog, bind node/control/tenant/key/policy and persist the manifest hash, generated ownership nonce, immutable server/world IDs and highest fence. Refuse preexisting derived names before any write, even matching labels. Never infer creation provenance from labels or adopt an unknown daemon result.
+
+Use a separate exclusive owner-private, bounded and file/directory-synced ownership journal. Persist each native effect intent before dispatch and its returned immutable Docker ID before the next effect. Persist verified completion before returning a proof. Unacknowledged writes, failed post-dispatch verification or process death retain pending intent; restart, rotation, a higher fence or rollback cannot erase it. Missing/corrupt/public/symlinked old state refuses reset. A crash leaves an operator-reviewed process lock, distinct from resolution of the retained intent. No automatic reconciliation or operator force-clear API is implemented.
+
+Provision creates an isolated network and a stopped container, then verifies exact IDs, nonce/labels, image/configuration, limits, storage and closed ports. It does not assert game readiness or start Minecraft. Lifecycle accepts only journal-owned IDs and revalidates the same immutable manifest; no opening of ports or host parameters is accepted. Network attachments outside the expected network and unrelated endpoints are denied. Reopen performs no start. Restart of an already stopped container returns verified `not_dispatched`; a new explicit start command is required.
+
+On a provision postcondition failure with acknowledged resources and no unknown native intent, attempt guarded rollback of those exact newly created stopped runtime resources only. Retain all world volumes, backups, image cache and allocated quota/ports. Running or drifted resources cannot be force-removed. Any unknown cleanup keeps the deployment pending. Successful compensation returns `rolled_back`, never provisioning success, and retires the deployment/world binding. The signed receipt contract adds this evidence-bearing terminal state; existing effect transport is absent, so no deployed mutable protocol is changed. Pre-dispatch no-op receipts carry no effect evidence; applied and rolled-back receipts do. No exactly-once physical-effect guarantee is made.
+
+The journal is limited to 128 deployments and 1 MiB; historical bindings remain retained and cannot be reset to free capacity. Durable controller jobs, approval/authority transport, administrative reconciliation/archival, real persistent storage allocation/quota, game ingress/readiness and recovery qualification remain separate required work. Socket-capable node compromise remains potential host compromise.

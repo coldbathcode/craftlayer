@@ -98,3 +98,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Node reservation ledger](development/node-reservations.md) records private qualified admission, atomic resource/port holds and non-expiring uncertain allocations.
 
 [Constrained broker](development/node-broker.md) records private compiler/Engine primitives, owned-resource requirements and unsupported persistent quota gates.
+
+- [Broker ownership decision](architecture/decisions/0023-node-broker-ownership.md) — private intent/IDs, retained-world rollback and truthful receipts.

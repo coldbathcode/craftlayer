@@ -89,13 +89,13 @@ export const nodeCommandReceipt = z
     command_hash: nodeHash,
     action: nodeAction,
     fence: generation,
-    state: z.enum(["succeeded", "not_dispatched", "uncertain"]),
+    state: z.enum(["succeeded", "rolled_back", "not_dispatched", "uncertain"]),
     evidence_hash: nodeHash.nullable(),
     finished_at: z.iso.datetime(),
   })
   .refine(
     (v) =>
-      v.state === "succeeded"
+      ["succeeded", "rolled_back"].includes(v.state)
         ? v.evidence_hash !== null
         : v.evidence_hash === null,
     "Receipt evidence must match state",

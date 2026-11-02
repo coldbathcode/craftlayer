@@ -33,8 +33,8 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
 | [CL-F2-04](../chapters/F2-family-access.md) | Family acceptance, security/recovery review and handoff | CL-F2-03 | Not started |
 | [CL-F25-01](../chapters/F2.5-docker-provisioning.md) | One-use node enrollment, outbound mTLS and signed commands | F2 gate for release; read-only work independent | In progress; trust/Hosts/local inventory A/B and local execution journal C |
-| [CL-F25-02](../chapters/F2.5-docker-provisioning.md) | Constrained broker, template plan, quotas/port reservations | CL-F25-01 for effects | In progress; preview A, reservation ledger B, fixed Engine policy C |
-| [CL-F25-03](../chapters/F2.5-docker-provisioning.md) | Durable provision, readiness, crash reconciliation and rollback | CL-F25-02 | Not started |
+| [CL-F25-02](../chapters/F2.5-docker-provisioning.md) | Constrained broker, template plan, quotas/port reservations | CL-F25-01 for effects | In progress; preview A, reservation ledger B, fixed Engine policy C, ownership runner D |
+| [CL-F25-03](../chapters/F2.5-docker-provisioning.md) | Durable provision, readiness, crash reconciliation and rollback | CL-F25-02 | Node ownership foundation only; controller/readiness/reconciliation open |
 | [CL-F25-04](../chapters/F2.5-docker-provisioning.md) | Creation wizard, REST and secured MCP subset | CL-F25-03 | Not started |
 | [CL-F25-05](../chapters/F2.5-docker-provisioning.md) | Disposable-host acceptance and provisioning review | CL-F25-04 | Not started |
 | [CL-F3-01](../chapters/F3-server-operations.md) | Adopted lifecycle approvals, multi-server metrics/logs | F2.5 gate | Not started |

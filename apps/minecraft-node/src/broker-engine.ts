@@ -244,6 +244,7 @@ export class BrokerEngine {
         (!expectedId || v.Id === expectedId),
       isolated: v.Internal && v.Driver === "bridge",
       endpoint_count: Object.keys(v.Containers ?? {}).length,
+      endpoint_ids: Object.keys(v.Containers ?? {}),
     };
   }
   async createNetwork(
@@ -367,6 +368,7 @@ export class BrokerEngine {
           }),
         ),
         NetworkSettings: z.object({
+          Networks: z.record(z.string(), z.unknown()),
           Ports: z
             .record(z.string(), z.array(z.unknown()).nullable())
             .nullable(),
@@ -429,6 +431,9 @@ export class BrokerEngine {
       h.CgroupnsMode === "private" &&
       safeArrays &&
       portsClosed &&
+      Object.keys(v.NetworkSettings.Networks).every(
+        (name) => name === e.NetworkMode,
+      ) &&
       mountsMatch &&
       nodeDigest(h.Tmpfs ?? {}) === nodeDigest(e.Tmpfs) &&
       (fixture ||

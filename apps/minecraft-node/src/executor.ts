@@ -36,6 +36,9 @@ export interface CommandBroker {
 }
 const proof = z.strictObject({
   verified: z.literal(true),
+  outcome: z
+    .enum(["applied", "rolled_back", "not_dispatched"])
+    .default("applied"),
   evidence_hash: z.string().regex(/^[a-f0-9]{64}$/),
 });
 function deny(code: string): never {
@@ -116,7 +119,7 @@ export class NodeCommandExecutor {
   #receipt(
     v: NodeCommand,
     digest: string,
-    state: "succeeded" | "not_dispatched" | "uncertain",
+    state: "succeeded" | "rolled_back" | "not_dispatched" | "uncertain",
     evidence: string | null,
   ): SignedNodeCommandReceipt {
     const payload = {
@@ -322,7 +325,8 @@ export class NodeCommandExecutor {
     });
     if (old) return old;
     let dispatched = false,
-      result: "succeeded" | "not_dispatched" | "uncertain" = "not_dispatched",
+      result: "succeeded" | "rolled_back" | "not_dispatched" | "uncertain" =
+        "not_dispatched",
       evidence: string | null = null;
     const abortEffect = new AbortController();
     let effectTimer: ReturnType<typeof setTimeout> | undefined;
@@ -352,8 +356,10 @@ export class NodeCommandExecutor {
         ]),
       );
       await guard();
-      evidence = verified.evidence_hash;
-      result = "succeeded";
+      if (verified.outcome === "rolled_back" && v.action !== "provision")
+        deny("NODE_BROKER_OUTCOME_DENIED");
+      result = verified.outcome === "applied" ? "succeeded" : verified.outcome;
+      evidence = result === "not_dispatched" ? null : verified.evidence_hash;
     } catch {
       result = dispatched ? "uncertain" : "not_dispatched";
     } finally {
@@ -377,7 +383,10 @@ export class NodeCommandExecutor {
       if (result !== "uncertain") resource.unresolved = null;
       if (result === "succeeded" && v.action === "provision")
         resource.provisioned = true;
-      if (result === "succeeded" && v.action === "rollback")
+      if (
+        result === "rolled_back" ||
+        (result === "succeeded" && v.action === "rollback")
+      )
         resource.retired = true;
     });
     return receipt;
