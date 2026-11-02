@@ -86,3 +86,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [F1 observation-service runbook](development/minecraft-management.md) documents captured/live status semantics, protected configuration, typed routes and unverified remote/game gates.
 
 [F2 identity runbook](development/minecraft-identities.md) records pinned unqualified artifacts, identity semantics and the required real-client gate.
+
+[Runnable family prototype](development/prototype.md): separate local stack, generated parent/viewer/child accounts and a test journey with synthetic servers and persistent pending requests.

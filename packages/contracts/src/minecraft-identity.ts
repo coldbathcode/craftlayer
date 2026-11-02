@@ -76,3 +76,8 @@ export const identityEnrollmentAccepted = z.strictObject({
 export type AuthenticatedGameIdentity = z.infer<
   typeof authenticatedGameIdentity
 >;
+
+export const identityEnrollmentPage = z.strictObject({
+  items: z.array(pendingIdentityEnrollment).max(50),
+  next_cursor: z.uuid().nullable(),
+});

@@ -2,6 +2,9 @@ import {
   type adoptionCommit,
   adoptionPlan,
   type adoptionRequest,
+  identityEnrollmentAccepted,
+  identityEnrollmentPage,
+  type identityEnrollmentRequest,
   itemsSchema,
   operationAccepted,
   operationView,
@@ -68,6 +71,22 @@ export function minecraftClient(
         `/api/v1/operations/${encodeURIComponent(id)}`,
         operationView,
         context,
+      ),
+    identityEnrollments: (id: string, cursor?: string) =>
+      identityRequest(
+        `/api/v1/servers/${encodeURIComponent(id)}/identity-enrollments${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`,
+        identityEnrollmentPage,
+        context,
+      ),
+    enrollIdentity: (
+      id: string,
+      input: z.infer<typeof identityEnrollmentRequest>,
+      key: string,
+    ) =>
+      identityRequest(
+        `/api/v1/servers/${encodeURIComponent(id)}/identity-enrollments`,
+        identityEnrollmentAccepted,
+        { ...context, method: "POST", json: input, idempotencyKey: key },
       ),
     observe: (id: string, version: number, key: string) =>
       identityRequest(

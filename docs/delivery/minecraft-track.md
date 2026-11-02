@@ -28,7 +28,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Verified locally |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Verified locally |
 | [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Verified locally; remote entry blocked |
-| [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | In progress; candidate/provenance checkpoint, real gate pending |
+| [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | In progress; candidate/provenance + pending request UI/prototype, real gate pending |
 | [CL-F2-02](../chapters/F2-family-access.md) | Desired/actual allowlist operations, revoke/expiry and UI | CL-F2-01 | Not started |
 | [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
 | [CL-F2-04](../chapters/F2-family-access.md) | Family acceptance, security/recovery review and handoff | CL-F2-03 | Not started |

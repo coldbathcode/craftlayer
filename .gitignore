@@ -40,3 +40,5 @@ next-env.d.ts
 .worker-secrets
 
 .minecraft-secrets/
+
+.craftlayer-prototype/

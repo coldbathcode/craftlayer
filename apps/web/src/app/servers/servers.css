@@ -556,3 +556,73 @@
     letter-spacing: 0;
   }
 }
+.server-demo {
+  border: 1px dashed #789964;
+  padding: 14px 18px;
+  margin: 20px 0;
+  background: #e6efda;
+  font-size: 12px;
+}
+.server-demo strong {
+  font: 10px monospace;
+  letter-spacing: 1px;
+}
+.server-demo p {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+.server-enrollments {
+  margin-bottom: 24px;
+}
+.server-enrollment-form {
+  display: grid;
+  grid-template-columns: minmax(130px, 0.8fr) minmax(160px, 1.4fr) auto;
+  gap: 14px;
+  align-items: end;
+  padding: 16px 0;
+}
+.server-enrollment-list {
+  list-style: none;
+  padding: 0;
+  margin-bottom: 0;
+}
+.server-enrollment-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+.server-enrollment-list strong {
+  font-size: 13px;
+  display: block;
+  overflow-wrap: anywhere;
+}
+.server-enrollment-list div > span {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+@media (max-width: 1050px) {
+  .server-enrollment-form {
+    grid-template-columns: 1fr 1fr;
+  }
+  .server-enrollment-form button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 700px) {
+  .server-enrollment-list li {
+    align-items: start;
+    flex-wrap: wrap;
+  }
+  .server-enrollment-form {
+    grid-template-columns: 1fr;
+  }
+  .server-enrollment-form input,
+  .server-enrollment-form select {
+    font-size: 16px;
+  }
+}

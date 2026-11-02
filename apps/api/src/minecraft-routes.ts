@@ -4,6 +4,9 @@ import {
   adoptionPlan,
   adoptionRequest,
   errorSchema,
+  identityEnrollmentAccepted,
+  identityEnrollmentPage,
+  identityEnrollmentRequest,
   itemsSchema,
   operationAccepted,
   operationView,
@@ -146,6 +149,47 @@ export async function registerMinecraft(
     "/api/v1/servers/:id/activity",
     { schema: { params, response: { 200: serverActivity, ...errors } } },
     async (r) => control.activity(token(r), org(r), r.params.id),
+  );
+  api.get(
+    "/api/v1/servers/:id/identity-enrollments",
+    {
+      schema: {
+        params,
+        querystring: z.strictObject({ cursor: z.uuid().optional() }),
+        response: { 200: identityEnrollmentPage, ...errors },
+      },
+    },
+    async (r) =>
+      control.identityEnrollments(
+        token(r),
+        org(r),
+        r.params.id,
+        r.query.cursor,
+      ),
+  );
+  api.post(
+    "/api/v1/servers/:id/identity-enrollments",
+    {
+      schema: {
+        params,
+        body: identityEnrollmentRequest,
+        response: { 202: identityEnrollmentAccepted, ...errors },
+      },
+    },
+    async (r, reply) =>
+      reply
+        .code(202)
+        .send(
+          await withManagementRequest(r.id, () =>
+            control.enrollIdentity(
+              token(r),
+              org(r),
+              r.params.id,
+              r.body,
+              key(r),
+            ),
+          ),
+        ),
   );
   api.get(
     "/api/v1/operations/:id",

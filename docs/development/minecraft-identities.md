@@ -1,6 +1,6 @@
 # Minecraft identity development and qualification
 
-Status: authorized F2 local work in progress, CL-F2-01 checkpoint A. No authenticated game bridge, verified enrollment, allowlist mutation or family readiness is delivered by this checkpoint. [ADR 0018](../architecture/decisions/0018-game-identity-provenance.md) defines the provenance boundary; [F2 chapter](../chapters/F2-family-access.md) keeps real MC-03 evidence mandatory.
+Status: authorized F2 local work in progress, CL-F2-01 checkpoints A–B. No authenticated game bridge, verified enrollment, allowlist mutation or family readiness is delivered by this checkpoint. [ADR 0018](../architecture/decisions/0018-game-identity-provenance.md) defines the provenance boundary; [F2 chapter](../chapters/F2-family-access.md) keeps real MC-03 evidence mandatory.
 
 ## Pinned candidate, not an upgrade plan
 
@@ -25,7 +25,7 @@ Before booting a future disposable test instance, obtain the adult’s EULA ackn
 
 `normalizeAuthenticatedIdentity` is a pure helper for the future authenticated bridge: it checks typed issuer/edition/UUID/XUID/link mapping only. Supplying a matching object does not authenticate a player. Java online profile UUIDs and unsigned Bedrock XUIDs remain separate subjects; names are private display metadata. Linked Bedrock evidence must preserve the XUID and effective Java UUID; a shared game UUID never grants another account’s access. Link/unlink changes return review-required rather than silently changing permissions or worlds. Public/name-only resolution remains pending, not authenticated provenance or ownership.
 
-The browser enrollment schema accepts edition and requested display name only. It rejects caller UUID/XUID, verification, credentials, paths, commands or web-user assertions. F2 checkpoint B will persist those pending requests under current adult scope; it will not turn them into access. Explicit adult web-to-game assignment, target/issuer/profile-bound authenticated receipts and replay/revocation protection remain required.
+The browser enrollment schema accepts edition and requested display name only. It rejects caller UUID/XUID, verification, credentials, paths, commands or web-user assertions. F2 checkpoint B persists those pending requests under current adult scope and never turns them into access. Explicit adult web-to-game assignment, target/issuer/profile-bound authenticated receipts and replay/revocation protection remain required.
 
 ## Required qualification record
 
@@ -43,3 +43,14 @@ Use approved licensed clients/accounts, never passwords/tokens in Git or chat. R
 | Missing/outdated bridge/profile | Unsupported/pending, never verified or ready |
 
 Real-client admission/denial tests and effective bridge event timing are still unexecuted. Snapshot descriptors/protocol source and deterministic fixtures cannot close MC-03. No live/Contabo, backup/restore, family-ready or production claim follows.
+
+
+## Implemented pending enrollment API and UI
+
+Adult `player:enroll` can POST `/api/v1/servers/{id}/identity-enrollments` with edition/requested_name and UUID Idempotency-Key. `player:read` can GET the same route with an optional scoped UUID cursor (50-row pages). New default write permission belongs only to Org Admin; child ceiling denies it even with added roles. Current canonical server/environment/membership is checked; actor/session comes from the guard. Requests cannot assert UUID/XUID, provenance, web-user binding or access. No verification/promotion endpoint exists.
+
+A 202 response carries operation/enrollment/server IDs. Operation success means the pending request was saved, not that identity verification or access succeeded. Immutable SQL rows permit only `pending`, expire after 24 hours and are projected with `identity_verified:false`, `access_granted:false` and explicit bridge-unavailable reason. Fresh/replayed requests require current permission; different bodies/servers conflict on reused keys. Server registration/world/observation stays unchanged. Operation, request, audit and reference-only outbox commit atomically; no consumer dispatches a game action.
+
+Migration 0017 is additive and upgrades existing built-in admin roles using a transaction-local migration policy removed before commit. Forced RLS, tenant server/operation/membership FKs and no runtime UPDATE/DELETE prevent promotion/rebinding through the app role. Limits: 200 retained requests/server, existing twelve actor/environment operations/minute and 10,000 operations/environment. Retention/pruning, authenticated bridge, explicit adult game-account binding and real compatibility remain unfinished.
+
+The dashboard shows Players & access, role-controlled Java/Bedrock name requests, pending/expired rows and scoped activity. [Runnable prototype](prototype.md) seeds only synthetic servers and separate ordinary test accounts so the flow can be exercised before game connectivity exists.

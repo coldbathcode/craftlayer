@@ -1,6 +1,6 @@
 # Minecraft management, operations and node architecture
 
-Status: planned F-track contract, not implemented. [Reconciliation](../delivery/unified-reconciliation.md), [ADR 0015](decisions/0015-unified-control-plane.md) and [ADR 0016](decisions/0016-node-provisioning-boundary.md) preserve implemented Chapters 00–03. Detailed bot play remains in [Minecraft cooperation](minecraft-cooperation.md).
+Status: staged F-track contract; F1 and F2 pending identity request/prototype checkpoints are implemented, with real F2 access/recovery/node gates still open. [Reconciliation](../delivery/unified-reconciliation.md), [ADR 0015](decisions/0015-unified-control-plane.md) and [ADR 0016](decisions/0016-node-provisioning-boundary.md) preserve implemented Chapters 00–03. Detailed bot play remains in [Minecraft cooperation](minecraft-cooperation.md).
 
 ## Components and trust boundaries
 
@@ -96,3 +96,7 @@ Lock/reserve capacity and protocol/address/ports transactionally with expiry and
 The [management runbook](../development/minecraft-management.md) describes implemented contracts. `packages/minecraft-control` owns scoped registry/operation/projection logic independently of Fastify, queues and UI. PostgreSQL migration 0016 adds server/operation/reference-only outbox state without changing existing agent runtime tables. Protected captured inventory and optional fixed Java status-only query are the implemented observation capabilities; no RCON adapter exists in F1. Captured offline remains offline; failed status is unavailable. No source can start an offline server or prove authentication/backup recovery.
 
 `/servers` is a browser-only SDK consumer using existing same-origin identity/CSRF and JSON-safe schemas. Organization/world changes clear cached server/player/activity projections and invalidate late reads; periodic visible-tab metadata refresh never automatically issues a game query. The UI separates exact-plan metadata registration from future provisioning, requires typed confirmation for unregister, and leaves game/admin/backup controls unavailable. Current API/domain checks remain authoritative even when a control is absent or stale. Remote management is denied until separately qualified private entry/MFA; the local dashboard is no deployment approval. [F1 review](../reviews/F1-control-plane.md) records acceptance scope and manual gaps.
+
+## Implemented F2 pending prototype boundary
+
+Migration 0017 adds immutable pending name-resolution requests, canonical actor/session scope, current `player:enroll` and explicit `player:read`, durable operation receipts and atomic audit/reference-only outbox. No consumer promotes identity or grants access. `/servers/:id/identity-enrollments` GET/POST and typed SDK/UI expose pending/expired metadata only. The separate loopback prototype uses generated accounts and synthetic flagged snapshots; it cannot contact a real game server. [Prototype guide](../development/prototype.md) documents isolation and retained data; [ADR 0018](decisions/0018-game-identity-provenance.md) preserves authenticated-provenance/link-review requirements.

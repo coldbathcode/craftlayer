@@ -86,6 +86,7 @@ test("isolated parent dashboard observes without game controls and clears revoke
   const observation = {
     observed_at: new Date(Date.now() - 120_000).toISOString(),
     state: "offline",
+    data_kind: "synthetic",
     java: { host: "play.example.invalid", port: 25565 },
     bedrock: { host: "play.example.invalid", port: 19132 },
     players: null,
@@ -124,7 +125,9 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     page.getByRole("heading", { name: "Family survival", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".server-state")).toHaveText("Stale observation");
+  await expect(page.locator(".server-detail-heading .server-state")).toHaveText(
+    "Stale observation",
+  );
   await expect(
     page.getByText("Family readiness has not been verified.", { exact: false }),
   ).toBeVisible();
@@ -147,9 +150,30 @@ test("isolated parent dashboard observes without game controls and clears revoke
   });
   await page.getByRole("button", { name: "Observe approved source" }).click();
   await expect(page.getByText("FixturePlayer", { exact: false })).toBeVisible();
-  await expect(page.locator(".server-state")).toHaveText("Observed online");
+  await expect(page.locator(".server-detail-heading .server-state")).toHaveText(
+    "Observed online",
+  );
   await expect(
     page.getByText("observation recorded", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("LOCAL PROTOTYPE · SIMULATED SERVER", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Game edition").selectOption("java");
+  await page.getByLabel("Player name", { exact: true }).fill("BrowserRequest");
+  await page.getByRole("button", { name: "Request identity check" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "no game access granted" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".server-enrollment-list")
+      .getByText("BrowserRequest", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .locator(".server-enrollment-list")
+      .getByText("Pending · no access", { exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "Account", exact: true }).focus();
   await page.screenshot({
@@ -305,6 +329,9 @@ test("isolated parent dashboard observes without game controls and clears revoke
     viewer.getByRole("button", { name: "Observe approved source" }),
   ).toHaveCount(0);
   await expect(
+    viewer.getByRole("button", { name: "Request identity check" }),
+  ).toHaveCount(0);
+  await expect(
     viewer.getByRole("heading", { name: "Adopt existing" }),
   ).toHaveCount(0);
   await expect(
@@ -338,6 +365,9 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     page.getByText("No server registered in this world yet."),
   ).toBeVisible();
+  await expect(page.getByText("BrowserRequest", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByText("FixturePlayer", { exact: false })).toHaveCount(
     0,
   );
@@ -360,7 +390,7 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     page.getByRole("status").filter({ hasText: "Registration removed." }),
   ).toBeVisible();
-  await expect(page.locator(".server-state")).toHaveText(
+  await expect(page.locator(".server-detail-heading .server-state")).toHaveText(
     "Registration removed",
   );
   await page.setViewportSize({ width: 390, height: 844 });

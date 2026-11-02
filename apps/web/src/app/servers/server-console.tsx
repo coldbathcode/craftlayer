@@ -7,6 +7,7 @@ import {
   itemsSchema,
   type Me,
   meSchema,
+  type pendingIdentityEnrollment,
   type playersView,
   type ServerView,
   type serverActivity,
@@ -25,6 +26,7 @@ import type { z } from "zod";
 type Plan = z.infer<typeof adoptionPlan>;
 type Target = z.infer<typeof targetView>;
 type Players = z.infer<typeof playersView>;
+type Enrollment = z.infer<typeof pendingIdentityEnrollment>;
 type Activity = z.infer<typeof serverActivity>;
 function observed(server: ServerView) {
   if (!server.registered) return "Registration removed";
@@ -78,7 +80,8 @@ export function ServerConsole() {
     [selectedId, setSelectedId] = useState(""),
     [targets, setTargets] = useState<Target[]>([]),
     [canAdopt, setCanAdopt] = useState(false),
-    [canAudit, setCanAudit] = useState(false);
+    [canAudit, setCanAudit] = useState(false),
+    [canEnroll, setCanEnroll] = useState(false);
   const [players, setPlayers] = useState<Players | null>(null),
     [activity, setActivity] = useState<Activity["items"]>([]),
     [error, setError] = useState(""),
@@ -89,11 +92,19 @@ export function ServerConsole() {
     [target, setTarget] = useState(""),
     [plan, setPlan] = useState<Plan | null>(null),
     [confirmation, setConfirmation] = useState("");
+  const [enrollments, setEnrollments] = useState<Enrollment[]>([]),
+    [enrollmentCursor, setEnrollmentCursor] = useState<string | null>(null),
+    [enrollmentName, setEnrollmentName] = useState(""),
+    [enrollmentEdition, setEnrollmentEdition] = useState<"java" | "bedrock">(
+      "java",
+    );
+  const detailGeneration = useRef(0);
   const generation = useRef(0),
     scope = useRef("");
   const selected = servers.find((s) => s.id === selectedId) ?? null;
   const reset = useCallback(() => {
     generation.current++;
+    detailGeneration.current++;
     setServers([]);
     setSelectedId("");
     setCursor(null);
@@ -105,6 +116,9 @@ export function ServerConsole() {
     setError("");
     setBusy(false);
     setConfirmation("");
+    setEnrollments([]);
+    setEnrollmentCursor(null);
+    setEnrollmentName("");
   }, []);
   const failure = useCallback(
     (e: unknown) => {
@@ -167,6 +181,7 @@ export function ServerConsole() {
         setWorld(worlds[0]?.id ?? "");
         setCanAdopt(a.permissions.includes("server:adopt"));
         setCanAudit(a.can_read_audit);
+        setCanEnroll(a.permissions.includes("player:enroll"));
       })
       .catch((e) => {
         if (!abort.signal.aborted) failure(e);
@@ -252,8 +267,11 @@ export function ServerConsole() {
     };
   }, [org, world, load, reset]);
   useEffect(() => {
+    detailGeneration.current++;
     setPlayers(null);
     setActivity([]);
+    setEnrollments([]);
+    setEnrollmentCursor(null);
     setConfirmation("");
     if (!selected || !me) return;
     const abort = new AbortController(),
@@ -262,6 +280,18 @@ export function ServerConsole() {
       .players(selected.id)
       .then((v) => {
         if (!abort.signal.aborted) setPlayers(v);
+      })
+      .catch((e) => {
+        if (!abort.signal.aborted && e instanceof ApiError && e.status === 401)
+          failure(e);
+      });
+    void api
+      .identityEnrollments(selected.id)
+      .then((v) => {
+        if (!abort.signal.aborted) {
+          setEnrollments(v.items);
+          setEnrollmentCursor(v.next_cursor);
+        }
       })
       .catch((e) => {
         if (!abort.signal.aborted && e instanceof ApiError && e.status === 401)
@@ -283,6 +313,25 @@ export function ServerConsole() {
         });
     return () => abort.abort();
   }, [selected, me, org, canAudit, failure]);
+  async function moreEnrollments() {
+    if (!me || !selected || !enrollmentCursor || busy) return;
+    const epoch = detailGeneration.current;
+    setBusy(true);
+    try {
+      const page = await minecraftClient(
+        org,
+        me.csrf_token,
+      ).identityEnrollments(selected.id, enrollmentCursor);
+      if (epoch === detailGeneration.current) {
+        setEnrollments((old) => [...old, ...page.items]);
+        setEnrollmentCursor(page.next_cursor);
+      }
+    } catch (e) {
+      if (epoch === detailGeneration.current) failure(e);
+    } finally {
+      setBusy(false);
+    }
+  }
   async function action(
     fn: (api: ReturnType<typeof minecraftClient>) => Promise<string>,
   ) {
@@ -598,6 +647,15 @@ export function ServerConsole() {
                       </div>
                       <span className="server-state">{observed(selected)}</span>
                     </div>
+                    {selected.observation?.data_kind === "synthetic" ? (
+                      <div className="server-demo" role="note">
+                        <strong>LOCAL PROTOTYPE · SIMULATED SERVER</strong>
+                        <p>
+                          This is demo data. No Minecraft server is connected.
+                          Requests are saved here, but grant no game access.
+                        </p>
+                      </div>
+                    ) : null}
                     <div className="server-notice">
                       <strong>Read-only, by design.</strong>
                       <p>
@@ -706,6 +764,116 @@ export function ServerConsole() {
                         )}
                       </article>
                     </div>
+                    <article className="server-panel server-enrollments">
+                      <div className="server-panel-title">
+                        <h3>Players &amp; access</h3>
+                        <span className="server-pill">
+                          VERIFICATION PENDING
+                        </span>
+                      </div>
+                      <p className="server-subtle">
+                        Request an identity check before granting access. A
+                        player name is not a verified account. Authentication
+                        and allowlist changes are unavailable in this preview.
+                      </p>
+                      {canEnroll && selected.registered ? (
+                        <form
+                          className="server-enrollment-form"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            void action(async (api) => {
+                              await api.enrollIdentity(
+                                selected.id,
+                                {
+                                  edition: enrollmentEdition,
+                                  requested_name: enrollmentName,
+                                },
+                                crypto.randomUUID(),
+                              );
+                              setEnrollmentName("");
+                              return "Identity request saved. Pending authentication; no game access granted.";
+                            });
+                          }}
+                        >
+                          <label>
+                            Game edition
+                            <select
+                              disabled={busy}
+                              value={enrollmentEdition}
+                              onChange={(e) =>
+                                setEnrollmentEdition(
+                                  e.target.value as "java" | "bedrock",
+                                )
+                              }
+                            >
+                              <option value="java">Java Edition</option>
+                              <option value="bedrock">Bedrock Edition</option>
+                            </select>
+                          </label>
+                          <label>
+                            Player name
+                            <input
+                              required
+                              value={enrollmentName}
+                              maxLength={enrollmentEdition === "java" ? 16 : 32}
+                              minLength={enrollmentEdition === "java" ? 3 : 1}
+                              disabled={busy}
+                              onChange={(e) =>
+                                setEnrollmentName(e.target.value)
+                              }
+                              autoComplete="off"
+                              placeholder={
+                                enrollmentEdition === "java"
+                                  ? "Java username"
+                                  : "Xbox gamertag"
+                              }
+                            />
+                          </label>
+                          <button
+                            type="submit"
+                            className="server-solid"
+                            disabled={busy || !enrollmentName.trim()}
+                          >
+                            Request identity check
+                          </button>
+                        </form>
+                      ) : null}
+                      {enrollments.length ? (
+                        <ul className="server-enrollment-list">
+                          {enrollments.map((r) => (
+                            <li key={r.id}>
+                              <div>
+                                <strong>{r.requested_name}</strong>
+                                <span>
+                                  {r.edition === "java" ? "Java" : "Bedrock"} ·
+                                  requested {when(r.created_at)}
+                                </span>
+                              </div>
+                              <span className="server-state">
+                                {r.expired
+                                  ? "Expired · unverified"
+                                  : "Pending · no access"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="server-subtle">
+                          No identity requests yet. Only authenticated evidence
+                          can move an identity beyond pending.
+                        </p>
+                      )}
+                      {enrollmentCursor ? (
+                        <button
+                          type="button"
+                          className="server-text-button"
+                          disabled={busy}
+                          onClick={() => void moreEnrollments()}
+                        >
+                          Load more identity requests
+                        </button>
+                      ) : null}
+                    </article>
                     <article className="server-panel server-audit">
                       <div className="server-panel-title">
                         <h3>Recent activity</h3>

@@ -6,6 +6,12 @@ One self-hostable Core for safe family Minecraft management and coordinated AI a
 
 Core must work without CraftLayer Cloud, an entitlement service or required telemetry. Cloud remains a separate future service consuming public Core interfaces.
 
+## Try the family prototype
+
+Run `pnpm prototype:up`, then open **http://127.0.0.1:3001/servers** (the command prints a different loopback URL if that port is occupied). Private parent/viewer/child sign-in details are generated in `.craftlayer-prototype/START-HERE.md`. Try simulated servers, players, activity and persistent pending identity requests. `pnpm prototype:down` stops the separate prototype while retaining its data. [Prototype guide](docs/development/prototype.md).
+
+This prototype uses synthetic server data, grants no game access, and leaves the existing installation/Contabo/worlds untouched. F2 authenticated identities, allowlists and backups remain in progress.
+
 ## Run the foundation
 
 With Node 22.23.3, pnpm 10.23.0, Docker and Compose v2:

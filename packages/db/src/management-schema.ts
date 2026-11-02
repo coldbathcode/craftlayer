@@ -70,6 +70,7 @@ export const managementOperations = pgTable(
   },
   (t) => [
     unique().on(t.organizationId, t.id),
+    unique().on(t.organizationId, t.serverId, t.id),
     unique().on(t.organizationId, t.actorId, t.kind, t.requestKey),
     foreignKey({
       columns: [t.organizationId, t.projectId, t.environmentId, t.serverId],
@@ -104,6 +105,50 @@ export const managementOutbox = pgTable(
         managementOperations.organizationId,
         managementOperations.id,
       ],
+    }),
+  ],
+);
+
+// SQL 0017 permits pending, immutable requests only; no verified/access columns.
+export const minecraftIdentityEnrollments = pgTable(
+  "minecraft_identity_enrollments",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    projectId: uuid("project_id").notNull(),
+    environmentId: uuid("environment_id").notNull(),
+    serverId: uuid("server_id").notNull(),
+    requestedBy: uuid("requested_by").notNull(),
+    operationId: uuid("operation_id").notNull(),
+    edition: text("edition").notNull(),
+    requestedName: varchar("requested_name", { length: 32 }).notNull(),
+    state: text("state").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.id),
+    unique().on(t.organizationId, t.operationId),
+    foreignKey({
+      columns: [t.organizationId, t.projectId, t.environmentId, t.serverId],
+      foreignColumns: [
+        minecraftServers.organizationId,
+        minecraftServers.projectId,
+        minecraftServers.environmentId,
+        minecraftServers.id,
+      ],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.serverId, t.operationId],
+      foreignColumns: [
+        managementOperations.organizationId,
+        managementOperations.serverId,
+        managementOperations.id,
+      ],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.requestedBy],
+      foreignColumns: [memberships.organizationId, memberships.userId],
     }),
   ],
 );

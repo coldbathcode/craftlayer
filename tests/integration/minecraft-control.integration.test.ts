@@ -169,6 +169,13 @@ describe("Minecraft registry tenant and operation boundary", () => {
         )
       ).rows.map((r) => r.permission);
       expect(rows).toEqual(["operation:read", "player:read", "server:read"]);
+      expect(
+        (
+          await c.query(
+            "select 1 from role_permissions where role_id='00000000-0000-4000-8000-00000000f103' and permission='player:enroll'",
+          )
+        ).rowCount,
+      ).toBe(1);
     });
   });
   it("registers once under concurrent replay with atomic operation, audit and outbox", async () => {
@@ -323,7 +330,7 @@ describe("Minecraft registry tenant and operation boundary", () => {
     expect(
       (
         await runtime.query(
-          "select 1 from pg_policies where policyname='f1_migration_discovery'",
+          "select 1 from pg_policies where policyname in ('f1_migration_discovery','f2_migration_discovery')",
         )
       ).rows,
     ).toHaveLength(0);
@@ -590,5 +597,304 @@ describe("Minecraft HTTP and observation boundary", () => {
     );
     expect(restored.server_id).toBe(server);
     expect((await service.get(adult, org, server)).registered).toBe(true);
+  });
+});
+
+describe("pending Minecraft identity resolution boundary", () => {
+  it("records one pending request under concurrent replay without changing server/access state", async () => {
+    const actor = await member("org_admin"),
+      key = randomUUID(),
+      body = { edition: "bedrock", requested_name: "Family Player" };
+    const before = await service.get(adult, org, server);
+    const receipts = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        service.enrollIdentity(actor, org, server, body, key),
+      ),
+    );
+    expect(new Set(receipts.map((r) => r.operation_id)).size).toBe(1);
+    expect(new Set(receipts.map((r) => r.enrollment_id)).size).toBe(1);
+    const receipt = receipts[0];
+    if (!receipt) throw new Error("Receipt missing");
+    const page = await service.identityEnrollments(viewer, org, server),
+      request = page.items.find((r) => r.id === receipt.enrollment_id);
+    expect(request).toMatchObject({
+      state: "pending",
+      reason: "authenticated_bridge_unavailable",
+      identity_verified: false,
+      access_granted: false,
+      expired: false,
+    });
+    expect(
+      (await service.operation(actor, org, receipt.operation_id)).state,
+    ).toBe("succeeded");
+    expect((await service.get(adult, org, server)).version).toBe(
+      before.version,
+    );
+    await tx(runtime, org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select 1 from minecraft_identity_enrollments where operation_id=$1",
+            [receipt.operation_id],
+          )
+        ).rowCount,
+      ).toBe(1);
+      expect(
+        (
+          await c.query(
+            "select 1 from management_outbox where operation_id=$1",
+            [receipt.operation_id],
+          )
+        ).rowCount,
+      ).toBe(1);
+      const audit = (
+        await c.query<{ details: Record<string, unknown> }>(
+          "select details from audit_events where details->>'operation_id'=$1",
+          [receipt.operation_id],
+        )
+      ).rows;
+      expect(audit).toHaveLength(1);
+      expect(JSON.stringify(audit)).not.toContain("Family Player");
+    });
+    await expect(
+      service.enrollIdentity(
+        actor,
+        org,
+        server,
+        { ...body, requested_name: "Changed Player" },
+        key,
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    await auth.logout(actor);
+    await expect(
+      service.enrollIdentity(actor, org, server, body, key),
+    ).rejects.toMatchObject({ status: 401 });
+  });
+  it("denies child/admin unions, viewer writes, foreign scope and caller verification claims", async () => {
+    const body = { edition: "java", requested_name: "TestPlayer" };
+    for (const actor of [child, viewer])
+      await expect(
+        service.enrollIdentity(actor, org, server, body, randomUUID()),
+      ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.identityEnrollments(child, org, server),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.identityEnrollments(adult, foreignOrg, server),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      service.enrollIdentity(
+        adult,
+        org,
+        server,
+        { ...body, profile_uuid: randomUUID(), identity_verified: true },
+        randomUUID(),
+      ),
+    ).rejects.toThrow();
+    await expect(
+      service.identityEnrollments(adult, org, server, randomUUID()),
+    ).rejects.toMatchObject({ status: 404 });
+    const expired = new MinecraftControl({
+      databaseUrl: runtimeUrl,
+      auth,
+      clock: () => Date.now() + 25 * 3600000,
+    });
+    try {
+      expect(
+        (await expired.identityEnrollments(adult, org, server)).items.every(
+          (r) => r.expired && !r.identity_verified && !r.access_granted,
+        ),
+      ).toBe(true);
+    } finally {
+      await expired.close();
+    }
+  });
+  it("enforces forced RLS, tenant operation/server FKs and immutable pending-only rows", async () => {
+    expect(
+      (await runtime.query("select * from minecraft_identity_enrollments"))
+        .rows,
+    ).toHaveLength(0);
+    await expect(
+      tx(runtime, org, (c) =>
+        c.query("update minecraft_identity_enrollments set state='verified'"),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      tx(runtime, org, (c) =>
+        c.query("delete from minecraft_identity_enrollments"),
+      ),
+    ).rejects.toMatchObject({ code: "42501" });
+    const rows = await tx(runtime, org, (c) =>
+      c.query("select * from minecraft_identity_enrollments limit 1"),
+    );
+    const row = rows.rows[0];
+    if (!row) throw new Error("Fixture enrollment missing");
+    const otherServer = randomUUID();
+    await tx(runtime, org, (c) =>
+      c.query(
+        "insert into minecraft_servers(id,organization_id,project_id,environment_id,name,target_id,binding_hash) values($1,$2,$3,$4,'Other fixture',$5,$6)",
+        [
+          otherServer,
+          org,
+          project,
+          environment,
+          `identity-${randomUUID()}`,
+          randomBytes(32).toString("hex"),
+        ],
+      ),
+    );
+    const otherOperation = randomUUID();
+    await tx(runtime, org, (c) =>
+      c.query(
+        "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) select $1,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,$2,request_hash,state,fence,deadline,created_at,finished_at from management_operations where organization_id=$3 and id=$4",
+        [otherOperation, randomUUID(), org, row.operation_id],
+      ),
+    );
+    await expect(
+      tx(runtime, org, (c) =>
+        c.query(
+          "insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,'java','TestPlayer',now(),now()+interval '1 hour')",
+          [
+            randomUUID(),
+            org,
+            project,
+            environment,
+            otherServer,
+            row.requested_by,
+            otherOperation,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23503" });
+    await expect(
+      tx(runtime, org, (c) =>
+        c.query(
+          "insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,state,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,'java','TestPlayer','verified',now(),now()+interval '1 hour')",
+          [
+            randomUUID(),
+            org,
+            project,
+            environment,
+            server,
+            row.requested_by,
+            row.operation_id,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      tx(runtime, foreignOrg, (c) =>
+        c.query(
+          "insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,'java','TestPlayer',now(),now()+interval '1 hour')",
+          [
+            randomUUID(),
+            foreignOrg,
+            project,
+            environment,
+            server,
+            row.requested_by,
+            row.operation_id,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23503" });
+  });
+  it("serves pending-only typed HTTP receipts with CSRF, idempotency and correlated audit", async () => {
+    const actor = await member("org_admin"),
+      app = await buildApp({
+        auth,
+        minecraft: service,
+        publicUrl: "http://127.0.0.1:3000",
+        readiness: async () => true,
+      });
+    const path = `/api/v1/servers/${server}/identity-enrollments`,
+      headers = {
+        cookie: `craftlayer_session=${actor}`,
+        "x-craftlayer-organization": org,
+        origin: "http://127.0.0.1:3000",
+        "idempotency-key": randomUUID(),
+      };
+    try {
+      const me = (
+        await app.inject({ method: "GET", url: "/api/v1/auth/me", headers })
+      ).json();
+      const write = { ...headers, "x-csrf-token": me.csrf_token };
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: path,
+            headers: { "x-craftlayer-organization": org },
+          })
+        ).statusCode,
+      ).toBe(401);
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path,
+            headers,
+            payload: { edition: "java", requested_name: "TestPlayer" },
+          })
+        ).statusCode,
+      ).toBe(403);
+      for (const field of [
+        "uuid",
+        "xuid",
+        "identity_verified",
+        "allowlist",
+        "web_user_id",
+        "rcon_password",
+      ])
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: path,
+              headers: write,
+              payload: {
+                edition: "java",
+                requested_name: "TestPlayer",
+                [field]: "untrusted",
+              },
+            })
+          ).statusCode,
+        ).toBe(400);
+      const result = await app.inject({
+        method: "POST",
+        url: path,
+        headers: write,
+        payload: { edition: "java", requested_name: "TestPlayer" },
+      });
+      expect(result.statusCode).toBe(202);
+      const receipt = result.json(),
+        page = (await app.inject({ method: "GET", url: path, headers })).json();
+      expect(
+        page.items.find((r: { id: string }) => r.id === receipt.enrollment_id),
+      ).toMatchObject({
+        identity_verified: false,
+        access_granted: false,
+        state: "pending",
+      });
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: `${path}/${receipt.enrollment_id}/verify`,
+            headers: write,
+            payload: { identity_verified: true },
+          })
+        ).statusCode,
+      ).toBe(404);
+      const audit = await tx(runtime, org, (c) =>
+        c.query(
+          "select details->>'request_id' as request_id from audit_events where details->>'operation_id'=$1",
+          [receipt.operation_id],
+        ),
+      );
+      expect(audit.rows[0].request_id).toBe(result.headers["x-request-id"]);
+    } finally {
+      await app.close();
+    }
   });
 });

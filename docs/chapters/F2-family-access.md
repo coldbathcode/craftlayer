@@ -1,6 +1,6 @@
 # F2 — Verified family access and recoverable backups
 
-**Status:** locally authorized by the user’s “continue” after F1; CL-F2-01 in progress, checkpoint A implemented; real compatibility gate open. **Milestone:** F2. **Requirements:** PR-025–029, PR-035. No production evidence exists.
+**Status:** locally authorized by the user’s “continue” after F1; CL-F2-01 in progress, checkpoints A–B implemented; runnable local prototype available; real compatibility gate open. **Milestone:** F2. **Requirements:** PR-025–029, PR-035. No production evidence exists.
 
 ## Objective
 
@@ -16,11 +16,11 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 ### [ ] CL-F2-01 — Pinned identity compatibility and safe enrollment
 
-**Depends on:** F1 gate. **Status:** in progress; provenance/candidate preparation checkpoint implemented, authenticated bridge/client qualification pending. **Size:** L.
+**Depends on:** F1 gate. **Status:** in progress; provenance/candidate and durable pending enrollment/UI checkpoints implemented, authenticated bridge/client qualification pending. **Size:** L.
 
 **Implementation:** Select and record compatible immutable server/image/plugins and real Java/Bedrock authentication flow. Add verified edition/UUID/XUID provenance, explicit web-to-game identity binding and safe first-time resolution. Unresolved names remain pending; unsupported Floodgate behavior blocks rather than bypasses auth.
 
-Checkpoint A: [ADR 0018](../architecture/decisions/0018-game-identity-provenance.md), strict provenance/mapping contracts and non-runnable candidate artifact preparation. See [identity runbook](../development/minecraft-identities.md). Checkpoint B is durable pending requests, not access. These checkpoints do not close this task.
+Checkpoint A: [ADR 0018](../architecture/decisions/0018-game-identity-provenance.md), strict provenance/mapping contracts and non-runnable candidate artifact preparation. See [identity runbook](../development/minecraft-identities.md). Checkpoint B adds scoped durable pending requests/API/SDK/UI and a [runnable local prototype](../development/prototype.md), not verified identity or access. These checkpoints do not close this task.
 
 **Required evidence:** MC-03: actual approved test clients/accounts prove unknown rejection, approved admission, rename/spoof/link-change handling and no whitelist-off enrollment window. Fakes alone cannot close this task’s real compatibility gate.
 

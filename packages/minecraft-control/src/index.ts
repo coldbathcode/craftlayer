@@ -12,10 +12,14 @@ import {
   type CapturedObservation,
   capturedObservation,
   type InventoryTarget,
+  identityEnrollmentAccepted,
+  identityEnrollmentPage,
+  identityEnrollmentRequest,
   inventoryTarget,
   observationView,
   operationAccepted,
   operationView,
+  pendingIdentityEnrollment,
   playersView,
   serverActivity,
   serverView,
@@ -520,6 +524,164 @@ export class MinecraftControl {
       },
     );
   }
+  /** Names are requests, never authenticated identities or implicit web/game bindings. */
+  async enrollIdentity(
+    token: string,
+    org: string,
+    id: string,
+    input: unknown,
+    key: string,
+  ) {
+    const request = identityEnrollmentRequest.parse(input),
+      located = await this.#locate(token, org, id),
+      body = { server_id: id, ...request };
+    return this.#scope(
+      token,
+      org,
+      located.environment_id,
+      "player:enroll",
+      async (c, p, _a, project) => {
+        const row = await this.#server(c, org, id);
+        const replay = await this.#replay(
+          c,
+          org,
+          p.user.id,
+          "identity_enroll",
+          key,
+          body,
+        );
+        if (replay) {
+          const old = (
+            await c.query<{ id: string }>(
+              "select id from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and operation_id=$3",
+              [org, id, replay.id],
+            )
+          ).rows[0];
+          if (!old) denied("ENROLLMENT_RECEIPT_MISSING");
+          return identityEnrollmentAccepted.parse({
+            operation_id: replay.id,
+            enrollment_id: old.id,
+            server_id: id,
+          });
+        }
+        if (!row.registered) denied("SERVER_NOT_REGISTERED");
+        await this.#admit(c, org, row.environment_id, p.user.id);
+        const count = (
+          await c.query<{ total: number }>(
+            "select count(*)::int total from minecraft_identity_enrollments where organization_id=$1 and server_id=$2",
+            [org, id],
+          )
+        ).rows[0];
+        if (!count || count.total >= 200) denied("ENROLLMENT_LIMIT", 429);
+        const operation = randomUUID(),
+          enrollment = randomUUID(),
+          now = new Date(this.#now());
+        await c.query(
+          "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) values($1,$2,$3,$4,$5,$6,$7,'identity_enroll',$8,$9,'succeeded',0,$10,$10,$10)",
+          [
+            operation,
+            org,
+            project,
+            row.environment_id,
+            id,
+            p.user.id,
+            p.sessionId,
+            key,
+            managementHash(body),
+            now,
+          ],
+        );
+        await c.query(
+          "insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+          [
+            enrollment,
+            org,
+            project,
+            row.environment_id,
+            id,
+            p.user.id,
+            operation,
+            request.edition,
+            request.requested_name,
+            now,
+            new Date(now.getTime() + 86400000),
+          ],
+        );
+        await this.#event(
+          c,
+          org,
+          p,
+          operation,
+          "server.identity_enrollment_requested",
+          id,
+        );
+        return identityEnrollmentAccepted.parse({
+          operation_id: operation,
+          enrollment_id: enrollment,
+          server_id: id,
+        });
+      },
+    );
+  }
+  async identityEnrollments(
+    token: string,
+    org: string,
+    id: string,
+    cursor?: string,
+  ) {
+    const located = await this.#locate(token, org, id);
+    return this.#scope(
+      token,
+      org,
+      located.environment_id,
+      "player:read",
+      async (c) => {
+        await this.#server(c, org, id);
+        if (cursor) {
+          z.uuid().parse(cursor);
+          if (
+            !(
+              await c.query(
+                "select 1 from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and id=$3",
+                [org, id, cursor],
+              )
+            ).rowCount
+          )
+            denied("NOT_FOUND", 404);
+        }
+        const rows = (
+          await c.query<{
+            id: string;
+            edition: string;
+            requested_name: string;
+            created_at: Date;
+            expires_at: Date;
+          }>(
+            "select id,edition,requested_name,created_at,expires_at from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and ($3::uuid is null or id>$3) order by id limit 51",
+            [org, id, cursor ?? null],
+          )
+        ).rows;
+        return identityEnrollmentPage.parse({
+          next_cursor: rows.length > 50 ? (rows[49]?.id ?? null) : null,
+          items: rows.slice(0, 50).map((r) =>
+            pendingIdentityEnrollment.parse({
+              id: r.id,
+              server_id: id,
+              edition: r.edition,
+              requested_name: r.requested_name,
+              state: "pending",
+              reason: "authenticated_bridge_unavailable",
+              created_at: r.created_at.toISOString(),
+              expires_at: r.expires_at.toISOString(),
+              expired: r.expires_at.getTime() <= this.#now(),
+              identity_verified: false,
+              access_granted: false,
+            }),
+          ),
+        });
+      },
+    );
+  }
   async #admit(
     c: pg.PoolClient,
     org: string,
@@ -789,7 +951,7 @@ export class MinecraftControl {
             outcome: string;
             details: { operation_id: string };
           }>(
-            "select action,created_at,outcome,details from audit_events where organization_id=$1 and target_id=$2 and action in ('server.adopted_read_only','server.observation_requested','server.observation_recorded','server.observation_failed','server.unregistered') order by id desc limit 30",
+            "select action,created_at,outcome,details from audit_events where organization_id=$1 and target_id=$2 and action in ('server.adopted_read_only','server.observation_requested','server.observation_recorded','server.observation_failed','server.unregistered','server.identity_enrollment_requested') order by id desc limit 30",
             [org, id],
           )
         ).rows;

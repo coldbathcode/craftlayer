@@ -12,6 +12,7 @@ export const gameAddress = z.strictObject({
 });
 export const capturedObservation = z.strictObject({
   source: z.enum(["captured_inventory", "java_status"]).optional(),
+  data_kind: z.literal("synthetic").optional(),
   reported_player_count: z.number().int().min(0).max(10000).optional(),
   observed_at: z.iso.datetime(),
   state: z.enum(["online", "offline", "unknown", "unavailable"]),
@@ -115,7 +116,7 @@ export const operationView = z.strictObject({
   id: z.uuid(),
   server_id: z.uuid(),
   environment_id: z.uuid(),
-  kind: z.enum(["adopt", "observe", "unregister"]),
+  kind: z.enum(["adopt", "observe", "unregister", "identity_enroll"]),
   state: z.enum(["running", "succeeded", "failed"]),
   failure_code: z.enum([
     "source_unavailable",
@@ -153,6 +154,7 @@ export const serverActivity = z.strictObject({
           "server.observation_recorded",
           "server.observation_failed",
           "server.unregistered",
+          "server.identity_enrollment_requested",
         ]),
         occurred_at: z.iso.datetime(),
         operation_id: z.uuid(),

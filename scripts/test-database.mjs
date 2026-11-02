@@ -10,6 +10,9 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pinLocalDocker } from "./lib/local-docker.mjs";
+
+pinLocalDocker();
 
 const image = "craftlayer-postgres-test:local";
 const name = `craftlayer-test-${process.pid}`;
@@ -142,6 +145,7 @@ try {
   const previousManagement = join(migrationFixture, "management-prior");
   cpSync("packages/db/migrations", previousManagement, { recursive: true });
   rmSync(join(previousManagement, "0016_minecraft_management.sql"));
+  rmSync(join(previousManagement, "0017_minecraft_identity_requests.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
@@ -164,7 +168,7 @@ try {
     "-v",
     "ON_ERROR_STOP=1",
     "-c",
-    "INSERT INTO organizations(id,name) VALUES('00000000-0000-4000-8000-00000000f101','Prior management fixture'); INSERT INTO roles(id,organization_id,name,built_in) VALUES('00000000-0000-4000-8000-00000000f102','00000000-0000-4000-8000-00000000f101','viewer',true)",
+    "INSERT INTO organizations(id,name) VALUES('00000000-0000-4000-8000-00000000f101','Prior management fixture'); INSERT INTO roles(id,organization_id,name,built_in) VALUES('00000000-0000-4000-8000-00000000f102','00000000-0000-4000-8000-00000000f101','viewer',true),('00000000-0000-4000-8000-00000000f103','00000000-0000-4000-8000-00000000f101','org_admin',true)",
   ]);
   for (let i = 0; i < 2; i++)
     run("pnpm", ["db:migrate"], { env: managementMigration, stdio: "inherit" });

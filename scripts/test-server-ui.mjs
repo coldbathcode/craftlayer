@@ -4,6 +4,9 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { pinLocalDocker } from "./lib/local-docker.mjs";
+
+pinLocalDocker();
 
 // Never claim the user's installation or reuse its owner/recovery credentials.
 const root = resolve(import.meta.dirname, ".."),

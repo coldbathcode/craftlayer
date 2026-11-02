@@ -54,3 +54,7 @@ Readable labels, sufficient contrast, touch targets, keyboard access, visible fo
 ## Browser acceptance evidence
 
 Record desktop/mobile widths, adult/operator/viewer/child roles, loading/empty/error/disconnected states, keyboard path and screen-reader review. Verify no provider keys in DOM, network responses, bundles or client error reporting. Test session expiry while a mission runs and membership revocation during an event stream. Include meaningful Playwright journeys; screenshots alone do not prove authorization.
+
+## Current F2 prototype
+
+Players & access now records scoped pending Java/Bedrock name requests and displays pending/expired status without a verification/allowlist action. A separate [local prototype](../development/prototype.md) provides parent/viewer/child accounts and clearly simulated servers; it grants no real access and does not complete F2. Trusted authenticated identity, explicit adult binding and backup/recovery journeys remain gated.

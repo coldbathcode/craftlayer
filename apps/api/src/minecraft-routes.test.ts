@@ -21,6 +21,7 @@ it("blocks remotely configured management paths before invoking a domain handler
       "/api/v1/servers?environment_id=00000000-0000-4000-8000-000000000001",
       "/api/v1/servers/00000000-0000-4000-8000-000000000001/status",
       "/api/v1/operations/00000000-0000-4000-8000-000000000001",
+      "/api/v1/servers/00000000-0000-4000-8000-000000000001/identity-enrollments",
     ]) {
       const result = await app.inject({ method: "GET", url });
       expect(result.statusCode).toBe(503);
