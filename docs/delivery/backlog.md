@@ -113,6 +113,8 @@ CL-F25-03 checkpoint B adds private durable first-provision commands/leases, cur
 
 CL-F25-03 checkpoint C adds pinned outbound command/permit/receipt transport and optional gateway injection, verified with actual disposable DB/TLS/Redis Engine composition. Installed gateway/agent stays inventory-only. Next: remote current-authority adapter, independently verified approval and real host/world qualification, followed by production composition. See [controller runbook](../development/deployment-jobs.md).
 
+CL-F25-03 checkpoint D adds a distinct signed private identity-authority proof service/client, current dual-grant validation without gateway identity secrets, proof-bounded writes/permits and final stop rechecks. Real DB/TLS/Redis flow uses a no-identity gateway. Next: API-only sealed-grant admission/separate gateway issuance, then installed approval/host/world qualification. See [authority ADR](../architecture/decisions/0025-remote-execution-authority.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

@@ -1008,6 +1008,10 @@ export {
   type DeploymentQualifier,
   type NodePeer,
 } from "./deployment-jobs.js";
+export type {
+  DeploymentAuthorizer,
+  DeploymentPrincipal,
+} from "./execution-authorizer.js";
 export {
   floodgateUuid,
   identityContinuity,
@@ -1016,6 +1020,8 @@ export {
 export { InventoryFileSource } from "./inventory.js";
 export { NodeControl } from "./nodes.js";
 export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
+
+export { RemoteDeploymentAuthorizer } from "./remote-authorizer.js";
 export {
   type ReservationAdmission,
   type ReservationAdmissionContext,

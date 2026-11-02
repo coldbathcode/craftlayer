@@ -1,6 +1,6 @@
 # Chapter F2.5 review — secure nodes and Docker provisioning progress
 
-**Implementation state:** partial, locally verified checkpoints. **Acceptance decision:** pending; chapter not complete. **Reviewer:** unassigned. **Date:** 2026-11-02 UTC. **Commit/tree:** executor `c13d7a0`, reservations `11499b2`, fixed Engine `38faeb5`, ownership `83a2af6`, real fixture `c043d38`; intake `d95d815`; controller B `1dfdca1`; outbound C publication follows this record. **Authorized scope:** continued local F2/F2.5/F3 checkpoints with publication per step; no production access/world changes or Chapter 04.
+**Implementation state:** partial, locally verified checkpoints. **Acceptance decision:** pending; chapter not complete. **Reviewer:** unassigned. **Date:** 2026-11-02 UTC. **Commit/tree:** executor `c13d7a0`, reservations `11499b2`, fixed Engine `38faeb5`, ownership `83a2af6`, real fixture `c043d38`; intake `d95d815`; controller B `1dfdca1`; outbound C `eefe57c`; remote D publication follows this record. **Authorized scope:** continued local F2/F2.5/F3 checkpoints with publication per step; no production access/world changes or Chapter 04.
 
 ## Delivered behavior
 
@@ -10,8 +10,8 @@
 
 | Requirement/task | Criterion and exact check | Result | Limits |
 | --- | --- | --- | --- |
-| CL-F25-01 / MC-01/06/10 | `pnpm check`: signed scope/time/nonce/stop/fence/journal fault checks | PASS/0, 344 unit cases overall | Existing ten executor cases plus current broker/contracts; fake current authority |
-| CL-F25-02 / MC-07/10 | `pnpm test:db`: transactional reservation/port/budget/revocation checks | PASS/0, 151 integration cases overall plus migration proofs | Qualified admission/approval explicitly fake; no actual persistent quota |
+| CL-F25-01 / MC-01/06/10 | `pnpm check`: signed scope/time/nonce/stop/fence/journal fault checks | PASS/0, 347 unit cases overall | Existing ten executor cases plus current broker/contracts; fake current authority |
+| CL-F25-02 / MC-07/10 | `pnpm test:db`: transactional reservation/port/budget/revocation checks | PASS/0, 152 integration cases overall plus migration proofs | Qualified admission/approval explicitly fake; no actual persistent quota |
 | CL-F25-02/03 / MC-06/08/11 | `pnpm check`: recording Engine ownership/config/fault/process-death cases | PASS/0, fifteen Engine plus thirteen runner cases | Real child kill against recording Engine, not a real game |
 | CL-F25-02/03 / MC-06/08/11 | `pnpm test:node:broker`: actual signed Redis scratch fixture lifecycle/compensation/unknown ack/preservation | PASS/0 with exact fixture cleanup | Local Unix Docker, no Minecraft image/world; harness captures IDs separately |
 | CL-F25-03/A / MC-01/06/10 | `pnpm test:db`: durable disabled intake, replay/reopen/scope/revocation/stop/RLS/SQL binding | PASS/0, nine new cases included above | No installed worker/transport/effect path |
@@ -45,3 +45,5 @@ Decision: pending. Next authorized local task: remote current-authority and qual
 CL-F25-03/B progress: `pnpm check` PASS/0 (342 unit cases/35 files) and `pnpm test:db` PASS/0 (150 cases/seven files plus migration proofs) cover private controller issuance/current grant/qualifier/node proof/receipt/expiry behavior. Eighteen new DB cases and two contract cases use explicitly fake qualification; no native effect or installed production transport is implied. ADR 0024 records key/identity isolation and remaining gates.
 
 CL-F25-03/C: `pnpm check` PASS/0 (344 unit cases/36 files); `pnpm test:db` PASS/0 (151 cases/seven files plus migration proofs). Actual DB/TLS/Redis broker journey passes with temporary uninstalled PKI, explicit fake qualifier/approval and exact stopped-fixture cleanup. Optional gateway injection is not enabled by installed entrypoints. No game/world/EULA or production qualification.
+
+CL-F25-03/D: `pnpm check` PASS/0 (347 unit cases/39 files), `pnpm test:db` PASS/0 (152 cases/seven files plus migration proofs). The native journey now uses remote identity proof with a gateway lacking identity service injection. Three unit cases cover strict proof purpose/private URL/separate signer; one extra DB case proves expired-proof rollback, while the existing real journey adds certificate/key/replay/cookie/digest/expiry/revocation denials. Process/container isolation and installed admission/issuer/qualification remain open. ADR 0025.

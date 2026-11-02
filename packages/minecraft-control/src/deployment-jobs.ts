@@ -26,6 +26,10 @@ import {
 } from "@craftlayer/node-protocol";
 import pg from "pg";
 import { z } from "zod";
+import type {
+  DeploymentAuthorizer,
+  DeploymentPrincipal,
+} from "./execution-authorizer.js";
 
 export interface DeploymentQualificationContext {
   phase: "issue" | "fetch" | "permit";
@@ -128,7 +132,8 @@ export class DeploymentJobs {
   constructor(
     private readonly options: {
       databaseUrl: string;
-      auth: IdentityService;
+      auth?: IdentityService;
+      authorizer?: DeploymentAuthorizer;
       controlPrivateKey: string;
       policy: unknown;
       qualifier?: DeploymentQualifier;
@@ -146,6 +151,10 @@ export class DeploymentJobs {
     });
     this.#public = nodePrivateKey(options.controlPrivateKey).public_key;
     this.#policy = optionsPolicy.parse(options.policy);
+  }
+  #auth() {
+    if (!this.options.auth) deny("DEPLOYMENT_HUMAN_AUTH_NOT_INSTALLED", 503);
+    return this.options.auth;
   }
   close() {
     return this.#pool.end();
@@ -208,14 +217,10 @@ export class DeploymentJobs {
     id: string,
     kind: "intent" | "job",
   ) {
-    return this.options.auth.guardOrganization(
-      token,
-      org,
-      "organization:read",
-      () =>
-        this.#tx(org, (c) =>
-          kind === "intent" ? this.#intent(c, org, id) : this.#job(c, org, id),
-        ),
+    return this.#auth().guardOrganization(token, org, "organization:read", () =>
+      this.#tx(org, (c) =>
+        kind === "intent" ? this.#intent(c, org, id) : this.#job(c, org, id),
+      ),
     );
   }
   #human<T>(
@@ -224,7 +229,7 @@ export class DeploymentJobs {
     r: Binding,
     fn: (c: pg.PoolClient, p: Principal) => Promise<T>,
   ) {
-    return this.options.auth.guardResource(
+    return this.#auth().guardResource(
       token,
       org,
       "node:deploy",
@@ -276,17 +281,27 @@ export class DeploymentJobs {
   #guard<T>(
     r: Binding,
     grants: readonly ExecutionGrant[],
-    fn: (c: pg.PoolClient, p: Principal) => Promise<T>,
+    fn: (c: pg.PoolClient, p: DeploymentPrincipal) => Promise<T>,
   ) {
     this.#grants(r, grants);
-    return this.options.auth.guardExecutions(grants, (p) => {
+    const authorizer: DeploymentAuthorizer | undefined =
+      this.options.authorizer ?? this.options.auth;
+    if (!authorizer) deny("DEPLOYMENT_AUTHORITY_UNAVAILABLE", 503);
+    return authorizer.guardExecutions(grants, (p) => {
       if (
         p.user.account_type !== "adult" ||
         p.user.id !== r.actor_id ||
         p.sessionId !== r.session_id
       )
         deny("DEPLOYMENT_SESSION_DENIED", 403);
-      return this.#tx(r.organization_id, (c) => fn(c, p));
+      return this.#tx(r.organization_id, async (c) => {
+        if ((p.validatedUntil ?? Infinity) <= this.#now())
+          deny("DEPLOYMENT_AUTHORITY_EXPIRED", 503);
+        const value = await fn(c, p);
+        if ((p.validatedUntil ?? Infinity) <= this.#now())
+          deny("DEPLOYMENT_AUTHORITY_EXPIRED", 503);
+        return value;
+      });
     });
   }
   #current(r: Binding) {
@@ -346,7 +361,7 @@ export class DeploymentJobs {
   #context(
     phase: DeploymentQualificationContext["phase"],
     r: Binding,
-    p: Principal,
+    p: DeploymentPrincipal,
     jobId: string,
     stop: string,
     grants: readonly ExecutionGrant[],
@@ -475,16 +490,14 @@ export class DeploymentJobs {
     z.uuid().parse(key);
     const located = await this.#locate(token, org, v.intent_id, "intent"),
       grants = [
-        await this.options.auth.issueExecutionGrant(token, org, "node:deploy", {
+        await this.#auth().issueExecutionGrant(token, org, "node:deploy", {
           kind: "project",
           id: located.project_id,
         }),
-        await this.options.auth.issueExecutionGrant(
-          token,
-          org,
-          "server:provision",
-          { kind: "environment", id: located.environment_id },
-        ),
+        await this.#auth().issueExecutionGrant(token, org, "server:provision", {
+          kind: "environment",
+          id: located.environment_id,
+        }),
       ],
       id = randomUUID(),
       requestHash = nodeDigest(v);
@@ -619,6 +632,8 @@ export class DeploymentJobs {
       const job = await this.#job(c, org, id);
       await this.#event(c, job, "issued");
       this.#current(job);
+      if ((await this.#stop(c, job)) !== job.stop_hash)
+        deny("DEPLOYMENT_STOP_CHANGED");
       this.#qualified(evidence, context);
       return this.#view(job);
     });
@@ -723,6 +738,7 @@ export class DeploymentJobs {
         r.command.payload.approval_hash,
       );
       await this.#nonce(c, r, v, true);
+      if ((await this.#stop(c, r)) !== stop) deny("DEPLOYMENT_STOP_CHANGED");
       this.#request(r, signed, peer);
       this.#active(r);
       this.#qualified(
@@ -755,6 +771,7 @@ export class DeploymentJobs {
               now + 5000,
               r.lease_expires_at.getTime(),
               p.authorityExpiresAt ?? Number.POSITIVE_INFINITY,
+              p.validatedUntil ?? Number.POSITIVE_INFINITY,
               r.credential_expires_at.getTime(),
             ),
           ).toISOString(),

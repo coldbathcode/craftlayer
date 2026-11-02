@@ -44,3 +44,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0023 — Durable broker ownership](0023-node-broker-ownership.md).
 
 - [0024 — Durable provision controller](0024-durable-provision-controller.md).
+
+- [0025 — Remote execution authority](0025-remote-execution-authority.md).

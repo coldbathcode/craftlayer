@@ -1,9 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, it } from "vitest";
+import { buildExecutionAuthorityApp } from "../../apps/api/src/execution-authority-app.js";
 import { buildNodeAgentApp } from "../../apps/api/src/node-agent-app.js";
 import { ConstrainedDockerBroker } from "../../apps/minecraft-node/src/broker.js";
 import { BrokerEngine } from "../../apps/minecraft-node/src/broker-engine.js";
@@ -22,7 +24,9 @@ import {
   DeploymentJobs,
   type DeploymentQualificationContext,
 } from "../../packages/minecraft-control/src/index.js";
+import { RemoteDeploymentAuthorizer } from "../../packages/minecraft-control/src/remote-authorizer.js";
 import {
+  certificateHash,
   generateNodeKey,
   nodeDigest,
   nodePrivateKey,
@@ -732,7 +736,39 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         },
       },
     },
-    jobs = new DeploymentJobs(options),
+    issuer = new DeploymentJobs(options),
+    authorityKey = generateNodeKey(),
+    authorityApp = await buildExecutionAuthorityApp({
+      auth: h.auth,
+      authorityPrivateKey: authorityKey.private_key,
+      controllerPublicKey: f.control.public_key,
+      controllerCertificateSha256: certificateHash(await read("other.crt")),
+      key: await read("server.key"),
+      cert: await read("server.crt"),
+      ca: await read("ca.crt"),
+    });
+  await authorityApp.listen({ host: "127.0.0.1", port: 0 });
+  const authorityAddress = authorityApp.server.address();
+  if (!authorityAddress || typeof authorityAddress === "string")
+    throw new Error("Authority listener missing");
+  const remoteOptions = {
+      url: `https://127.0.0.1:${authorityAddress.port}/`,
+      ca: await read("ca.crt"),
+      cert: await read("other.crt"),
+      key: await read("other.key"),
+      serverCertificateSha256: info.server_certificate_sha256,
+      authorityPublicKey: authorityKey.public_key,
+      controlPrivateKey: f.control.private_key,
+    },
+    remote = new RemoteDeploymentAuthorizer(remoteOptions),
+    jobs = new DeploymentJobs({
+      databaseUrl: url,
+      authorizer: remote,
+      controlPrivateKey: f.control.private_key,
+      policy: options.policy,
+      qualifier: options.qualifier,
+      clock: Date.now,
+    }),
     app = await buildNodeAgentApp({
       control: f.nodes,
       jobs,
@@ -817,7 +853,7 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         allowed_actions: ["provision"],
       },
       transport = new CommandTransport({ connection, policy });
-    const job = await jobs.prepare(
+    const job = await issuer.prepare(
       f.adult,
       f.org,
       { intent_id: f.intent.operation_id },
@@ -838,6 +874,122 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
           job.command_hash,
         ),
       ).rejects.toThrow();
+    await expect(
+      jobs.prepare(
+        f.adult,
+        f.org,
+        { intent_id: f.intent.operation_id },
+        randomUUID(),
+      ),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_HUMAN_AUTH_NOT_INSTALLED" });
+    const stored = (
+        await h.tx(h.runtime, f.org, (c) =>
+          c.query(
+            "select node_grant,server_grant from minecraft_deployment_jobs where id=$1",
+            [job.operation_id],
+          ),
+        )
+      ).rows[0],
+      grants = [stored.node_grant, stored.server_grant];
+    for (const wrong of [
+      { ...remoteOptions, cert: "", key: "" },
+      { ...remoteOptions, url: "https://127.0.0.1:1/" },
+      {
+        ...remoteOptions,
+        cert: await read("client.crt"),
+        key: await read("client.key"),
+      },
+      { ...remoteOptions, serverCertificateSha256: "0".repeat(64) },
+      { ...remoteOptions, authorityPublicKey: generateNodeKey().public_key },
+      { ...remoteOptions, controlPrivateKey: generateNodeKey().private_key },
+    ])
+      await expect(
+        new RemoteDeploymentAuthorizer(wrong).guardExecutions(
+          grants,
+          async () => true,
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_AUTHORITY_UNAVAILABLE" });
+    const rawAuthority = async (
+      payload: Record<string, unknown>,
+      signature = signNodeValue(payload, f.control.private_key),
+      cookie?: string,
+    ) => {
+      const body = JSON.stringify({ payload, grants, signature });
+      return new Promise<{ status: number; body: unknown }>(
+        (resolve, reject) => {
+          const req = httpsRequest(
+            new URL("/internal/v1/execution-authority", remoteOptions.url),
+            {
+              method: "POST",
+              agent: false,
+              ca: remoteOptions.ca,
+              cert: remoteOptions.cert,
+              key: remoteOptions.key,
+              minVersion: "TLSv1.3",
+              maxVersion: "TLSv1.3",
+              headers: {
+                "content-type": "application/json",
+                "content-length": Buffer.byteLength(body),
+                ...(cookie !== undefined ? { cookie } : {}),
+              },
+            },
+            (res) => {
+              const chunks: Buffer[] = [];
+              res.on("data", (b) => chunks.push(b));
+              res.once("end", () =>
+                resolve({
+                  status: res.statusCode ?? 500,
+                  body: JSON.parse(Buffer.concat(chunks).toString("utf8")),
+                }),
+              );
+              res.once("error", reject);
+            },
+          );
+          req.once("error", reject);
+          req.end(body);
+        },
+      );
+    };
+    const proofRequest = () => {
+      const now = Date.now();
+      return {
+        schema_version: 1,
+        purpose: "identity.execution.check.v1",
+        control_id: nodeDigest(f.control.public_key),
+        organization_id: f.org,
+        request_nonce: randomUUID(),
+        grants_hash: nodeDigest(grants),
+        issued_at: new Date(now).toISOString(),
+        expires_at: new Date(now + 5000).toISOString(),
+      };
+    };
+    const once = proofRequest();
+    expect((await rawAuthority(once)).status).toBe(200);
+    expect((await rawAuthority(once)).status).toBe(429);
+    const oversizedWindow = proofRequest();
+    oversizedWindow.expires_at = new Date(
+      Date.parse(oversizedWindow.issued_at) + 5001,
+    ).toISOString();
+    expect((await rawAuthority(oversizedWindow)).status).toBe(403);
+    expect(
+      (await rawAuthority({ ...proofRequest(), grants_hash: "0".repeat(64) }))
+        .status,
+    ).toBe(403);
+    expect((await rawAuthority(proofRequest(), "0".repeat(86))).status).toBe(
+      403,
+    );
+    expect(
+      (await rawAuthority(proofRequest(), undefined, "session=browser")).status,
+    ).toBe(401);
+    expect(
+      (
+        await rawAuthority({
+          ...proofRequest(),
+          issued_at: new Date(Date.now() - 10000).toISOString(),
+          expires_at: new Date(Date.now() - 5000).toISOString(),
+        })
+      ).status,
+    ).toBe(401);
     const command = await transport.fetch(job.operation_id, job.command_hash),
       v = command.payload,
       image = JSON.parse(
@@ -923,7 +1075,7 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       receipt_state: "succeeded",
     });
     expect(await transport.submitReceipt(receipt)).toEqual(ack);
-    expect(await jobs.get(f.adult, f.org, job.operation_id)).toEqual(ack);
+    expect(await issuer.get(f.adult, f.org, job.operation_id)).toEqual(ack);
     const retained = await f.ledger.get(f.adult, f.org, f.r.reservation_id);
     expect(retained.state).toBe("allocated");
     await expect(
@@ -951,12 +1103,23 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
     } finally {
       await disabled.close();
     }
+    await h.tx(h.identity, f.org, (c) =>
+      c.query(
+        "delete from role_permissions where organization_id=$1 and permission='node:deploy'",
+        [f.org],
+      ),
+    );
+    await expect(
+      remote.guardExecutions(grants, async () => true),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_AUTHORITY_UNAVAILABLE" });
     clean = true;
   } finally {
     await executor?.close();
     await broker?.close();
     await app.close();
     await jobs.close();
+    await issuer.close();
+    await authorityApp.close();
     await f.jobs.close();
     await f.nodes.close();
     await f.ledger.close();
@@ -979,3 +1142,35 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
     if (clean) await rm(root, { recursive: true });
   }
 }, 30000);
+
+it("does not commit controller mutations under an expired remote authority proof", () =>
+  fixture(async (f) => {
+    const jobs = new DeploymentJobs({
+      ...f.options,
+      authorizer: {
+        guardExecutions: (grants, fn) =>
+          h.auth.guardExecutions(grants, (p) =>
+            fn({ ...p, validatedUntil: f.now() - 1 }),
+          ),
+      },
+    });
+    try {
+      await expect(
+        jobs.prepare(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_AUTHORITY_EXPIRED" });
+      expect(
+        (
+          await h.tx(h.runtime, f.org, (c) =>
+            c.query("select 1 from minecraft_deployment_jobs"),
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      await jobs.close();
+    }
+  }));

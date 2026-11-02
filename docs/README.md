@@ -105,3 +105,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 - [F2.5 progress review](reviews/F25-secure-nodes.md) — local evidence and incomplete release criteria.
 
 - [Durable provision controller](development/deployment-jobs.md) — signed leases/current permits and remaining isolation/qualification gates.
+
+- [Remote execution-authority decision](architecture/decisions/0025-remote-execution-authority.md) — API identity proof without sharing node-control keys or identity secrets.
