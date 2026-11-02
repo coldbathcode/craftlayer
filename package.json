@@ -38,7 +38,9 @@
     "test:runtime-stack": "node scripts/test-runtime-stack.mjs",
     "test:preflight": "vitest run tests/unit/minecraft-preflight.test.ts",
     "test:preflight:recovery": "vitest run tests/unit/minecraft-preservation.test.ts",
-    "test:server-ui": "node scripts/test-server-ui.mjs"
+    "test:server-ui": "node scripts/test-server-ui.mjs",
+    "minecraft:identity:prepare": "node --import tsx scripts/minecraft/identity-fixture.ts prepare",
+    "minecraft:identity:verify": "node --import tsx scripts/minecraft/identity-fixture.ts verify"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
@@ -51,6 +53,7 @@
     "tsx": "4.23.15",
     "typescript": "5.9.3",
     "vite": "8.3.5",
-    "vitest": "5.0.5"
+    "vitest": "5.0.5",
+    "zod": "4.6.7"
   }
 }

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "id": "paper-26_3-crossplay-candidate-1",
+  "qualification": "unqualified",
+  "researched_at": "2026-11-02",
+  "java_major": 25,
+  "java_image": "eclipse-temurin:25-jre@sha256:ecdc0adb37bde1a281c4d245a3cd535004b1fc8322d560f5b09463b248c81df0",
+  "minecraft_java": "26.3",
+  "bedrock_versions": [
+    "26.40",
+    "26.41",
+    "26.42",
+    "26.43",
+    "26.44",
+    "26.45",
+    "26.50",
+    "26.51",
+    "26.52",
+    "26.60"
+  ],
+  "artifacts": [
+    {
+      "component": "paper",
+      "version": "26.3",
+      "build": 237,
+      "filename": "paper.jar",
+      "sha256": "57d8774be83dbe2be6a814e945f26a6b82339af9b1c82b768bbfdf4c23fda56e",
+      "url": "https://fill-data.papermc.io/v1/objects/57d8774be83dbe2be6a814e945f26a6b82339af9b1c82b768bbfdf4c23fda56e/paper-26.3-237.jar",
+      "source_commit": "7e88a0da385c201f00011ce5eef1834d391e4023"
+    },
+    {
+      "component": "geyser",
+      "version": "2.12.1",
+      "build": 1281,
+      "filename": "Geyser-Spigot.jar",
+      "sha256": "67876ccc117c37bfe58ad2cf2e52c31db7bf3a9c3ff8960aaf0789fd5696bba2",
+      "url": "https://download.geysermc.org/v2/projects/geyser/versions/2.12.1/builds/1281/downloads/spigot",
+      "source_commit": "b9d535a67cb6ef75a38140db0bd5ac2ccbe1e9ba"
+    },
+    {
+      "component": "floodgate",
+      "version": "2.2.5",
+      "build": 141,
+      "filename": "floodgate-spigot.jar",
+      "sha256": "21570aff9ce17d6983928e8552777760e1ede5050026b04c686b0ae112e6fd7e",
+      "url": "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/141/downloads/spigot",
+      "source_commit": "81b65ccb766bf8024858ebf3eefa6974056aecc5"
+    }
+  ],
+  "policy": {
+    "online_mode": true,
+    "white_list": true,
+    "enforce_whitelist": true,
+    "public_rcon": false,
+    "account_linking": "blocked_pending_review",
+    "eula_accepted": false
+  },
+  "sources": {
+    "paper": "https://fill.papermc.io/v3/projects/paper/versions/26.3/builds/237",
+    "geyser": "https://download.geysermc.org/v2/projects/geyser/versions/2.12.1/builds/1281",
+    "floodgate": "https://download.geysermc.org/v2/projects/floodgate/versions/2.2.5/builds/141",
+    "protocol": "https://github.com/GeyserMC/Geyser/blob/b9d535a67cb6ef75a38140db0bd5ac2ccbe1e9ba/core/src/main/java/org/geysermc/geyser/network/bedrock/GameProtocol.java",
+    "java_protocol": "https://github.com/GeyserMC/Geyser/blob/b9d535a67cb6ef75a38140db0bd5ac2ccbe1e9ba/gradle/libs.versions.toml",
+    "java_image": "https://hub.docker.com/_/eclipse-temurin"
+  }
+}

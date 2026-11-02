@@ -14,5 +14,6 @@ export const errorSchema = z.strictObject({
 });
 export * from "./identity.js";
 export * from "./minecraft.js";
+export * from "./minecraft-identity.js";
 export * from "./providers.js";
 export * from "./runtime.js";

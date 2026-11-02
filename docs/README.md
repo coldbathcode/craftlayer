@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1 is locally implemented with review prepared; F2–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1 is locally implemented with review prepared; F2 is locally authorized/in progress; F2.5/F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -84,3 +84,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [F0 local review](reviews/F0-preflight.md) and [handoff](delivery/handoffs/F0-preflight.md) record preflight/preservation tools and synthetic recovery evidence; production gates remain unverified.
 
 [F1 observation-service runbook](development/minecraft-management.md) documents captured/live status semantics, protected configuration, typed routes and unverified remote/game gates.
+
+[F2 identity runbook](development/minecraft-identities.md) records pinned unqualified artifacts, identity semantics and the required real-client gate.

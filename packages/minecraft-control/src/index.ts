@@ -839,4 +839,10 @@ export class MinecraftControl {
     );
   }
 }
+
+export {
+  floodgateUuid,
+  identityContinuity,
+  normalizeAuthenticatedIdentity,
+} from "./identity-policy.js";
 export { InventoryFileSource } from "./inventory.js";

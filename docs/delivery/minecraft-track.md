@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 locally verified with review prepared; CL-F1-01–03 complete locally. F2–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 locally verified with review prepared; CL-F1-01–03 complete locally. F2 is now locally authorized/in progress after user continuation; F2.5/F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -28,7 +28,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Verified locally |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Verified locally |
 | [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Verified locally; remote entry blocked |
-| [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | Not started |
+| [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | In progress; candidate/provenance checkpoint, real gate pending |
 | [CL-F2-02](../chapters/F2-family-access.md) | Desired/actual allowlist operations, revoke/expiry and UI | CL-F2-01 | Not started |
 | [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
 | [CL-F2-04](../chapters/F2-family-access.md) | Family acceptance, security/recovery review and handoff | CL-F2-03 | Not started |
