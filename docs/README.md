@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1 is locally implemented with review prepared; F2–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 

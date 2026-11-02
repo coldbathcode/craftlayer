@@ -357,6 +357,7 @@ export function IdentityConsole() {
         </a>
         <nav aria-label="Account navigation">
           <a href="/">Overview</a>
+          <a href="/servers">Servers</a>
           {me && (
             <button
               type="button"

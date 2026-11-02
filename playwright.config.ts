@@ -1,11 +1,15 @@
 import { defineConfig, devices } from "@playwright/test";
+
+const suite =
+  process.env.CRAFTLAYER_SERVER_E2E === "1"
+    ? "servers"
+    : process.env.CRAFTLAYER_IDENTITY_E2E === "1"
+      ? "identity"
+      : "foundation";
 export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: true,
-  outputDir:
-    process.env.CRAFTLAYER_IDENTITY_E2E === "1"
-      ? "test-results/identity"
-      : "test-results/foundation",
+  outputDir: `test-results/${suite}`,
   forbidOnly: !!process.env.CI,
   retries: 0,
   reporter: [
@@ -14,10 +18,7 @@ export default defineConfig({
       "html",
       {
         open: "never",
-        outputFolder:
-          process.env.CRAFTLAYER_IDENTITY_E2E === "1"
-            ? "playwright-report/identity"
-            : "playwright-report/foundation",
+        outputFolder: `playwright-report/${suite}`,
       },
     ],
   ],

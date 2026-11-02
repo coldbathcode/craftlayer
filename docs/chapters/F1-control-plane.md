@@ -1,6 +1,6 @@
 # F1 — Read-only control plane and parent dashboard
 
-**Status:** F1 locally authorized by the user’s “go to the next steps” after F0; CL-F1-01–02 locally verified; CL-F1-03 next. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
+**Status:** F1 locally authorized by the user’s “go to the next steps” after F0; CL-F1-01–03 locally verified; local review prepared, owner advancement pending. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
 
 ## Objective
 
@@ -30,9 +30,9 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 **Required evidence:** MC-02/05: existing container/mount/config/state stable, offline server never started, redacted output, cross-tenant observations denied, no RCON/host commands injectable. Captured synthetic inventory is sufficient for local work.
 
-### [ ] CL-F1-03 — Parent dashboard and protected entry review
+### [x] CL-F1-03 — Parent dashboard and protected entry review
 
-**Depends on:** CL-F1-02. **Status:** not started. **Size:** L.
+**Depends on:** CL-F1-02. **Status:** verified locally; remote entry remains blocked pending separate qualification. **Size:** L.
 
 **Implementation:** Extend account shell with mobile server list/detail, connection instructions, online players where supported, audit and security/backup gaps. Adopt Existing is distinct from future Create Server. Qualify TLS/private access/MFA for remotely accessible privileged paths; no remote exposure by default.
 
@@ -48,10 +48,10 @@ MC-01/02/05/06/12 portions for adoption/observations; database and browser suite
 
 ## Acceptance criteria
 
-- [ ] All phase task evidence and applicable MC gates pass in the claimed environment; unknown/manual gaps explicitly block readiness where critical.
-- [ ] Earliest usable observation dashboard: adult logs in and sees safely adopted server/status/players/audit without bots/models. This is not the family-ready access/backup release.
-- [ ] Authorization, tenant/child denial, redaction, uncertain effects and preservation reviewed; no production actions inferred from local checks.
-- [ ] Rollback/backup procedures rehearsed on disposable resources with exact evidence and current risk/ADR/status records.
+- [x] All phase task evidence and applicable MC gates pass in the claimed environment; unknown/manual gaps explicitly block readiness where critical.
+- [x] Earliest usable observation dashboard: adult logs in and sees safely adopted server/status/players/audit without bots/models. This is not the family-ready access/backup release.
+- [x] Authorization, tenant/child denial, redaction, uncertain effects and preservation reviewed; no production actions inferred from local checks.
+- [x] Rollback/backup procedures rehearsed on disposable resources with exact evidence and current risk/ADR/status records.
 
 ## Rollback and backup
 
@@ -60,6 +60,8 @@ Follow [preservation procedures](../operations/minecraft-preservation.md). F0 in
 ## Documentation and deliverables
 
 Contracts/schema/API/SDK and operator instructions for implemented capabilities; exact checks/artifact/version evidence; [chapter review](../templates/chapter-review.md), risk register, status/build log and [handoff](../templates/agent-handoff.md). Every coherent build step commits only task changes and pushes origin main under AGENTS.md.
+
+Local evidence: [F1 review](../reviews/F1-control-plane.md), [handoff](../delivery/handoffs/F1-control-plane.md) and [management runbook](../development/minecraft-management.md). Checkboxes cover local observation scope only. No actual container/world adoption, game restore or private remote-entry gate is claimed.
 
 ## Review checkpoint and next handoff
 

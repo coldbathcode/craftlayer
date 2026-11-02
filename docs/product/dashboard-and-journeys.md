@@ -1,6 +1,6 @@
 # Dashboard, onboarding and family experience
 
-Status: interaction requirements; the existing /account console is implemented. F1–F2 extend it for family management before the bot-focused Chapter 05, which reuses that shell/design rather than rebuilding it. See [management track](../delivery/minecraft-track.md).
+Status: interaction requirements; /account and F1 local read-only /servers are implemented. F2 extends them for family management before the bot-focused Chapter 05, which reuses that shell/design rather than rebuilding it. See [management track](../delivery/minecraft-track.md).
 
 ## Information architecture
 

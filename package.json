@@ -37,7 +37,8 @@
     "setup:worker": "node scripts/setup-worker.mjs",
     "test:runtime-stack": "node scripts/test-runtime-stack.mjs",
     "test:preflight": "vitest run tests/unit/minecraft-preflight.test.ts",
-    "test:preflight:recovery": "vitest run tests/unit/minecraft-preservation.test.ts"
+    "test:preflight:recovery": "vitest run tests/unit/minecraft-preservation.test.ts",
+    "test:server-ui": "node scripts/test-server-ui.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

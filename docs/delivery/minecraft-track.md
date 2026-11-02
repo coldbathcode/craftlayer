@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 now authorized/in progress; CL-F1-01–02 locally verified; CL-F1-03 next. F2–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 locally verified with review prepared; CL-F1-01–03 complete locally. F2–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -27,7 +27,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F0-02](../chapters/F0-preflight.md) | Preservation manifest, backup/restore rehearsal and remediation plan | CL-F0-01; live inspection only separately approved | Verified locally; live evidence unverified |
 | [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Verified locally |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Verified locally |
-| [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Not started |
+| [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Verified locally; remote entry blocked |
 | [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | Not started |
 | [CL-F2-02](../chapters/F2-family-access.md) | Desired/actual allowlist operations, revoke/expiry and UI | CL-F2-01 | Not started |
 | [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
@@ -48,4 +48,4 @@ Tests must prove zero write/start/stop/exec/firewall/prune/restore calls against
 
 The already authorized next task remains CL-03-07: review dirty runtime changes, complete isolated restart/Redis-loss/fault evidence, then Chapter 03 review/handoff. REC-01 does not execute that coding task.
 
-Current local F0 implementation and limits: [review](../reviews/F0-preflight.md). Next new coding task is CL-F1-01 (server/operation contracts, schema and scoped permissions) after explicit F1 authorization. CL-03-07 remains open separately.
+Current local F0 implementation and limits: [review](../reviews/F0-preflight.md). F1 local implementation/review now exists: [F1 review](../reviews/F1-control-plane.md). Next new management coding task is CL-F2-01 (pinned identity compatibility and safe enrollment) after explicit F2 authorization. CL-03-07 remains open separately.

@@ -2,7 +2,7 @@
 
 One self-hostable Core for safe family Minecraft management and coordinated AI agents. The immediate plan is preserving/adopting the existing server, verified player access/backups, then secure Docker provisioning; agent, coding and research capabilities remain on the roadmap.
 
-**Chapters 00–02 are implemented and verified locally.** This preview includes private local accounts, owner setup/recovery, organization roles and scoped access, adult invitations, child accounts, sessions/audit, an account console, typed API contracts and the private Docker stack. The server provider gateway adds encrypted connections, conservative routing, persistent stop and durable budgets. Simulation fleet/runtime tasks CL-03-01–06 are implemented with recorded evidence; final runtime qualification is open. Minecraft management, provisioning and bots remain unimplemented.
+**Chapters 00–02 are implemented and verified locally.** This preview includes private local accounts, owner setup/recovery, organization roles and scoped access, adult invitations, child accounts, sessions/audit, an account console, typed API contracts and the private Docker stack. The server provider gateway adds encrypted connections, conservative routing, persistent stop and durable budgets. Simulation fleet/runtime tasks CL-03-01–06 are implemented with recorded evidence; final runtime qualification is open. F0 preservation tooling and the F1 local read-only server dashboard/API are implemented; live adoption, verified player access/backups, provisioning and bots remain gated.
 
 Core must work without CraftLayer Cloud, an entitlement service or required telemetry. Cloud remains a separate future service consuming public Core interfaces.
 
@@ -18,7 +18,7 @@ pnpm setup:local
 pnpm stack:up
 ```
 
-Open **http://127.0.0.1:3000**. Only the web edge is published, on loopback. Setup generates local random credentials; no provider key or cloud account is needed. Follow the [developer quickstart](docs/development/quickstart.md) for prerequisites, commands, host development and troubleshooting. Open **http://127.0.0.1:3000/account** for first-owner setup and administration. Follow the [identity/recovery runbook](docs/development/identity-and-recovery.md). New installations require owner setup; preserve existing account state. Production release hardening remains Chapter 09.
+Open **http://127.0.0.1:3000**. Only the web edge is published, on loopback. Setup generates local random credentials; no provider key or cloud account is needed. Follow the [developer quickstart](docs/development/quickstart.md) for prerequisites, commands, host development and troubleshooting. Open **http://127.0.0.1:3000/account** for first-owner setup and administration. Follow the [identity/recovery runbook](docs/development/identity-and-recovery.md). New installations require owner setup; preserve existing account state. Open **http://127.0.0.1:3000/servers** after building the current code for the local observation dashboard; configure an approved source using the [management runbook](docs/development/minecraft-management.md). Existing running installations are not automatically upgraded by a Git push. Production release hardening remains Chapter 09.
 
 ## Build and check
 
@@ -31,10 +31,11 @@ pnpm test:offline
 pnpm exec playwright install chromium
 pnpm test:e2e
 pnpm test:identity-ui
+pnpm test:server-ui
 pnpm test:provider-stack
 ```
 
-The browser/stack checks require the running stack. Database tests create a disposable instance. See [the provider review](docs/reviews/02-provider-gateway.md), [provider runbook](docs/development/providers-and-budgets.md), [the identity review](docs/reviews/01-identity-and-rbac.md) and [foundation review](docs/reviews/00-foundation.md) for results, exact coverage and unverified features; no claim is made that later chapter behavior is implemented.
+Foundation browser/stack checks require the running stack. Database, identity UI and server UI checks create disposable installations and clean up only their own resources. See [the provider review](docs/reviews/02-provider-gateway.md), [provider runbook](docs/development/providers-and-budgets.md), [the identity review](docs/reviews/01-identity-and-rbac.md) and [foundation review](docs/reviews/00-foundation.md) for results, exact coverage and unverified features; no claim is made that later chapter behavior is implemented.
 
 ## Plan and agent instructions
 
@@ -42,9 +43,9 @@ The browser/stack checks require the running stack. Database tests create a disp
 - [Current status](docs/delivery/status.md) and [build log](docs/delivery/build-log.md): exact stopping point and evidence.
 - [Roadmap](docs/delivery/roadmap.md) and [original chapter backlog](docs/delivery/backlog.md): twelve chapter specifications with dependencies and acceptance criteria.
 - [AGENTS.md](AGENTS.md): shared Codex/Claude Code instructions; Claude Code also reads [CLAUDE.md](CLAUDE.md).
-- [F0 handoff](docs/delivery/handoffs/F0-preflight.md) and [preflight runbook](docs/development/minecraft-preflight.md): local tools, evidence and the next F1 authorization boundary.
+- [F1 handoff](docs/delivery/handoffs/F1-control-plane.md) and [management runbook](docs/development/minecraft-management.md): local dashboard/API, approved sources, evidence and the next F2 authorization boundary.
 
-**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; F0 local tooling is now verified ([review](docs/reviews/F0-preflight.md)); F1–F3 implementation and all Contabo operations need separate authorization.
+**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; F0 local tooling is now verified ([review](docs/reviews/F0-preflight.md)); F1 local implementation is complete with review prepared; F2 onward and all Contabo operations need separate authorization.
 
 ## Milestones
 
@@ -54,7 +55,7 @@ The browser/stack checks require the running stack. Database tests create a disp
 | Secure accounts | 01 | Implemented and verified; accepted for advancement |
 | Provider gateway | 02 | Implemented and verified; accepted for advancement |
 | Fleet runtime | 03 | Six tasks verified; final fault/restart review remains |
-| Family management | F0–F3 | F0 local preflight/preservation implemented; dashboard/access/backups/provisioning/lifecycle remain planned |
+| Family management | F0–F3 | F0 tools + F1 local observation dashboard implemented; access/backups/provisioning/lifecycle remain planned |
 | Minecraft vertical slice | 04–06 | Planned: dashboard/Kid Mode and 2–3 cooperating bots |
 | Extensible Core | 07–08 | Planned: more providers, isolated coding and cited research |
 | Self-hosted release | 09 | Planned: backups, upgrades, release images and security review |

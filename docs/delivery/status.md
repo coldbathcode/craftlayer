@@ -31,7 +31,7 @@ Read-only local preflight implemented and verified with synthetic/recording fixt
 
 Next within authorized F0: CL-F0-02 preservation manifest and disposable byte-recovery rehearsal, then F0 review. Existing Chapter 03 CL-03-07 is still open; its five entry-dirty files remain unchanged/excluded from this task commit. No production preflight, world/game/backup operation or network reachability/identity verification has run.
 
-## Current management checkpoint — F0 locally verified
+## Historical management checkpoint — F0 locally verified
 
 CL-F0-01–02 complete in local scope. Final `pnpm check` passed lint/boundaries, strict source/test/web checks, 215 tests and docs validation; both shell syntax checks and whitespace checks passed. Read-only preflight plus stopped-source preservation manifests now exist; synthetic snapshot/isolated filesystem-copy recovery verifies original content and detects corruption/loss/rename/mode drift. Capture refuses running or changed bindings, unstable files, symlinks/hardlinks/special files and exceeded bounds. Reports never mark backup, game restore, family or production readiness verified. [F0 review](../reviews/F0-preflight.md), [runbook](../development/minecraft-preflight.md), [conditional remediation plan](../operations/minecraft-remediation.md) and [handoff](handoffs/F0-preflight.md) record evidence and limits.
 
@@ -48,3 +48,11 @@ F1 authorized locally after F0 review. New strict contracts, scoped server/opera
 Protected captured-inventory source and bounded literal-private-IP Java status adapter implemented; only fixed status handshake/request, no login/RCON/Docker/commands. Scoped REST/OpenAPI 3.1 and typed SDK expose target plans/adoption/status/players/activity, durable observations and unregister/reactivation metadata. Observations revalidate current authority and fence after I/O; expired attempts need explicit authorized refresh. Remote management fails closed pending private entry/MFA qualification. Optional Compose mounts only protected inventory into API; no actual main stack deployment or Contabo connection.
 
 CL-F1-03 parent dashboard/browser review is next within authorized F1. Exact local check evidence is in the build log and [service runbook](../development/minecraft-management.md). Real identity/access/backup/world/remote/network gates remain unverified.
+
+## Current management checkpoint — F1 local observation dashboard
+
+CL-F1-01–03 implemented locally; [F1 review](../reviews/F1-control-plane.md) prepared for owner advancement. `/servers` reuses existing identity/account/RBAC/audit and typed API/SDK: approved-source plan/register, server/detail/player/activity views, provenance/freshness and explicit authentication/allowlist/network/backup gaps. Observe is bounded/read-only; unregister is registration metadata only, with exact-name UI confirmation. Children get no management UI; scoped viewers get reads without write controls. Polling reads stored metadata, and organization/session changes clear prior data. No provider/model is needed. Remote management remains blocked pending private entry/MFA qualification.
+
+Final verification is recorded in [build log](build-log.md); local review/handoff distinguish synthetic browser/DB/source proof from unexecuted game/Contabo/network/restoration gates. No existing installation was migrated/restarted or deployed, no Minecraft world/container was touched. The five unrelated Chapter 03 runtime/test changes remain unchanged/excluded; CL-03-07 is still open.
+
+Next management coding task **after F2 authorization**: CL-F2-01 pinned identity compatibility and safe enrollment, first on disposable approved fixtures. F2 is the earliest family-ready access/backup milestone; actual Java/Bedrock clients, unknown-player denial and isolated restore are required. F2.5 Docker enrollment/provisioning follows F2; F3 lifecycle follows that. No further phase or live-host action is authorized by this F1 checkpoint. [Handoff](handoffs/F1-control-plane.md).
