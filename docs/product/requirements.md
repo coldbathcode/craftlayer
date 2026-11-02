@@ -1,6 +1,6 @@
 # Product requirements and traceable outcomes
 
-Status: unified product contract reconciled 2026-11-02. Sources: unchanged [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md), [unified v0.4](../CRAFTLAYER_UNIFIED_SPEC.md) and [build prompt](../BUILD_PROMPT.md). IDs are stable; implementation evidence lives in [status](../delivery/status.md), not in these requirement tables. PR-023–035 are planned additions; completed invariants remain binding.
+Status: unified product contract reconciled 2026-11-02. Sources: unchanged [blueprint v0.2](../source/CraftLayer_Build_Blueprint.md), [unified v0.4](../CRAFTLAYER_UNIFIED_SPEC.md) and [build prompt](../BUILD_PROMPT.md). IDs are stable; implementation evidence lives in [status](../delivery/status.md), not in these requirement tables. PR-023–035 are new requirements: F0 local preflight/preservation is implemented with synthetic evidence; management services, live adoption/access/backup/node gates remain planned/unverified. Completed invariants remain binding.
 
 ## Product purpose
 

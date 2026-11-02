@@ -1,6 +1,6 @@
 # Minecraft management acceptance and release gates
 
-Status: planned tests; none executed by REC-01. Use deterministic clocks, synthetic identities, fake Docker/RCON recordings first, then uniquely owned disposable containers/worlds with pinned manifests. Never run suites against Contabo or the personal installation. Real Java/Bedrock clients, protected remote entry, off-host backup and production inventory require separately authorized manual evidence. Each gate records exact command, exit, environment/seed/version, artifact hash and reviewer in the phase review.
+Status: F0 local MC-02 collector/preservation and synthetic MC-08 byte-recovery rehearsal now executed; real game/production MC gates remain unverified. See [F0 review](../reviews/F0-preflight.md). REC-01 itself executed no Minecraft tests. Use deterministic clocks, synthetic identities, fake Docker/RCON recordings first, then uniquely owned disposable containers/worlds with pinned manifests. Never run suites against Contabo or the personal installation. Real Java/Bedrock clients, protected remote entry, off-host backup and production inventory require separately authorized manual evidence. Each gate records exact command, exit, environment/seed/version, artifact hash and reviewer in the phase review.
 
 | ID / requirements | Required positive and adversarial evidence | Phase / gate |
 | --- | --- | --- |
@@ -31,6 +31,6 @@ F3 full management: additionally qualify adopted lifecycle, redacted logs/metric
 
 ## Evidence commands and implementation ownership
 
-Existing commands: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:db`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm docs:check`, `pnpm compose:check`. Inspect package.json before each task; integration requires disposable DB setup. No F-specific test scripts exist yet. Add meaningful fixture/integration/browser commands with their owning task, document them before claiming execution, and preserve source blueprint checksum.
+Existing commands: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm build`, `pnpm test:db`, `pnpm test:integration`, `pnpm test:e2e`, `pnpm docs:check`, `pnpm compose:check`. Inspect package.json before each task; integration requires disposable DB setup. `pnpm test:preflight` and `pnpm test:preflight:recovery` now cover F0 local scope; no live game/production qualification is implied. Add meaningful fixture/integration/browser commands with their owning task, document them before claiming execution, and preserve source blueprint checksum.
 
 Production preservation proof must distinguish game-generated live writes from management effects: use stopped/quiesced snapshot hashes and immutable container/mount/config/state comparisons under approved read access. Do not compare two running-world hashes and assert unchanged. No production test may delete or replace a real world to prove rollback.

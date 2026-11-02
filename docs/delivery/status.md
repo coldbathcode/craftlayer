@@ -4,9 +4,9 @@ Last updated: 2026-11-02.
 
 ## Authorized scope
 
-The user’s “ok start building craftlayer!” after REC-01 authorizes F0 local implementation. Contabo access, backup capture and production changes remain unauthorized. F1 and later phases require their chapter checkpoint authorization. REC-01 documentation reconciliation is complete. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
+The user’s “ok start building craftlayer!” after REC-01 authorizes F0 local implementation (now locally verified; review prepared). Contabo access, backup capture and production changes remain unauthorized. F1 and later phases require their chapter checkpoint authorization. REC-01 documentation reconciliation is complete. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
 
-## Current checkpoint
+## Preserved runtime checkpoint
 
 - Chapters 00–02 implemented/verified; [provider review](../reviews/02-provider-gateway.md), hosted final CI 41292488668 passed at base `9c9981b`.
 - Chapter 03: CL-03-01 through CL-03-06 verified (6/7).
@@ -25,8 +25,14 @@ At REC-01 the first new management coding task ready **after F0 approval** was: 
 
 Checks/publication evidence: see [REC-01 build-log entry](build-log.md) and [handoff](handoffs/REC-01-unified-reconciliation.md). Preserve all five pre-existing modified runtime/test files listed there. Main/remote equality can be verified independently of their intentionally dirty state; a clean whole working tree cannot be claimed.
 
-## F0 implementation checkpoint — CL-F0-01
+## F0 implementation checkpoint — CL-F0-01 (historical)
 
 Read-only local preflight implemented and verified with synthetic/recording fixtures: bounded no-shell local inspect/list/version/firewall reads, selected config fingerprints, explicit unknowns, redacted report and generic errors. No remote transport or mutable command capability. `pnpm check` passed 208 unit tests plus lint/boundaries/typecheck/docs; `sh -n scripts/preflight.sh` and `git diff --check` passed. [Operator runbook](../development/minecraft-preflight.md) records exact usage/limits.
 
 Next within authorized F0: CL-F0-02 preservation manifest and disposable byte-recovery rehearsal, then F0 review. Existing Chapter 03 CL-03-07 is still open; its five entry-dirty files remain unchanged/excluded from this task commit. No production preflight, world/game/backup operation or network reachability/identity verification has run.
+
+## Current management checkpoint — F0 locally verified
+
+CL-F0-01–02 complete in local scope. Final `pnpm check` passed lint/boundaries, strict source/test/web checks, 215 tests and docs validation; both shell syntax checks and whitespace checks passed. Read-only preflight plus stopped-source preservation manifests now exist; synthetic snapshot/isolated filesystem-copy recovery verifies original content and detects corruption/loss/rename/mode drift. Capture refuses running or changed bindings, unstable files, symlinks/hardlinks/special files and exceeded bounds. Reports never mark backup, game restore, family or production readiness verified. [F0 review](../reviews/F0-preflight.md), [runbook](../development/minecraft-preflight.md), [conditional remediation plan](../operations/minecraft-remediation.md) and [handoff](handoffs/F0-preflight.md) record evidence and limits.
+
+Next management task: CL-F1-01 after **F1 authorization**; build registry/operation contracts/schema/permissions, private observation adapters and parent dashboard locally. No F1 implementation started. Separate Contabo read/backup/write approval remains required. Chapter 03 CL-03-07 and its five pre-existing modified files are still open/preserved, not completed by F0.

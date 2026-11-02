@@ -46,3 +46,18 @@ Exit 0 means inventory was produced; it is **not** security/readiness success. I
 `pnpm test:preflight` exercises stopped/running preservation, canary redaction in malformed/error paths, custom-port IPv4/IPv6 RCON detection, wrong-container/data denial, read-only command construction, missing socket/tool evidence, bounded/symlink/traversal rejection and CLI argument handling. Full `pnpm check` includes these tests and strict checking of `scripts/minecraft/**/*.ts`. See [build log](../delivery/build-log.md) for executed results; no production result is implied.
 
 Implementation references: [Docker inspect](https://docs.docker.com/reference/cli/docker/inspect/), [Node 22.23.3 child processes](https://nodejs.org/download/release/v22.23.3/docs/api/child_process.html) and [file operations](https://nodejs.org/download/release/v22.23.3/docs/api/fs.html). These informed bounded no-shell reads; actual installed server/plugin compatibility is a later qualification.
+
+## Stopped-source preservation manifest (CL-F0-02)
+
+```bash
+scripts/preservation.sh --help
+pnpm test:preflight:recovery
+```
+
+No arguments print help and perform no collection. After separate authorization for the selected local data read scope, `scripts/preservation.sh --local` accepts exactly `--container`, `--docker-socket`, `--data-root` and `--compose`, all paths absolute. It uses the same fixed read runner and refuses unless the verified target is exited, not running, with its exact `/data` source matched. It verifies container/image/config/mount/network/last-start/restart evidence and Compose again after hashing; any change refuses the manifest. It never stops the server to make capture possible.
+
+The manifest covers the selected data root, including files/directories, content hashes, path fingerprints, bytes and mode/UID/GID metadata. It excludes raw paths, names and contents. It rejects symlinks, hardlinks, special files, per-file sizes over 512 MiB, more than 10,000 entries, depth over 16 and total data over 2 GiB. A 30-second budget is checked between filesystem operations; a stalled filesystem operation itself needs operator cancellation. These are conservative F0 tool limits, not supported-world capacity claims; no auto-raising or repair occurs. File identity/size/time metadata is checked before/after reads and again at the end, including directory membership changes. atime is excluded because reading can update it. A trusted host and quiescent source are prerequisites; this is not an atomic snapshot or a defense against a malicious host.
+
+`compareTrees` is an internal typed helper comparing fresh manifests, not an untrusted-JSON API. It distinguishes changed/added/missing content and metadata. The recovery test makes temporary synthetic source/snapshot/restore directories, copies bytes only between those owned directories, verifies content and source preservation, and injects corruption/loss/rename/mode/source-change faults. Synthetic `.dat`/`.mca` names contain generated test bytes, not a playable world. No backup/restore command is exposed to users; no encrypted archive, key-decryption, game boot or off-host recovery is qualified. Manifests always report `backup_created:false`, `restoration_verified:false`, `production_verified:false` and `atomic_snapshot:false`.
+
+Use the [conditional remediation plan](../operations/minecraft-remediation.md) to review findings and approval/rollback prerequisites. Capture no live manifest or backup until the relevant read/write approval is obtained. [F0 review](../reviews/F0-preflight.md) distinguishes local proof from unverified production gates.

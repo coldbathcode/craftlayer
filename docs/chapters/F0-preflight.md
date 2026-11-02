@@ -1,6 +1,6 @@
 # F0 — Preservation and read-only preflight
 
-**Status:** F0 local implementation authorized by the user’s “ok start building craftlayer!” after REC-01; CL-F0-01 verified locally, CL-F0-02 next. **Milestone:** F0. **Requirements:** PR-023, PR-028–029. No production evidence exists.
+**Status:** F0 local implementation authorized by the user’s “ok start building craftlayer!” after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 requires authorization. **Milestone:** F0. **Requirements:** PR-023, PR-028–029. No production evidence exists.
 
 ## Objective
 
@@ -22,9 +22,9 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 **Required evidence:** Recording fake runner proves zero mutation calls, stopped/unrelated state preserved, secret canaries absent even on malformed input/errors, missing tools/privileges reported unknown. See MC-02 and the first-task specification in the track.
 
-### [ ] CL-F0-02 — Preservation manifest and recovery/remediation plan
+### [x] CL-F0-02 — Preservation manifest and recovery/remediation plan
 
-**Depends on:** CL-F0-01. **Status:** not started. **Size:** L.
+**Depends on:** CL-F0-01. **Status:** verified locally; [F0 review](../reviews/F0-preflight.md). **Size:** L.
 
 **Implementation:** Define stable world/container/config fingerprint, inventory comparison and backup/isolated-restore rehearsal on disposable data. Produce prioritized reversible security fixes with exact live approval gates. Production details remain unknown until approved inspection.
 
@@ -40,10 +40,12 @@ MC-02 collector/redaction and preservation; MC-05 exposure evidence; MC-08 dispo
 
 ## Acceptance criteria
 
-- [ ] All phase task evidence and applicable MC gates pass in the claimed environment; unknown/manual gaps explicitly block readiness where critical.
-- [ ] An operator can review a sanitized, non-destructive report and recovery/remediation plan with every unknown explicit. No existing server/container/world is changed.
-- [ ] Authorization, tenant/child denial, redaction, uncertain effects and preservation reviewed; no production actions inferred from local checks.
-- [ ] Rollback/backup procedures rehearsed on disposable resources with exact evidence and current risk/ADR/status records.
+Local scope only: recording fixtures and synthetic filesystem-copy recovery. Live Contabo inventory/backup/game/network gates remain unverified and cannot be marked passed.
+
+- [x] All phase task evidence and applicable MC gates pass in the claimed environment; unknown/manual gaps explicitly block readiness where critical.
+- [x] An operator can review a sanitized, non-destructive report and recovery/remediation plan with every unknown explicit. No existing server/container/world is changed.
+- [x] Authorization, tenant/child denial, redaction, uncertain effects and preservation reviewed; no production actions inferred from local checks.
+- [x] Local preservation and synthetic filesystem-copy recovery rehearsed with exact evidence/risk records; real backup/archive/game restoration remains unverified.
 
 ## Rollback and backup
 
@@ -56,3 +58,5 @@ Contracts/schema/API/SDK and operator instructions for implemented capabilities;
 ## Review checkpoint and next handoff
 
 Review applicable security/recovery and acceptance evidence before authorizing the next phase. Documentation or fake-only proof is not production readiness. Report exact next task and outstanding production/manual gates; never silently cross a phase boundary. Preserve completed original chapters and source inputs.
+
+Local review/evidence: [F0 review](../reviews/F0-preflight.md), [operator runbook](../development/minecraft-preflight.md) and [remediation decisions](../operations/minecraft-remediation.md). Live backup capture/consistent game restore are not delivered by this local rehearsal.

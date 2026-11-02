@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally authorized/in progress; F1–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1–F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -80,3 +80,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [REC-01 handoff](delivery/handoffs/REC-01-unified-reconciliation.md) records documentation checks/publication and preserved dirty files. F1 is the first read-only dashboard; F2 is the earliest family-ready access/backup milestone with real acceptance evidence; F2.5 provisioning and F3 lifecycle follow. New implementation or Contabo work requires authorization. Current simulation runtime evidence and remaining CL-03-07 work are in [runtime runbook](development/runtime.md) and status; do not reconstruct completed chapters.
 
 [Implemented read-only Minecraft preflight](development/minecraft-preflight.md) documents local usage and explicit production/identity/recovery limits.
+
+[F0 local review](reviews/F0-preflight.md) and [handoff](delivery/handoffs/F0-preflight.md) record preflight/preservation tools and synthetic recovery evidence; production gates remain unverified.

@@ -90,3 +90,7 @@ Chapter 02 authorization: the user requested “keep going next steps” after t
 ## F0 local preflight checkpoint
 
 CL-F0-01 uses no new runtime dependency: pinned TypeScript/tsx, fixed no-shell local reads, size/time caps and allowlisted output/fingerprints. Server/plugin/Java versions, ownership, actual client identity enforcement, effective network isolation and backup recovery remain unverified (D-26–D-29). Local fixture proof does not resolve production risks or authorize host access. Five existing runtime/test edits were preserved. Next: CL-F0-02 stable preservation evidence and disposable recovery rehearsal.
+
+## F0 local review
+
+CL-F0-02 adds stopped-source fingerprints with bounded chunked hashing and ordinary concurrent-change detection; this is not an atomic snapshot or protection from a malicious host. Synthetic filesystem-copy recovery and corruption/loss/link/mode/binding tests qualify local comparison only. Backup creation, encryption/key recovery, off-host copies, playable world restore, Java/Bedrock identities, edge reachability and Contabo state remain open. Conservative 2 GiB tree/512 MiB file/10,000-entry/depth-16 limits can refuse large real worlds; scope expansion requires explicit reviewed implementation, not silent truncation. F1 remains gated; the conditional remediation guide contains no automatic repair action.

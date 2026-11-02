@@ -1,6 +1,6 @@
 # Delivery roadmap and critical path
 
-Reconciled 2026-11-02. Chapters 00–02 are implemented/verified and accepted for advancement; CL-03-01–06 verified, CL-03-07 open. Original IDs/implemented behavior remain intact. No promised dates. [REC-01 gap analysis](unified-reconciliation.md) and [ADR 0015](../architecture/decisions/0015-unified-control-plane.md) explain the changed delivery order.
+Updated 2026-11-02: [F0 local implementation/review](../reviews/F0-preflight.md) delivered; F1 requires authorization. Chapters 00–02 are implemented/verified and accepted for advancement; CL-03-01–06 verified, CL-03-07 open. Original IDs/implemented behavior remain intact. No promised dates. [REC-01 gap analysis](unified-reconciliation.md) and [ADR 0015](../architecture/decisions/0015-unified-control-plane.md) explain the changed delivery order.
 
 ## Immediate management sequence
 

@@ -1,6 +1,6 @@
 # Existing-server preservation, backup and rollback runbook
 
-Status: procedure to implement and validate in F0–F3, not evidence of a backup or live inspection. No commands here authorize production access. Expected `minecraft-java`, `/opt/minecraft-java/compose.yaml` and `/opt/minecraft-java/data` must be discovered, not assumed. Treat worlds/player data as irreplaceable.
+Status: F0 local preflight/preservation tooling and synthetic byte-recovery rehearsal implemented; production backup/restore and later F procedures remain unverified. See [runbook](../development/minecraft-preflight.md), [conditional remediation](minecraft-remediation.md) and [review](../reviews/F0-preflight.md). This is not evidence of a live backup or inspection. No commands here authorize production access. Expected `minecraft-java`, `/opt/minecraft-java/compose.yaml` and `/opt/minecraft-java/data` must be discovered, not assumed. Treat worlds/player data as irreplaceable.
 
 ## Gates and evidence custody
 

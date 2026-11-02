@@ -42,9 +42,9 @@ The browser/stack checks require the running stack. Database tests create a disp
 - [Current status](docs/delivery/status.md) and [build log](docs/delivery/build-log.md): exact stopping point and evidence.
 - [Roadmap](docs/delivery/roadmap.md) and [original chapter backlog](docs/delivery/backlog.md): twelve chapter specifications with dependencies and acceptance criteria.
 - [AGENTS.md](AGENTS.md): shared Codex/Claude Code instructions; Claude Code also reads [CLAUDE.md](CLAUDE.md).
-- [Provider handoff](docs/delivery/handoffs/02-provider-gateway.md): how to resume safely.
+- [F0 handoff](docs/delivery/handoffs/F0-preflight.md) and [preflight runbook](docs/development/minecraft-preflight.md): local tools, evidence and the next F1 authorization boundary.
 
-**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; their implementation and all Contabo operations need separate authorization.
+**Every build step updates the plan, commits and pushes to `main`.** This is the user's standing instruction. [Current status](docs/delivery/status.md) records the evidence. The already-authorized next coding task is CL-03-07. [Unified reconciliation](docs/delivery/unified-reconciliation.md) and the [Minecraft track](docs/delivery/minecraft-track.md) define F0–F3; F0 local tooling is now verified ([review](docs/reviews/F0-preflight.md)); F1–F3 implementation and all Contabo operations need separate authorization.
 
 ## Milestones
 
@@ -54,7 +54,7 @@ The browser/stack checks require the running stack. Database tests create a disp
 | Secure accounts | 01 | Implemented and verified; accepted for advancement |
 | Provider gateway | 02 | Implemented and verified; accepted for advancement |
 | Fleet runtime | 03 | Six tasks verified; final fault/restart review remains |
-| Family management | F0–F3 | Planned: observation dashboard → verified access/backups → provisioning → lifecycle |
+| Family management | F0–F3 | F0 local preflight/preservation implemented; dashboard/access/backups/provisioning/lifecycle remain planned |
 | Minecraft vertical slice | 04–06 | Planned: dashboard/Kid Mode and 2–3 cooperating bots |
 | Extensible Core | 07–08 | Planned: more providers, isolated coding and cited research |
 | Self-hosted release | 09 | Planned: backups, upgrades, release images and security review |

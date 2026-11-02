@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: F0 local implementation authorized by the user after REC-01; CL-F0-01 verified, CL-F0-02 next. F1–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 next after authorization. F1–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -24,7 +24,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | Task | Work item | Dependency | State |
 | --- | --- | --- | --- |
 | [CL-F0-01](../chapters/F0-preflight.md) | Fixture-driven redacted read-only preflight | F0 authorized; 00–01 evidence | Verified locally |
-| [CL-F0-02](../chapters/F0-preflight.md) | Preservation manifest, backup/restore rehearsal and remediation plan | CL-F0-01; live inspection only separately approved | Not started |
+| [CL-F0-02](../chapters/F0-preflight.md) | Preservation manifest, backup/restore rehearsal and remediation plan | CL-F0-01; live inspection only separately approved | Verified locally; live evidence unverified |
 | [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Not started |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Not started |
 | [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Not started |
@@ -40,10 +40,12 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F3-01](../chapters/F3-server-operations.md) | Adopted lifecycle approvals, multi-server metrics/logs | F2.5 gate | Not started |
 | [CL-F3-02](../chapters/F3-server-operations.md) | Staged updates, retained decommission, API/MCP parity and review | CL-F3-01 | Not started |
 
-## First coding task ready to execute after approval
+## First-task boundary and current handoff
 
 CL-F0-01 creates `scripts/preflight.sh` as a read-only entry point with deterministic parser/redaction fixtures. No SSH automation, secrets in output, remote targets or mutations by default. Inspect Docker availability/state, IDs/mounts/networks/published ports, game/plugin/auth/allowlist metadata, storage/backup age and effective firewall evidence with bounded allowlisted reads. Never emit full `docker inspect`, Compose render, plugin configs or environment. Missing privileges/dependencies produce `unknown`/non-ready evidence rather than repairs or assumed passes.
 
 Tests must prove zero write/start/stop/exec/firewall/prune/restore calls against a recording fake command runner; canaries redacted even in malformed input/errors; stopped-server state preserved; unrelated-container metadata excluded; missing tools/privileges explicit. Produce a timestamped schema-versioned sanitized report and manual review instructions. Run only on local fixtures/disposable resources until production read access is explicitly authorized. This task does not implement F1 or authorize a new skeleton.
 
 The already authorized next task remains CL-03-07: review dirty runtime changes, complete isolated restart/Redis-loss/fault evidence, then Chapter 03 review/handoff. REC-01 does not execute that coding task.
+
+Current local F0 implementation and limits: [review](../reviews/F0-preflight.md). Next new coding task is CL-F1-01 (server/operation contracts, schema and scoped permissions) after explicit F1 authorization. CL-03-07 remains open separately.
