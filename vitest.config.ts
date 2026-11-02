@@ -14,6 +14,7 @@ export default defineConfig({
         "sdk",
         "providers",
         "runtime",
+        "minecraft-control",
       ].map((name) => [
         `@craftlayer/${name}`,
         fileURLToPath(

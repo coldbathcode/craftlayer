@@ -118,6 +118,56 @@ try {
   env.TEST_REDIS_URL = `redis://:${password}@127.0.0.1:${redisPort}`;
   for (let i = 0; i < 2; i++)
     run("pnpm", ["db:migrate"], { env, stdio: "inherit" });
+  // Management has its own identity fixture/database; it must not bootstrap or
+  // reconfigure the existing identity suite's installation secrets.
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_management_test OWNER craftlayer_migrator",
+  ]);
+  const managementUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_management_test`;
+  env.TEST_MANAGEMENT_DATABASE_URL = managementUrl("craftlayer_runtime");
+  env.TEST_MANAGEMENT_IDENTITY_DATABASE_URL = managementUrl(
+    "craftlayer_identity",
+  );
+  const previousManagement = join(migrationFixture, "management-prior");
+  cpSync("packages/db/migrations", previousManagement, { recursive: true });
+  rmSync(join(previousManagement, "0016_minecraft_management.sql"));
+  const managementMigration = {
+    ...env,
+    MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
+  };
+  run("pnpm", ["db:migrate"], {
+    env: {
+      ...managementMigration,
+      CRAFTLAYER_MIGRATIONS_DIRECTORY: previousManagement,
+    },
+    stdio: "inherit",
+  });
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer_management_test",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "INSERT INTO organizations(id,name) VALUES('00000000-0000-4000-8000-00000000f101','Prior management fixture'); INSERT INTO roles(id,organization_id,name,built_in) VALUES('00000000-0000-4000-8000-00000000f102','00000000-0000-4000-8000-00000000f101','viewer',true)",
+  ]);
+  for (let i = 0; i < 2; i++)
+    run("pnpm", ["db:migrate"], { env: managementMigration, stdio: "inherit" });
   run(
     "docker",
     [

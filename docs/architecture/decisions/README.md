@@ -28,3 +28,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0015 — Unified control plane and management delivery order](0015-unified-control-plane.md) adopts documentation reconciliation and F0–F3 ordering, preserving original task IDs and chapter evidence; it grants no implementation scope.
 
 [ADR 0016 — Privileged node/provisioning boundary](0016-node-provisioning-boundary.md) records the planned outbound node identity, signed commands, fixed broker policy and ownership-safe recovery contract; implementation remains gated.
+
+[ADR 0017 — Minecraft observation boundary](0017-minecraft-observation-boundary.md) records the F1 registry, scoped permissions, atomic local operations and cross-pool session-lock decision.

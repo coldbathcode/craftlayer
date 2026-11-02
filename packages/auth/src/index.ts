@@ -702,14 +702,14 @@ export class AuthService {
     org: string,
     permission: Permission,
     scope: { kind: "organization" | "project" | "environment"; id: string },
-    operation: (principal: Principal) => Promise<T>,
+    operation: (principal: Principal, authority: Authority) => Promise<T>,
   ): Promise<T> {
     return this.orgAction(
       token,
       org,
       permission,
       scope,
-      async (_client, principal) => operation(principal),
+      async (_client, principal, authority) => operation(principal, authority),
     );
   }
   /** Owner-only composition hook; does not expose the identity database client. */

@@ -15,6 +15,7 @@ COPY packages/auth/package.json packages/auth/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/providers/package.json packages/providers/package.json
 COPY packages/runtime/package.json packages/runtime/package.json
+COPY packages/minecraft-control/package.json packages/minecraft-control/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/db/package.json packages/db/package.json

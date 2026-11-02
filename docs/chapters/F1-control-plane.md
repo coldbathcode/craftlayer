@@ -1,6 +1,6 @@
 # F1 — Read-only control plane and parent dashboard
 
-**Status:** planned; implementation not authorized by REC-01. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
+**Status:** F1 locally authorized by the user’s “go to the next steps” after F0; CL-F1-01 verified, CL-F1-02 next. **Milestone:** F1. **Requirements:** PR-024–025, PR-028, PR-035. No production evidence exists.
 
 ## Objective
 
@@ -14,9 +14,9 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 ## Ordered engineering tasks
 
-### [ ] CL-F1-01 — Server and operation contracts, scope and permissions
+### [x] CL-F1-01 — Server and operation contracts, scope and permissions
 
-**Depends on:** F0 local gate. **Status:** not started. **Size:** L.
+**Depends on:** F0 local gate. **Status:** verified locally; ADR 0017 and build log. **Size:** L.
 
 **Implementation:** Add strict server/status/observation/operation contracts, additive tenant-aware server/operation/outbox schema and tested canonical server-scoped permission grants. Preserve identity child ceilings and existing routes. Establish durable operation IDs/idempotency and timestamped observations independently of mission runtime.
 

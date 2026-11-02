@@ -1,4 +1,9 @@
 export const organizationPermissions = [
+  "server:read",
+  "server:adopt",
+  "server:observe",
+  "player:read",
+  "operation:read",
   "organization:read",
   "membership:manage",
   "role:manage",
@@ -34,6 +39,11 @@ export const instancePermissions = [
 ] as const;
 export const rolePermissions = {
   org_admin: [
+    "server:read",
+    "server:adopt",
+    "server:observe",
+    "player:read",
+    "operation:read",
     "organization:read",
     "membership:manage",
     "role:manage",
@@ -64,6 +74,9 @@ export const rolePermissions = {
     "audit:read",
   ],
   operator: [
+    "server:read",
+    "player:read",
+    "operation:read",
     "organization:read",
     "project:read",
     "environment:read",
@@ -89,6 +102,9 @@ export const rolePermissions = {
     "template:write",
   ],
   viewer: [
+    "server:read",
+    "player:read",
+    "operation:read",
     "organization:read",
     "project:read",
     "environment:read",

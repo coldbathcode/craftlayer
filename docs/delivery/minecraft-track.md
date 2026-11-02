@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 next after authorization. F1–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 now authorized/in progress; CL-F1-01 verified, CL-F1-02 next. F2–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -25,7 +25,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | --- | --- | --- | --- |
 | [CL-F0-01](../chapters/F0-preflight.md) | Fixture-driven redacted read-only preflight | F0 authorized; 00–01 evidence | Verified locally |
 | [CL-F0-02](../chapters/F0-preflight.md) | Preservation manifest, backup/restore rehearsal and remediation plan | CL-F0-01; live inspection only separately approved | Verified locally; live evidence unverified |
-| [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Not started |
+| [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Verified locally |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Not started |
 | [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Not started |
 | [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | Not started |
