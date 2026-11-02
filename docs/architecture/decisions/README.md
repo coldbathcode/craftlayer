@@ -34,3 +34,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0018 — Game identity provenance](0018-game-identity-provenance.md) keeps Java/Bedrock subjects distinct, gates authenticated enrollment and separates pinned candidate artifact integrity from real client qualification.
 
 [ADR 0019 — Private node trust](0019-private-node-trust.md) records user-authorized parallel infrastructure development, mTLS/key/certificate-bound enrollment, replay/rotation/revocation and the initial inventory-only boundary.
+
+[ADR 0020 — Node execution journal](0020-node-execution-journal.md) defines signed current permits, durable local intent/receipts, fences/stop and conservative uncertainty without enabling host effects.

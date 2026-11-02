@@ -108,3 +108,5 @@ The optional node-control Compose service holds only runtime DB/TLS/control-sign
 ### CL-F25-02/A planning boundary
 
 [Provisioning runbook](../development/minecraft-provisioning.md) describes the implemented candidate template and effect-free dry-run. Canonical same-project environment plus node placement/provision authority is checked under current membership; child/viewer/cross-tenant and changed-permission denial applies. The digest is a short-lived preview identity, not an approval or reservation. Every actual execution gate remains closed; no job, image pull, EULA acceptance, Docker mutation or new world is dispatched by preview.
+
+CL-F25-01/C implements the private local execution boundary under [ADR 0020](decisions/0020-node-execution-journal.md): signed reference-only jobs, fresh current permits, durable local intent/fence/stop/receipt and conservative uncertainty. No inventory protocol or public execution endpoint changes. Actual current-authority transport, broker, reservation/reconciliation and host qualification remain pending.

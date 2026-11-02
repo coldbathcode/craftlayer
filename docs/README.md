@@ -92,3 +92,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Secure node runbook](development/minecraft-nodes.md) records mTLS/key-bound enrollment, read-only inventory and unimplemented provisioning/effect gates.
 
 [Provisioning preview runbook](development/minecraft-provisioning.md) records Family Survival planning, current dual permissions, conflict/freshness checks and outstanding executor/recovery gates.
+
+[Node execution boundary](development/node-execution.md) records the private signed-command library, crash journal and remaining dispatch/host gates.

@@ -56,6 +56,7 @@ export class NodeJournal {
     this.#lock = await open(join(this.directory, "agent.lock"), "wx", 0o600);
     await this.#lock.writeFile(String(process.pid));
     await this.#lock.sync();
+    return created;
   }
   async next() {
     const path = join(this.directory, `sequence-${this.version}.json`);

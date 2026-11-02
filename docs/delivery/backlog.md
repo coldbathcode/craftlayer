@@ -97,6 +97,8 @@ CL-F25-01 checkpoints A/B now include private trust, Hosts UI and a real local i
 
 CL-F25-02 checkpoint A now exposes the Family Survival template and scoped effect-free placement preview; reservations, signed execution and constrained broker are next. See [planning handoff](handoffs/F25-plans.md).
 
+CL-F25-01 checkpoint C adds a private signed execution/permit/journal/fence/stop boundary; transport remains inventory-only. Next: durable resource reservations and a constrained broker. See [execution runbook](../development/node-execution.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.
