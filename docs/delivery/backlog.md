@@ -109,6 +109,8 @@ CL-F25-02 checkpoint E adds repeatable real local non-Minecraft Docker lifecycle
 
 CL-F25-03 checkpoint A adds immutable disabled deployment intake, current adult actor/session/node/dispatch binding and atomic audit/reference-only outbox. No lease/signer/worker/effect route exists. Next: durable physical job/attempt/fence/current-permit transport. See [intake runbook](../development/deployment-intents.md) and [progress review](../reviews/F25-secure-nodes.md).
 
+CL-F25-03 checkpoint B adds private durable first-provision commands/leases, current dual-grant/qualifier checks, one-use node-signed fetch/permits and signed receipt/expiry settlement retaining uncertainty. No installed effect path or production qualifier exists. Next: outbound mTLS command transport and end-to-end disposable composition, with gateway/API key isolation retained. See [controller runbook](../development/deployment-jobs.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

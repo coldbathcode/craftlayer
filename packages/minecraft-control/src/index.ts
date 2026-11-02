@@ -1003,12 +1003,17 @@ export class MinecraftControl {
 }
 
 export {
+  DeploymentJobs,
+  type DeploymentQualificationContext,
+  type DeploymentQualifier,
+  type NodePeer,
+} from "./deployment-jobs.js";
+export {
   floodgateUuid,
   identityContinuity,
   normalizeAuthenticatedIdentity,
 } from "./identity-policy.js";
 export { InventoryFileSource } from "./inventory.js";
-
 export { NodeControl } from "./nodes.js";
 export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
 export {

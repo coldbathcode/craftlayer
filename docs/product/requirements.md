@@ -106,3 +106,5 @@ CL-F25-02/C implements fixed private image/resource/mount/network policy and sel
 CL-F25-02/D local evidence adds creation-proven journal ownership, no blind retry after unknown writes, manually stopped state preservation and evidence-bearing rolled-back outcomes distinct from success. World/backups/allocated reservations remain retained after runtime compensation. Real Minecraft/recovery/host release requirements remain unverified.
 
 CL-F25-03/A implements the durable intake portion of PR-028/032 only: current scoped adult request, exact immutable allocation/dispatch binding, atomic audit/outbox and idempotent pending metadata. SQL/contracts force execution disabled; no server-provisioning completion, world readiness or later release requirement is considered met.
+
+CL-F25-03/B adds local durable command/lease/current-permit/receipt evidence for PR-028/032. First provision is attempt/fence 1, one command per intake and no automatic retry; its success is stopped resources, not playable readiness. Unknown/expired or late receipts retain uncertainty and world/port accounting. Real transport/host/approval/identity/recovery release requirements remain unmet.

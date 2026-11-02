@@ -42,3 +42,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0022 — Constrained Engine policy](0022-constrained-engine-policy.md) records fixed image/resource/mount/network policy and guarded non-destructive Docker verbs.
 
 - [0023 — Durable broker ownership](0023-node-broker-ownership.md).
+
+- [0024 — Durable provision controller](0024-durable-provision-controller.md).

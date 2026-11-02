@@ -150,6 +150,7 @@ try {
   rmSync(join(previousManagement, "0019_minecraft_provision_plans.sql"));
   rmSync(join(previousManagement, "0020_minecraft_reservations.sql"));
   rmSync(join(previousManagement, "0021_minecraft_deployment_intents.sql"));
+  rmSync(join(previousManagement, "0022_minecraft_deployment_jobs.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
@@ -223,6 +224,30 @@ try {
         ...env,
         MIGRATION_DATABASE_URL: reservationsUrl("craftlayer_migrator"),
       },
+      stdio: "inherit",
+    });
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_jobs_test OWNER craftlayer_migrator",
+  ]);
+  const jobsUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_jobs_test`;
+  env.TEST_DEPLOYMENT_JOBS_DATABASE_URL = jobsUrl("craftlayer_runtime");
+  env.TEST_DEPLOYMENT_JOBS_IDENTITY_DATABASE_URL = jobsUrl(
+    "craftlayer_identity",
+  );
+  for (let i = 0; i < 2; i++)
+    run("pnpm", ["db:migrate"], {
+      env: { ...env, MIGRATION_DATABASE_URL: jobsUrl("craftlayer_migrator") },
       stdio: "inherit",
     });
   run(

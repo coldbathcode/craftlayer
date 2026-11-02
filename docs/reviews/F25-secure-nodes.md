@@ -1,6 +1,6 @@
 # Chapter F2.5 review — secure nodes and Docker provisioning progress
 
-**Implementation state:** partial, locally verified checkpoints. **Acceptance decision:** pending; chapter not complete. **Reviewer:** unassigned. **Date:** 2026-11-02 UTC. **Commit/tree:** executor `c13d7a0`, reservations `11499b2`, fixed Engine `38faeb5`, ownership `83a2af6`, real fixture `c043d38`; intake publication follows this record. **Authorized scope:** continued local F2/F2.5/F3 checkpoints with publication per step; no production access/world changes or Chapter 04.
+**Implementation state:** partial, locally verified checkpoints. **Acceptance decision:** pending; chapter not complete. **Reviewer:** unassigned. **Date:** 2026-11-02 UTC. **Commit/tree:** executor `c13d7a0`, reservations `11499b2`, fixed Engine `38faeb5`, ownership `83a2af6`, real fixture `c043d38`; intake `d95d815`; controller B publication follows this record. **Authorized scope:** continued local F2/F2.5/F3 checkpoints with publication per step; no production access/world changes or Chapter 04.
 
 ## Delivered behavior
 
@@ -10,11 +10,11 @@
 
 | Requirement/task | Criterion and exact check | Result | Limits |
 | --- | --- | --- | --- |
-| CL-F25-01 / MC-01/06/10 | `pnpm check`: signed scope/time/nonce/stop/fence/journal fault checks | PASS/0, 340 unit cases overall | Existing ten executor cases plus current broker/contracts; fake current authority |
-| CL-F25-02 / MC-07/10 | `pnpm test:db`: transactional reservation/port/budget/revocation checks | PASS/0, 132 integration cases overall plus migration proofs | Qualified admission/approval explicitly fake; no actual persistent quota |
+| CL-F25-01 / MC-01/06/10 | `pnpm check`: signed scope/time/nonce/stop/fence/journal fault checks | PASS/0, 342 unit cases overall | Existing ten executor cases plus current broker/contracts; fake current authority |
+| CL-F25-02 / MC-07/10 | `pnpm test:db`: transactional reservation/port/budget/revocation checks | PASS/0, 150 integration cases overall plus migration proofs | Qualified admission/approval explicitly fake; no actual persistent quota |
 | CL-F25-02/03 / MC-06/08/11 | `pnpm check`: recording Engine ownership/config/fault/process-death cases | PASS/0, fifteen Engine plus thirteen runner cases | Real child kill against recording Engine, not a real game |
 | CL-F25-02/03 / MC-06/08/11 | `pnpm test:node:broker`: actual signed Redis scratch fixture lifecycle/compensation/unknown ack/preservation | PASS/0 with exact fixture cleanup | Local Unix Docker, no Minecraft image/world; harness captures IDs separately |
-| CL-F25-03/A / MC-01/06/10 | `pnpm test:db`: durable disabled intake, replay/reopen/scope/revocation/stop/RLS/SQL binding | PASS/0, nine new cases included above | No worker claim/signing/transport/effect path |
+| CL-F25-03/A / MC-01/06/10 | `pnpm test:db`: durable disabled intake, replay/reopen/scope/revocation/stop/RLS/SQL binding | PASS/0, nine new cases included above | No installed worker/transport/effect path |
 | F2/F25 family release | Real Java/Bedrock identity/allowlist, consistent backup/isolated restore, persistent world hard quota, remote firewall/control/MFA | NOT RUN / release blocked | Requires qualified fixtures/operator/client evidence and explicit production authorization |
 
 Pinned Node 22.23.3/pnpm 10.23.0/PostgreSQL 18, macOS arm64, Docker 28.2.2/Engine API 1.50, committed Redis image digest. No paid inference, Cloud, EULA acceptance, world change or Contabo access. Exact commands/corrections are in [build log](../delivery/build-log.md).
@@ -31,7 +31,7 @@ No new UI in these checkpoints; existing prototype `/nodes` and `/servers` remai
 
 ## Known limitations and unresolved work
 
-Bounded local journals (execution 128 commands/512 KiB, ownership 128 deployments/1 MiB) have no archival/force-clear. Intake is immutable pending metadata with no cancellation/lease/signer/receipt worker. Allocated/uncertain world/port claims remain retained after runtime cleanup. Production qualifiers and licensed clients/recovery gates remain open; read-only Contabo permission/target is unanswered. Preserved concurrent Chapter 03/review edits prevent whole-tree cleanliness; task-only publications exclude them.
+Bounded local journals (execution 128 commands/512 KiB, ownership 128 deployments/1 MiB) have no archival/force-clear. Intake stays immutable pending metadata; controller B supplies a separate first-command lease/signer/current-permit/receipt core. Installed network/remote authorizer/real qualifier/cancellation/archival remains absent. Allocated/uncertain world/port claims remain retained after runtime cleanup. Production qualifiers and licensed clients/recovery gates remain open; read-only Contabo permission/target is unanswered. Preserved concurrent Chapter 03/review edits prevent whole-tree cleanliness; task-only publications exclude them.
 
 ## Review decision and handoff
 
@@ -40,4 +40,6 @@ Bounded local journals (execution 128 commands/512 KiB, ownership 128 deployment
 - [ ] No unresolved blocking release issue.
 - [x] Implemented checkpoint docs/backlog/status/ADRs updated consistently.
 
-Decision: pending. Next authorized local task: durable controller job/attempt/lease/fence/signing/receipt and fresh-authority integration, following [handoff](../delivery/handoffs/F25-core-progress.md). This prepared progress review does not accept the chapter or authorize production.
+Decision: pending. Next authorized local task: outbound transport/end-to-end fixture and remote current-authority integration, following [handoff](../delivery/handoffs/F25-core-progress.md). This prepared progress review does not accept the chapter or authorize production.
+
+CL-F25-03/B progress: `pnpm check` PASS/0 (342 unit cases/35 files) and `pnpm test:db` PASS/0 (150 cases/seven files plus migration proofs) cover private controller issuance/current grant/qualifier/node proof/receipt/expiry behavior. Eighteen new DB cases and two contract cases use explicitly fake qualification; no native effect or installed production transport is implied. ADR 0024 records key/identity isolation and remaining gates.

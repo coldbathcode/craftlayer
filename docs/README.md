@@ -103,3 +103,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 
 - [Deployment controller intake](development/deployment-intents.md) — private durable disabled metadata and remaining dispatch gates.
 - [F2.5 progress review](reviews/F25-secure-nodes.md) — local evidence and incomplete release criteria.
+
+- [Durable provision controller](development/deployment-jobs.md) — signed leases/current permits and remaining isolation/qualification gates.
