@@ -105,6 +105,8 @@ CL-F25-02 checkpoint C adds fixed approved image/resource/mount/network policy a
 
 CL-F25-02 checkpoint D adds durable broker creation provenance, lifecycle, retained-world rollback and truthful signed outcomes. Unknown effects stay blocked after restart/rotation. Next: disposable real Engine exercise, then controller jobs/authority integration. See [ownership ADR](../architecture/decisions/0023-node-broker-ownership.md).
 
+CL-F25-02 checkpoint E adds repeatable real local non-Minecraft Docker lifecycle/compensation/lost-ack/preservation checks via `pnpm test:node:broker`. Persistent Minecraft quota/identity/recovery is still unqualified. Next: durable controller jobs and current authority integration. See [broker runbook](../development/node-broker.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.
