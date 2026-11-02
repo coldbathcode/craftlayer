@@ -115,6 +115,8 @@ CL-F25-03 checkpoint C adds pinned outbound command/permit/receipt transport and
 
 CL-F25-03 checkpoint D adds a distinct signed private identity-authority proof service/client, current dual-grant validation without gateway identity secrets, proof-bounded writes/permits and final stop rechecks. Real DB/TLS/Redis flow uses a no-identity gateway. Next: API-only sealed-grant admission/separate gateway issuance, then installed approval/host/world qualification. See [authority ADR](../architecture/decisions/0025-remote-execution-authority.md).
 
+CL-F25-03 checkpoint E adds API-side key-free sealed original-authority admission and gateway-side issue-by-reference, with immutable SQL 0023 links, stop/expiry preservation and reference-only outbox. The actual remote/TLS/Redis fixture now uses the split from its first job. Next: canonical HTTP/SDK metadata and background dispatch/polling, then qualified approval/host/world sources. See [controller runbook](../development/deployment-jobs.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

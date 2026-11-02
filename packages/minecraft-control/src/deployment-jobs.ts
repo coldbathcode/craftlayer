@@ -498,19 +498,68 @@ export class DeploymentJobs {
           kind: "environment",
           id: located.environment_id,
         }),
+      ];
+    return this.#issue(located, grants, v, key);
+  }
+  async issueAdmission(org: string, authorizationId: string) {
+    const admitted = await this.#tx(org, async (c) => {
+      const a = (
+        await c.query<{
+          intent_id: string;
+          node_grant: ExecutionGrant;
+          server_grant: ExecutionGrant;
+          stop_hash: string;
+          expires_at: Date;
+        }>(
+          "select intent_id,node_grant,server_grant,stop_hash,expires_at from minecraft_deployment_authorizations where organization_id=$1 and id=$2",
+          [org, z.uuid().parse(authorizationId)],
+        )
+      ).rows[0];
+      if (!a) deny("NOT_FOUND", 404);
+      if (a.expires_at.getTime() <= this.#now())
+        deny("DEPLOYMENT_AUTHORIZATION_STALE");
+      return { ...a, r: await this.#intent(c, org, a.intent_id) };
+    });
+    return this.#issue(
+      admitted.r,
+      [
+        executionGrantSchema.parse(admitted.node_grant),
+        executionGrantSchema.parse(admitted.server_grant),
       ],
+      { intent_id: admitted.intent_id },
+      authorizationId,
+      {
+        id: authorizationId,
+        stop: admitted.stop_hash,
+        expires: admitted.expires_at.getTime(),
+      },
+    );
+  }
+  async #issue(
+    located: Binding,
+    grants: ExecutionGrant[],
+    v: z.infer<typeof deploymentJobRequest>,
+    key: string,
+    admission?: { id: string; stop: string; expires: number },
+  ) {
+    const org = located.organization_id,
       id = randomUUID(),
       requestHash = nodeDigest(v);
     const snapshot = await this.#guard(located, grants, async (c, p) => {
       const r = await this.#intent(c, org, v.intent_id);
       this.#current(r);
-      const stop = await this.#stop(c, r),
-        oldId = (
-          await c.query<{ id: string }>(
-            "select id from minecraft_deployment_jobs where organization_id=$1 and (intent_id=$2 or (actor_id=$3 and request_key=$4))",
-            [org, v.intent_id, p.user.id, key],
-          )
-        ).rows[0];
+      const stop = await this.#stop(c, r);
+      if (
+        admission &&
+        (admission.expires <= this.#now() || admission.stop !== stop)
+      )
+        deny("DEPLOYMENT_AUTHORIZATION_STALE");
+      const oldId = (
+        await c.query<{ id: string }>(
+          "select id from minecraft_deployment_jobs where organization_id=$1 and (intent_id=$2 or (actor_id=$3 and request_key=$4))",
+          [org, v.intent_id, p.user.id, key],
+        )
+      ).rows[0];
       if (oldId) {
         const old = await this.#job(c, org, oldId.id);
         if (
@@ -543,6 +592,11 @@ export class DeploymentJobs {
       const stop = await this.#stop(c, r),
         context = this.#context("issue", r, p, id, stop, grants, v);
       this.#qualified(evidence, context);
+      if (
+        admission &&
+        (admission.expires <= this.#now() || admission.stop !== stop)
+      )
+        deny("DEPLOYMENT_AUTHORIZATION_STALE");
       const oldId = (
         await c.query<{ id: string }>(
           "select id from minecraft_deployment_jobs where organization_id=$1 and (intent_id=$2 or (actor_id=$3 and request_key=$4))",
@@ -564,6 +618,7 @@ export class DeploymentJobs {
       const now = this.#now(),
         expires = Math.min(
           now + 30000,
+          admission?.expires ?? Infinity,
           p.authorityExpiresAt ?? Number.POSITIVE_INFINITY,
           r.credential_expires_at.getTime(),
         );
@@ -605,7 +660,7 @@ export class DeploymentJobs {
           signature: signNodeValue(payload, this.options.controlPrivateKey),
         });
       await c.query(
-        "insert into minecraft_deployment_jobs(id,organization_id,project_id,environment_id,node_id,credential_version,reservation_id,intent_id,actor_id,session_id,request_key,request_hash,node_grant,server_grant,command,command_hash,stop_hash,lease_id,attempt,fence,state,created_at,lease_expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,1,1,'issued',$19,$20)",
+        "insert into minecraft_deployment_jobs(id,organization_id,project_id,environment_id,node_id,credential_version,reservation_id,intent_id,actor_id,session_id,request_key,request_hash,node_grant,server_grant,command,command_hash,stop_hash,lease_id,attempt,fence,state,created_at,lease_expires_at,authorization_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,1,1,'issued',$19,$20,$21)",
         [
           id,
           org,
@@ -627,11 +682,12 @@ export class DeploymentJobs {
           randomUUID(),
           new Date(now),
           new Date(expires),
+          admission?.id ?? null,
         ],
       );
       const job = await this.#job(c, org, id);
       await this.#event(c, job, "issued");
-      this.#current(job);
+      this.#active(job);
       if ((await this.#stop(c, job)) !== job.stop_hash)
         deny("DEPLOYMENT_STOP_CHANGED");
       this.#qualified(evidence, context);

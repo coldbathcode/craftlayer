@@ -9,6 +9,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { minecraftDeploymentAuthorizations } from "./deployment-authorization-schema.js";
 import { minecraftDeploymentIntents } from "./deployment-schema.js";
 import { memberships } from "./identity-schema.js";
 import { minecraftNodeCredentials } from "./node-schema.js";
@@ -25,6 +26,7 @@ export const minecraftDeploymentJobs = pgTable(
     credentialVersion: integer("credential_version").notNull(),
     reservationId: uuid("reservation_id").notNull(),
     intentId: uuid("intent_id").notNull(),
+    authorizationId: uuid("authorization_id"),
     actorId: uuid("actor_id").notNull(),
     sessionId: uuid("session_id").notNull(),
     requestKey: uuid("request_key").notNull(),
@@ -47,6 +49,17 @@ export const minecraftDeploymentJobs = pgTable(
   },
   (t) => [
     unique().on(t.organizationId, t.id),
+    unique("minecraft_deployment_jobs_authorization_unique").on(
+      t.organizationId,
+      t.authorizationId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.authorizationId],
+      foreignColumns: [
+        minecraftDeploymentAuthorizations.organizationId,
+        minecraftDeploymentAuthorizations.id,
+      ],
+    }),
     unique().on(t.organizationId, t.nodeId, t.credentialVersion, t.id),
     unique().on(t.organizationId, t.intentId),
     unique().on(t.organizationId, t.reservationId),

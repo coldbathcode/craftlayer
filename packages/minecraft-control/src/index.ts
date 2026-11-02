@@ -1002,6 +1002,7 @@ export class MinecraftControl {
   }
 }
 
+export { DeploymentAdmissions } from "./deployment-admissions.js";
 export {
   DeploymentJobs,
   type DeploymentQualificationContext,
@@ -1020,7 +1021,6 @@ export {
 export { InventoryFileSource } from "./inventory.js";
 export { NodeControl } from "./nodes.js";
 export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
-
 export { RemoteDeploymentAuthorizer } from "./remote-authorizer.js";
 export {
   type ReservationAdmission,

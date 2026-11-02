@@ -151,6 +151,9 @@ try {
   rmSync(join(previousManagement, "0020_minecraft_reservations.sql"));
   rmSync(join(previousManagement, "0021_minecraft_deployment_intents.sql"));
   rmSync(join(previousManagement, "0022_minecraft_deployment_jobs.sql"));
+  rmSync(
+    join(previousManagement, "0023_minecraft_deployment_authorizations.sql"),
+  );
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),

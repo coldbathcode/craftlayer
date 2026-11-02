@@ -21,6 +21,7 @@ import {
   signedNodeCommandPermit,
 } from "../../packages/contracts/src/index.js";
 import {
+  DeploymentAdmissions,
   DeploymentJobs,
   type DeploymentQualificationContext,
 } from "../../packages/minecraft-control/src/index.js";
@@ -736,7 +737,11 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         },
       },
     },
-    issuer = new DeploymentJobs(options),
+    admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: Date.now,
+    }),
     authorityKey = generateNodeKey(),
     authorityApp = await buildExecutionAuthorityApp({
       auth: h.auth,
@@ -853,12 +858,13 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         allowed_actions: ["provision"],
       },
       transport = new CommandTransport({ connection, policy });
-    const job = await issuer.prepare(
+    const admitted = await admissions.admit(
       f.adult,
       f.org,
       { intent_id: f.intent.operation_id },
       randomUUID(),
     );
+    const job = await jobs.issueAdmission(f.org, admitted.operation_id);
     for (const wrong of [
       { ...connection, cert: "", key: "" },
       {
@@ -1075,7 +1081,9 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       receipt_state: "succeeded",
     });
     expect(await transport.submitReceipt(receipt)).toEqual(ack);
-    expect(await issuer.get(f.adult, f.org, job.operation_id)).toEqual(ack);
+    expect(
+      await admissions.get(f.adult, f.org, admitted.operation_id),
+    ).toMatchObject({ job_id: job.operation_id, effects: "metadata_only" });
     const retained = await f.ledger.get(f.adult, f.org, f.r.reservation_id);
     expect(retained.state).toBe("allocated");
     await expect(
@@ -1118,7 +1126,7 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
     await broker?.close();
     await app.close();
     await jobs.close();
-    await issuer.close();
+    await admissions.close();
     await authorityApp.close();
     await f.jobs.close();
     await f.nodes.close();
@@ -1172,5 +1180,351 @@ it("does not commit controller mutations under an expired remote authority proof
       ).toBe(0);
     } finally {
       await jobs.close();
+    }
+  }));
+
+it("persists one sealed authority admission/audit/reference-only outbox for concurrent replay without a control key", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      key = randomUUID();
+    try {
+      const results = await Promise.all(
+          Array.from({ length: 6 }, () =>
+            admissions.admit(
+              f.adult,
+              f.org,
+              { intent_id: f.intent.operation_id },
+              key,
+            ),
+          ),
+        ),
+        a = results[0];
+      if (!a) throw new Error("Admission missing");
+      expect(new Set(results.map((r) => r.operation_id)).size).toBe(1);
+      expect(a).toMatchObject({
+        authorization_state: "active",
+        effects: "metadata_only",
+        job_id: null,
+      });
+      expect(JSON.stringify(a)).not.toContain("signature");
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_authorizations"))
+            .rowCount,
+        ).toBe(1);
+        const outbox = (
+          await c.query(
+            "select * from minecraft_deployment_authorization_outbox",
+          )
+        ).rows;
+        expect(outbox).toHaveLength(1);
+        expect(Object.keys(outbox[0]).sort()).toEqual([
+          "authorization_id",
+          "created_at",
+          "id",
+          "organization_id",
+          "schema_version",
+        ]);
+        expect(
+          (
+            await c.query(
+              "select 1 from audit_events where action='server.deployment_authorized'",
+            )
+          ).rowCount,
+        ).toBe(1);
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(0);
+      });
+      const reopened = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      });
+      try {
+        expect(await reopened.get(f.adult, f.org, a.operation_id)).toEqual(a);
+      } finally {
+        await reopened.close();
+      }
+      await expect(
+        admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+      const jobs = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          f.jobs.issueAdmission(f.org, a.operation_id),
+        ),
+      );
+      expect(new Set(jobs.map((r) => r.operation_id)).size).toBe(1);
+      const job = jobs[0];
+      if (!job) throw new Error("Job missing");
+      expect(
+        await admissions.get(f.adult, f.org, a.operation_id),
+      ).toMatchObject({ job_id: job.operation_id });
+    } finally {
+      await admissions.close();
+    }
+  }));
+it("enforces current adult/session/tenant authority for sealed admission and its metadata view", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      for (const token of ["", f.child, f.viewer])
+        await expect(
+          admissions.admit(
+            token,
+            f.org,
+            { intent_id: f.intent.operation_id },
+            randomUUID(),
+          ),
+        ).rejects.toMatchObject({ status: token ? 403 : 401 });
+      await expect(
+        admissions.admit(
+          f.adult,
+          f.foreignOrg,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      const other = await f.member("org_admin");
+      await expect(
+        admissions.admit(
+          other,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_SESSION_DENIED" });
+      const key = randomUUID(),
+        a = await admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          key,
+        );
+      for (const token of [f.child, f.viewer])
+        await expect(
+          admissions.get(token, f.org, a.operation_id),
+        ).rejects.toMatchObject({ status: 403 });
+      await h.tx(h.identity, f.org, (c) =>
+        c.query("update sessions set revoked_at=now() where token_hash=$1", [
+          createHash("sha256").update(f.adult).digest("hex"),
+        ]),
+      );
+      await expect(
+        admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          key,
+        ),
+      ).rejects.toMatchObject({ status: 401 });
+      await expect(
+        f.jobs.issueAdmission(f.org, a.operation_id),
+      ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    } finally {
+      await admissions.close();
+    }
+  }));
+it("never extends expired admission or issues with expired/missing/default qualification", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const a = await admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+        disabled = new DeploymentJobs({
+          databaseUrl: url,
+          authorizer: h.auth,
+          controlPrivateKey: f.control.private_key,
+          policy: f.options.policy,
+          clock: f.now,
+        });
+      try {
+        await expect(
+          disabled.issueAdmission(f.org, a.operation_id),
+        ).rejects.toMatchObject({ code: "DEPLOYMENT_UNQUALIFIED" });
+      } finally {
+        await disabled.close();
+      }
+      f.advance(120001);
+      await f.touch();
+      expect(
+        await admissions.get(f.adult, f.org, a.operation_id),
+      ).toMatchObject({ authorization_state: "expired", job_id: null });
+      await expect(
+        f.jobs.issueAdmission(f.org, a.operation_id),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_AUTHORIZATION_STALE" });
+      await expect(
+        admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toThrow();
+      expect(
+        (
+          await h.tx(h.runtime, f.org, (c) =>
+            c.query("select 1 from minecraft_deployment_jobs"),
+          )
+        ).rowCount,
+      ).toBe(0);
+      expect(
+        (await f.ledger.get(f.adult, f.org, f.r.reservation_id)).state,
+      ).toBe("allocated");
+    } finally {
+      await admissions.close();
+    }
+  }));
+it("retains stop epoch and SQL sealed-authority/immutability bindings across admission and issuance", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const a = await admissions.admit(
+        f.adult,
+        f.org,
+        { intent_id: f.intent.operation_id },
+        randomUUID(),
+      );
+      expect(
+        (
+          await h.runtime.query(
+            "select 1 from minecraft_deployment_authorizations",
+          )
+        ).rowCount,
+      ).toBe(0);
+      for (const table of [
+        "minecraft_deployment_authorizations",
+        "minecraft_deployment_authorization_outbox",
+      ]) {
+        await expect(
+          h.tx(h.runtime, f.org, (c) => c.query(`delete from ${table}`)),
+        ).rejects.toMatchObject({ code: "42501" });
+        await expect(
+          h.tx(h.runtime, f.org, (c) =>
+            c.query(`update ${table} set created_at=now()`),
+          ),
+        ).rejects.toMatchObject({ code: "42501" });
+      }
+      await expect(
+        h.tx(h.runtime, f.foreignOrg, (c) =>
+          c.query(
+            "insert into minecraft_deployment_authorization_outbox(id,organization_id,authorization_id,created_at) values($1,$2,$3,now())",
+            [randomUUID(), f.foreignOrg, a.operation_id],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+      const scope = randomUUID();
+      await h.tx(h.runtime, f.org, async (c) => {
+        await c.query(
+          "select set_config('app.runtime_internal','enabled',true)",
+        );
+        await c.query(
+          "insert into runtime_stop_latches(kind,scope_id,organization_id,epoch,latched,operation_id,reason) values('instance',$1,null,1,true,$2,'Admission stop')",
+          [scope, randomUUID()],
+        );
+      });
+      try {
+        await expect(
+          f.jobs.issueAdmission(f.org, a.operation_id),
+        ).rejects.toMatchObject({ code: "STOP_LATCHED" });
+      } finally {
+        await h.tx(h.runtime, f.org, async (c) => {
+          await c.query(
+            "select set_config('app.runtime_internal','enabled',true)",
+          );
+          await c.query(
+            "update runtime_stop_latches set latched=false,epoch=epoch+1 where kind='instance' and scope_id=$1",
+            [scope],
+          );
+        });
+      }
+      await expect(
+        f.jobs.issueAdmission(f.org, a.operation_id),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_AUTHORIZATION_STALE" });
+    } finally {
+      await admissions.close();
+    }
+  }));
+
+it("SQL rejects altered sealed actor/scope and job-authority links before uniqueness can mask binding checks", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const a = await admissions.admit(
+        f.adult,
+        f.org,
+        { intent_id: f.intent.operation_id },
+        randomUUID(),
+      );
+      for (const expression of [
+        "jsonb_set(node_grant,'{userId}',to_jsonb(gen_random_uuid()::text))",
+        "jsonb_set(node_grant,'{permission}','\"server:provision\"'::jsonb)",
+        "jsonb_set(node_grant,'{resource,id}',to_jsonb(gen_random_uuid()::text))",
+      ]) {
+        await expect(
+          h.tx(h.runtime, f.org, (c) =>
+            c.query(
+              `insert into minecraft_deployment_authorizations(id,organization_id,project_id,environment_id,node_id,reservation_id,intent_id,actor_id,session_id,request_key,request_hash,stop_hash,node_grant,server_grant,created_at,expires_at) select gen_random_uuid(),organization_id,project_id,environment_id,node_id,reservation_id,intent_id,actor_id,session_id,gen_random_uuid(),request_hash,stop_hash,${expression},server_grant,created_at,expires_at from minecraft_deployment_authorizations where id=$1`,
+              [a.operation_id],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+      }
+      const job = await f.jobs.issueAdmission(f.org, a.operation_id);
+      await expect(
+        h.tx(h.runtime, f.org, (c) =>
+          c.query(
+            "update minecraft_deployment_jobs set authorization_id=null,version=version+1 where id=$1",
+            [job.operation_id],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23514" });
+      const commands = (
+        await h.tx(h.runtime, f.org, (c) =>
+          c.query(
+            "select node_grant,server_grant,authorization_id from minecraft_deployment_jobs where id=$1",
+            [job.operation_id],
+          ),
+        )
+      ).rows[0];
+      expect(commands.authorization_id).toBe(a.operation_id);
+      expect(
+        (
+          await h.tx(h.runtime, f.org, (c) =>
+            c.query("select 1 from minecraft_deployment_authorizations"),
+          )
+        ).rowCount,
+      ).toBe(1);
+    } finally {
+      await admissions.close();
     }
   }));
