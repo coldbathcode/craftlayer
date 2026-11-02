@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: planned, not authorized for coding by REC-01. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01 verified, CL-F0-02 next. F1–F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -23,7 +23,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 
 | Task | Work item | Dependency | State |
 | --- | --- | --- | --- |
-| [CL-F0-01](../chapters/F0-preflight.md) | Fixture-driven redacted read-only preflight | Explicit F0 coding authorization; 00–01 evidence | Not started |
+| [CL-F0-01](../chapters/F0-preflight.md) | Fixture-driven redacted read-only preflight | F0 authorized; 00–01 evidence | Verified locally |
 | [CL-F0-02](../chapters/F0-preflight.md) | Preservation manifest, backup/restore rehearsal and remediation plan | CL-F0-01; live inspection only separately approved | Not started |
 | [CL-F1-01](../chapters/F1-control-plane.md) | Server/operation contracts, scope schema and management permissions | F0 local gate; 00–01 | Not started |
 | [CL-F1-02](../chapters/F1-control-plane.md) | In-place adoption, observation adapter and REST/SDK | CL-F1-01 | Not started |

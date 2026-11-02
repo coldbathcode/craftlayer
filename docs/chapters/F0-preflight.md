@@ -1,6 +1,6 @@
 # F0 — Preservation and read-only preflight
 
-**Status:** planned; implementation not authorized by REC-01. **Milestone:** F0. **Requirements:** PR-023, PR-028–029. No production evidence exists.
+**Status:** F0 local implementation authorized by the user’s “ok start building craftlayer!” after REC-01; CL-F0-01 verified locally, CL-F0-02 next. **Milestone:** F0. **Requirements:** PR-023, PR-028–029. No production evidence exists.
 
 ## Objective
 
@@ -14,9 +14,9 @@ Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [manage
 
 ## Ordered engineering tasks
 
-### [ ] CL-F0-01 — Fixture-driven redacted read-only preflight
+### [x] CL-F0-01 — Fixture-driven redacted read-only preflight
 
-**Depends on:** F0 coding authorization. **Status:** not started. **Size:** L.
+**Depends on:** F0 coding authorization (received). **Status:** verified locally; [runbook](../development/minecraft-preflight.md) and build log. **Size:** L.
 
 **Implementation:** Implement local scripts/preflight.sh with bounded allowlisted read collection and schema-versioned redacted output. Record Docker state/IDs/mounts/ports, Paper/Geyser/Floodgate/auth/allowlist metadata, effective firewall evidence, disk and backup unknowns. No SSH automation, mutation, repair or game start.
 

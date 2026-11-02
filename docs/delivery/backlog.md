@@ -2,7 +2,7 @@
 
 **Chapters 00–02 are implemented and accepted for advancement; CL-03-01–06 verified, CL-03-07 open; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
-This table preserves the original 84 numbered chapter tasks. The [16-task Minecraft management track](minecraft-track.md) adds F0 → F1 → F2 → F2.5 → F3 before new CL-04 bot work; all F tasks are unimplemented and need explicit authorization. F1 depends on 00–01/F0, not bots or model routing. See [reconciliation](unified-reconciliation.md) for reuse and exact scope.
+This table preserves the original 84 numbered chapter tasks. The [16-task Minecraft management track](minecraft-track.md) adds F0 → F1 → F2 → F2.5 → F3 before new CL-04 bot work; F0 is now locally authorized, CL-F0-01 verified and CL-F0-02 next; later F phases need explicit authorization. F1 depends on 00–01/F0, not bots or model routing. See [reconciliation](unified-reconciliation.md) for reuse and exact scope.
 
 Each original chapter is a conservative dependency chain of seven reviewable tasks. Dependencies may be refined during implementation with documented justification; never reorder around a safety gate. Chapters 07/08 have technical opportunities for independent work, but chapter authorization and acceptance still apply.
 

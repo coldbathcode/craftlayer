@@ -35,7 +35,8 @@
     "setup:providers": "node scripts/setup-providers.mjs",
     "test:provider-stack": "node scripts/test-provider-stack.mjs",
     "setup:worker": "node scripts/setup-worker.mjs",
-    "test:runtime-stack": "node scripts/test-runtime-stack.mjs"
+    "test:runtime-stack": "node scripts/test-runtime-stack.mjs",
+    "test:preflight": "vitest run tests/unit/minecraft-preflight.test.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

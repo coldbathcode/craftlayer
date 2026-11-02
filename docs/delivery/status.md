@@ -4,7 +4,7 @@ Last updated: 2026-11-02.
 
 ## Authorized scope
 
-REC-01 documentation reconciliation is authorized by the current request, including relevant documentation checks and commit/push. It does not authorize implementation, Contabo access or infrastructure changes. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
+The user’s “ok start building craftlayer!” after REC-01 authorizes F0 local implementation. Contabo access, backup capture and production changes remain unauthorized. F1 and later phases require their chapter checkpoint authorization. REC-01 documentation reconciliation is complete. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
 
 ## Current checkpoint
 
@@ -21,6 +21,12 @@ REC-01 documentation reconciliation is authorized by the current request, includ
 
 Documentation reconciliation delivered: [gap/reuse/conflict analysis](unified-reconciliation.md), [16-task F0–F3 track](minecraft-track.md), updated product/architecture/ADRs/backlog/roadmap, phase chapters, security/deployment and backup/rollback/acceptance procedures. This is a plan, not implemented Minecraft functionality. F1 observation preview is earliest dashboard; F2 verified access/backups is earliest family-ready management milestone; full lifecycle in F3 follows F2.5 provisioning. No models/bots required for F1/F2.
 
-First new management coding task ready **after F0 approval**: CL-F0-01 local fixture-driven redacted read-only preflight. F0–F3 and Chapter 04 remain unimplemented/unapproved. Exact production host state, Java/Bedrock compatibility, port isolation, backups and restoration are unverified. No VPS connection, deployment, container/world modification or destructive operation was performed.
+At REC-01 the first new management coding task ready **after F0 approval** was: CL-F0-01 local fixture-driven redacted read-only preflight. F0–F3 and Chapter 04 were then unimplemented/unapproved; current F0 implementation is recorded below. Exact production host state, Java/Bedrock compatibility, port isolation, backups and restoration are unverified. No VPS connection, deployment, container/world modification or destructive operation was performed.
 
 Checks/publication evidence: see [REC-01 build-log entry](build-log.md) and [handoff](handoffs/REC-01-unified-reconciliation.md). Preserve all five pre-existing modified runtime/test files listed there. Main/remote equality can be verified independently of their intentionally dirty state; a clean whole working tree cannot be claimed.
+
+## F0 implementation checkpoint — CL-F0-01
+
+Read-only local preflight implemented and verified with synthetic/recording fixtures: bounded no-shell local inspect/list/version/firewall reads, selected config fingerprints, explicit unknowns, redacted report and generic errors. No remote transport or mutable command capability. `pnpm check` passed 208 unit tests plus lint/boundaries/typecheck/docs; `sh -n scripts/preflight.sh` and `git diff --check` passed. [Operator runbook](../development/minecraft-preflight.md) records exact usage/limits.
+
+Next within authorized F0: CL-F0-02 preservation manifest and disposable byte-recovery rehearsal, then F0 review. Existing Chapter 03 CL-03-07 is still open; its five entry-dirty files remain unchanged/excluded from this task commit. No production preflight, world/game/backup operation or network reachability/identity verification has run.

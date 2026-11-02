@@ -86,3 +86,7 @@ For a new material question: assign ID, describe impact, propose the safest usef
 An open question does not block unrelated planning. Never resolve a high-risk unknown by inventing a tested fact or silently weakening the acceptance criteria.
 
 Chapter 02 authorization: the user requested “keep going next steps” after the Chapter 01 review. Chapter 03 was subsequently authorized by the next-steps request; Chapter 04 remains gated. ADR 0013 also resolves the entry-gate overstatement: only the recovery encryption pattern existed before Chapter 02; provider credential storage is implemented in its own task.
+
+## F0 local preflight checkpoint
+
+CL-F0-01 uses no new runtime dependency: pinned TypeScript/tsx, fixed no-shell local reads, size/time caps and allowlisted output/fingerprints. Server/plugin/Java versions, ownership, actual client identity enforcement, effective network isolation and backup recovery remain unverified (D-26–D-29). Local fixture proof does not resolve production risks or authorize host access. Five existing runtime/test edits were preserved. Next: CL-F0-02 stable preservation evidence and disposable recovery rehearsal.
