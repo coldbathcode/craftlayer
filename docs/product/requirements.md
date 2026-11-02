@@ -98,3 +98,5 @@ CL-F25-01/A–B implements the read-only portion of PR-030: adult-approved, cert
 CL-F25-02/A adds a strict Family Survival template and effect-free placement preview for PR-031. It checks current adult `node:deploy`/`server:provision`, canonical same-project Minecraft scope, report freshness, declared memory and Docker port conflicts. Pinned unqualified artifacts, EULA false and open image/identity/recovery/storage/network/broker gates prevent dispatch; preview never creates a reservation or approval.
 
 PR-030 local signed execution primitives now exist at CL-F25-01/C. Fake authority/broker and process-kill evidence prove local ordering/replay/stop refusal, not production command dispatch, actual Docker fencing, Minecraft readiness or verified recovery.
+
+PR-031 reservation primitives now have real PostgreSQL race/tenant/current-authority evidence at CL-F25-02/B. This proves controller metadata exclusion, not physical quotas, full host qualification or Minecraft provisioning; production admission/approval and broker remain unimplemented.

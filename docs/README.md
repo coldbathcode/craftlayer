@@ -94,3 +94,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Provisioning preview runbook](development/minecraft-provisioning.md) records Family Survival planning, current dual permissions, conflict/freshness checks and outstanding executor/recovery gates.
 
 [Node execution boundary](development/node-execution.md) records the private signed-command library, crash journal and remaining dispatch/host gates.
+
+[Node reservation ledger](development/node-reservations.md) records private qualified admission, atomic resource/port holds and non-expiring uncertain allocations.

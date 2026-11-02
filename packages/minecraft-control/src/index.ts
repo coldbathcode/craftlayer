@@ -1011,3 +1011,8 @@ export { InventoryFileSource } from "./inventory.js";
 
 export { NodeControl } from "./nodes.js";
 export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
+export {
+  type ReservationAdmission,
+  type ReservationAdmissionContext,
+  ReservationLedger,
+} from "./reservations.js";

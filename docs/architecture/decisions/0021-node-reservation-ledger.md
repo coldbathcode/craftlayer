@@ -1,0 +1,21 @@
+# ADR 0021 — Transactional node reservations and retained uncertainty
+
+Status: adopted for local F2.5 development, 2026-11-02. Complements [ADR 0020](0020-node-execution-journal.md); no host execution or family release is enabled.
+
+## Decision
+
+Use a private reservation domain service with current adult `node:deploy` and canonical same-project Minecraft `server:provision`, separate restricted runtime pool and short tenant-scoped transactions. Reuse authenticated membership and the existing shared instance/org/environment stop latches. Never hold either identity or runtime transaction while acquiring external host qualification. Recheck current scope/authority, node/key version, freshness and proof binding after that I/O. No network/HTTP/SDK/MCP route exposes this service yet.
+
+Require a trusted admission port to verify complete current host/native-port/capacity/quota/template/identity/recovery policy. It returns a strict, short-lived hash-bound result; clients and queues cannot assert qualification. No production adapter is supplied, so the default is unavailable. Reported CPU/RAM are upper bounds; unbounded/stale host reports are ineligible. Budget means the total CraftLayer allocation budget after unrelated workloads/system headroom, so existing managed reservations are counted exactly once. Admission must establish that budget from actual host ownership; the initial Docker report cannot do that alone.
+
+Create 60s **metadata-only undispatched holds** with generated immutable deployment/server/world IDs, fixed Family Survival resource requests and exact plan/template/policy/node generation. Current adult authority permits such a reversible hold; it does not approve EULA or infrastructure creation. Recording dispatch intent additionally requires fresh admission with independently verified adult approval bound to the exact reservation/plan, unchanged template/policy, current capacity/conflicts and an unexpired expected version. The production admission/approval adapter remains unimplemented; tests use explicit fakes and do not qualify the candidate runtime.
+
+Serialize competing admissions with the existing organization management advisory barrier plus node row lock. Sum every unreleased CPU/RAM/disk allocation; use a unique node/protocol/port claim across all addresses and composite tenant FKs. Recheck full aggregate budget/actual conflicts at dispatch. Admission expiry cleanup releases only held records and their metadata ports, recording a durable expiry operation/audit/reference-only outbox in the same transaction. Dispatched (`allocated`) or `uncertain` records never expire or release via ordinary cancellation. SQL additionally prevents mutation of immutable identity/resources/history and deletion of retained port claims.
+
+Each reserve/release/dispatch/uncertainty mutation has actor/session/key/body hash and atomic operation/audit/outbox. Identical replay revalidates authority; altered key input conflicts. Admission limits use rolling minute/day windows and at most 100 active allocations per node, not lifetime history. Safety release/expiry is not blocked by the reserve admission rate ceiling. Retain metadata/history; no Docker/world/backup resource is removed.
+
+## Consequences and remaining gates
+
+Allocated/uncertain holds may need operator reconciliation and continue consuming capacity indefinitely. There is deliberately no force-release shortcut. A future proven runtime removal must account separately for retained world/backup storage before releasing quotas; reverting an app/image is not world recovery. Background expiry sweep, durable non-browser dispatch authority/approval, current stop transport, qualified admission, actual broker and evidence-bound reconciliation remain necessary. This ledger is not a lock against unrelated host administrators or a proof of physical quota enforcement.
+
+References: [PostgreSQL 18 locking](https://www.postgresql.org/docs/18/explicit-locking.html), [PostgreSQL 18 RLS](https://www.postgresql.org/docs/18/ddl-rowsecurity.html). Use the pinned project version, forced RLS, scoped parameters and transaction-local context; no schema-time external I/O.

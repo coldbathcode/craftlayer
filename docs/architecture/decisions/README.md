@@ -36,3 +36,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0019 — Private node trust](0019-private-node-trust.md) records user-authorized parallel infrastructure development, mTLS/key/certificate-bound enrollment, replay/rotation/revocation and the initial inventory-only boundary.
 
 [ADR 0020 — Node execution journal](0020-node-execution-journal.md) defines signed current permits, durable local intent/receipts, fences/stop and conservative uncertainty without enabling host effects.
+
+[ADR 0021 — Node reservation ledger](0021-node-reservation-ledger.md) defines short scoped transactions, qualified private admission, expiring metadata holds and retained uncertain allocations.
