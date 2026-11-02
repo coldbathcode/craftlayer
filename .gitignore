@@ -42,3 +42,5 @@ next-env.d.ts
 .minecraft-secrets/
 
 .craftlayer-prototype/
+
+.node-secrets/

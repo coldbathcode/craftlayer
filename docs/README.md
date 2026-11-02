@@ -1,6 +1,6 @@
 # Documentation map and reading order
 
-**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1 is locally implemented with review prepared; F2 is locally authorized/in progress; F2.5/F3 and Chapter 04 require separate authorization; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
+**Status:** Chapters 00–02 implemented and locally verified; Chapter 02 is accepted for advancement and Chapter 03 is authorized/in progress; F0 is locally verified with review prepared; F1 is locally implemented with review prepared; F2 is locally authorized/in progress; F2.5/F3 capability development is now authorized; Chapter 04 and production operations remain gated; [unified reconciliation](delivery/unified-reconciliation.md) and [Minecraft track](delivery/minecraft-track.md) define the new priority; see [current checkpoint](delivery/status.md). Begin with the root [README](../README.md) and [AGENTS.md](../AGENTS.md). Claude Code also reads [CLAUDE.md](../CLAUDE.md).
 
 ## Planning layers
 
@@ -88,3 +88,5 @@ Read the current status before choosing a task. Specifications are proposed impl
 [F2 identity runbook](development/minecraft-identities.md) records pinned unqualified artifacts, identity semantics and the required real-client gate.
 
 [Runnable family prototype](development/prototype.md): separate local stack, generated parent/viewer/child accounts and a test journey with synthetic servers and persistent pending requests.
+
+[Secure node runbook](development/minecraft-nodes.md) records mTLS/key-bound enrollment, read-only inventory and unimplemented provisioning/effect gates.

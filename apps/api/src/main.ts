@@ -9,6 +9,7 @@ import { createDatabase } from "@craftlayer/db";
 import {
   InventoryFileSource,
   MinecraftControl,
+  NodeControl,
 } from "@craftlayer/minecraft-control";
 import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
 import { RuntimeService, redisPublisher } from "@craftlayer/runtime";
@@ -70,6 +71,13 @@ try {
     auth,
     source: new InventoryFileSource(config.CRAFTLAYER_MINECRAFT_INVENTORY_FILE),
   });
+  const nodes = new NodeControl({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    ...(config.CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY
+      ? { controlPublicKey: config.CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY }
+      : {}),
+  });
   let scheduling = false;
   const publish = redisPublisher(config.REDIS_URL);
   const runtimeTimer = setInterval(() => {
@@ -125,6 +133,7 @@ try {
     await providers.close();
     await runtime.close();
     await minecraft.close();
+    await nodes.close();
   };
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
@@ -136,12 +145,13 @@ try {
     providers,
     runtime,
     minecraft,
+    nodes,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
     readiness: async () => {
       const [db, pong] = await within(
         Promise.all([
           pool.query(
-            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null and to_regclass('public.minecraft_servers') is not null as migrated",
+            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null and to_regclass('public.minecraft_servers') is not null and to_regclass('public.minecraft_nodes') is not null as migrated",
           ),
           redis.isReady ? redis.ping() : Promise.resolve(null),
         ]),
@@ -159,6 +169,7 @@ try {
     await providers.close();
     await runtime.close();
     await minecraft.close();
+    await nodes.close();
   };
   installShutdown(() => close(), log);
   await app.listen({

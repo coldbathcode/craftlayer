@@ -1008,3 +1008,5 @@ export {
   normalizeAuthenticatedIdentity,
 } from "./identity-policy.js";
 export { InventoryFileSource } from "./inventory.js";
+
+export { NodeControl } from "./nodes.js";

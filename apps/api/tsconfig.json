@@ -33,6 +33,9 @@
     },
     {
       "path": "../../packages/minecraft-control"
+    },
+    {
+      "path": "../../packages/node-protocol"
     }
   ]
 }

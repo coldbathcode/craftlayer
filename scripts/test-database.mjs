@@ -146,6 +146,7 @@ try {
   cpSync("packages/db/migrations", previousManagement, { recursive: true });
   rmSync(join(previousManagement, "0016_minecraft_management.sql"));
   rmSync(join(previousManagement, "0017_minecraft_identity_requests.sql"));
+  rmSync(join(previousManagement, "0018_minecraft_nodes.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
@@ -172,6 +173,28 @@ try {
   ]);
   for (let i = 0; i < 2; i++)
     run("pnpm", ["db:migrate"], { env: managementMigration, stdio: "inherit" });
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_nodes_test OWNER craftlayer_migrator",
+  ]);
+  const nodesUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_nodes_test`;
+  env.TEST_NODES_DATABASE_URL = nodesUrl("craftlayer_runtime");
+  env.TEST_NODES_IDENTITY_DATABASE_URL = nodesUrl("craftlayer_identity");
+  for (let i = 0; i < 2; i++)
+    run("pnpm", ["db:migrate"], {
+      env: { ...env, MIGRATION_DATABASE_URL: nodesUrl("craftlayer_migrator") },
+      stdio: "inherit",
+    });
   run(
     "docker",
     [

@@ -1,6 +1,6 @@
 # Minecraft server management implementation track
 
-Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 locally verified with review prepared; CL-F1-01–03 complete locally. F2 is now locally authorized/in progress after user continuation; F2.5/F3 remain separately gated. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
+Status: F0 local implementation authorized by the user after REC-01; CL-F0-01–02 verified locally; F0 review prepared, F1 locally verified with review prepared; CL-F1-01–03 complete locally. F2 is now locally authorized/in progress after user continuation; F2.5/F3 local development is now authorized by the VPS-management request, with release/security/recovery dependencies retained. [Gap analysis](unified-reconciliation.md) explains reuse and conflicts; [roadmap](roadmap.md) retains original chapters. Each phase needs separate authorization/review; production access and changes need separate operator authorization. No Contabo checks have been executed.
 
 ## Sequence and milestones
 
@@ -32,7 +32,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F2-02](../chapters/F2-family-access.md) | Desired/actual allowlist operations, revoke/expiry and UI | CL-F2-01 | Not started |
 | [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
 | [CL-F2-04](../chapters/F2-family-access.md) | Family acceptance, security/recovery review and handoff | CL-F2-03 | Not started |
-| [CL-F25-01](../chapters/F2.5-docker-provisioning.md) | One-use node enrollment, outbound mTLS and signed commands | F2 gate | Not started |
+| [CL-F25-01](../chapters/F2.5-docker-provisioning.md) | One-use node enrollment, outbound mTLS and signed commands | F2 gate for release; read-only work independent | In progress; node trust checkpoint A |
 | [CL-F25-02](../chapters/F2.5-docker-provisioning.md) | Constrained broker, template plan, quotas/port reservations | CL-F25-01 | Not started |
 | [CL-F25-03](../chapters/F2.5-docker-provisioning.md) | Durable provision, readiness, crash reconciliation and rollback | CL-F25-02 | Not started |
 | [CL-F25-04](../chapters/F2.5-docker-provisioning.md) | Creation wizard, REST and secured MCP subset | CL-F25-03 | Not started |

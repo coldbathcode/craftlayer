@@ -1,4 +1,8 @@
 export const organizationPermissions = [
+  "node:read",
+  "node:enroll",
+  "node:rotate",
+  "node:revoke",
   "server:read",
   "server:adopt",
   "server:observe",
@@ -40,6 +44,10 @@ export const instancePermissions = [
 ] as const;
 export const rolePermissions = {
   org_admin: [
+    "node:read",
+    "node:enroll",
+    "node:rotate",
+    "node:revoke",
     "server:read",
     "server:adopt",
     "server:observe",

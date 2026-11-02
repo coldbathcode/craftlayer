@@ -8,6 +8,7 @@ import {
   identityEnrollmentPage,
   identityEnrollmentRequest,
   itemsSchema,
+  nodeOperationView,
   operationAccepted,
   operationView,
   playersView,
@@ -23,11 +24,13 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import type { NodeApi } from "./node-routes.js";
 export type MinecraftApi = Pick<MinecraftControl, keyof MinecraftControl>;
 export async function registerMinecraft(
   app: FastifyInstance,
   control: MinecraftApi,
   publicUrl: string,
+  nodes?: NodeApi,
 ) {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const enabled = ["localhost", "127.0.0.1", "[::1]"].includes(
@@ -193,8 +196,24 @@ export async function registerMinecraft(
   );
   api.get(
     "/api/v1/operations/:id",
-    { schema: { params, response: { 200: operationView, ...errors } } },
-    async (r) => control.operation(token(r), org(r), r.params.id),
+    {
+      schema: {
+        params,
+        response: {
+          200: z.union([operationView, nodeOperationView]),
+          ...errors,
+        },
+      },
+    },
+    async (r) => {
+      try {
+        return await control.operation(token(r), org(r), r.params.id);
+      } catch (e) {
+        if (nodes && e instanceof AuthError && e.status === 404)
+          return nodes.operation(token(r), org(r), r.params.id);
+        throw e;
+      }
+    },
   );
   for (const action of ["observe", "unregister"] as const)
     api.post(

@@ -1,0 +1,23 @@
+# ADR 0019 — Private node trust and parallel provisioning development
+
+Status: adopted for locally authorized VPS-management development, 2026-11-02. User requested more deploy/manage capability after the F2 prototype. This authorizes F2.5/F3 implementation alongside incomplete F2, not production access or relaxation of release gates.
+
+## Decision
+
+Develop independent host enrollment/control/provisioning components now, preserving F2 identity/recovery gates before live/family release and F2.5 provisioning acceptance. No existing host/game/world is changed by this decision. Original completed chapters remain intact. F2.5/F3 task dependencies remain release gates; code development need not wait for licensed client availability when it cannot dispatch game effects.
+
+Use a separate TLS 1.3 control listener requiring a client certificate signed by an operator-managed private CA. Bind each node enrollment to an adult-approved project, Ed25519 public key and exact client certificate fingerprint. Enrollment is one-use and expires after five minutes; public IDs are not bearer credentials. Application proofs bind protocol purpose, control identity, org/node, credential generation, monotonic sequence and a maximum 30s lifetime. Both TLS verification/certificate pinning and signed responses are required. Agent initiates all connections and exposes no listener.
+
+Operator PKI issuance is outside API handlers; the API never holds the CA private key. A local-only fixture generator creates new protected test certificates without installing trust or overwriting existing files. The API handles browser/member administration; the private gateway has only runtime DB access, its server TLS key and command signing key, no identity DB, Docker socket or world mounts. Nodes possess distinct TLS and signing keys, not user cookies or bot-worker credentials.
+
+Use immutable credential history, 24-hour credential expiry, explicit adult rotation/revocation and per-generation sequence storage in PostgreSQL. Current node/certificate/key/generation/expiry is checked on every request, including existing TLS connections. A rotation retains old credential records and never silently trusts the old key again. Revocation stops future accepted node requests; it does not stop/start games. Durable metadata operations use current adult scope, UUID replay/conflict and atomic shared audit plus a reference-only node outbox. Generic `/operations/:id` accepts a typed node-operation variant; node-operation alias delegates to the same receipt.
+
+The initial agent has **inventory.read only**: fixed Docker Engine API 1.50 GET paths, bounded responses/concurrency/counts and selected projections across all containers, including stopped/unrelated workloads. Raw inspect environment/mount/name/secret data stays out of reports/logs/queue/browser. Host observation is not authority. Reports hard-code provisioning qualification, full network inventory and disk quota verification false. Unbounded workloads are explicit; Docker ports alone do not cover native host processes. API/web/general workers never receive the socket. A Docker-capable node process remains host-privileged if compromised even when its code uses only reads.
+
+The local agent writes its sequence before requests and never resets it on ordinary reconnect. A private journal lock prevents simultaneous processes; a crash lock requires operator review, not automatic clearing. This checkpoint does not yet deliver physical job execution, command leases/fences, broker resource policy, provisioning, lifecycle, identity enforcement, backups/restore or a remote privileged browser entry/MFA qualification.
+
+## Evidence and next gates
+
+Unit and actual restricted-role database/mTLS tests cover signature/body/time/credential binding, enrollment replay, rotation/revocation, TLS client/server pinning, role/tenant/child denial, immutable history and atomic metadata receipts. No fake-only or read-only proof qualifies mutable node execution. Follow with complete signed command/job contracts and bounded broker, capacity/port/quota validation, durable reservations and non-destructive recovery, plus F2 actual identity/restore tests. Contabo inspection/install/deployment remains separately approved.
+
+Primary references: [Node 22 TLS](https://nodejs.org/docs/latest-v22.x/api/tls.html), [Node 22 crypto](https://nodejs.org/docs/latest-v22.x/api/crypto.html), [Docker API 1.50](https://docs.docker.com/reference/api/engine/version/v1.50/), [OpenSSL certificate tooling](https://docs.openssl.org/3.0/man1/openssl-x509/). Runtime uses pinned Node 22.23.3; consulted Node 22 patch documentation does not change the pin.

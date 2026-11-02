@@ -1,6 +1,6 @@
 # F3 — Multi-server lifecycle and operations
 
-**Status:** planned; implementation not authorized by REC-01. **Milestone:** F3. **Requirements:** PR-025, PR-028–029, PR-032–035. No production evidence exists.
+**Status:** local capability development authorized by the user’s VPS deployment/management request; not started; release dependencies remain. **Milestone:** F3. **Requirements:** PR-025, PR-028–029, PR-032–035. No production evidence exists.
 
 ## Objective
 
@@ -8,7 +8,7 @@ Full initial server-management dashboard scope including explicit lifecycle cont
 
 ## Dependencies and entry gate
 
-Explicit F3 authorization after F2.5. Adopted production lifecycle is a separate capability/approval; adoption never grants deletion or recreation.
+User authorized local F3 capability development alongside F2/F2.5; F2.5 remains its release/deployment gate. Adopted production lifecycle is a separate capability/approval; adoption never grants deletion or recreation.
 
 Read AGENTS.md, current status, [track](../delivery/minecraft-track.md), [management architecture](../architecture/minecraft-management.md), security and preservation references. Inspect Git status and preserve unrelated work. Each phase is a separately authorized chapter boundary.
 

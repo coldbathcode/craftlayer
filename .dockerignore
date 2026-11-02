@@ -22,3 +22,5 @@ playwright-report
 .minecraft-secrets
 
 .craftlayer-prototype/
+
+.node-secrets/

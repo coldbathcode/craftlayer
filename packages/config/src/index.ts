@@ -37,6 +37,10 @@ export function parseOwnerRecoveryConfig(
 }
 const schema = z
   .strictObject({
+    CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{59}$/)
+      .optional(),
     CRAFTLAYER_MINECRAFT_INVENTORY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_KEY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_POLICY_FILE: z.string().startsWith("/").optional(),

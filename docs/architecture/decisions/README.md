@@ -32,3 +32,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 [ADR 0017 — Minecraft observation boundary](0017-minecraft-observation-boundary.md) records the F1 registry, scoped permissions, atomic local operations and cross-pool session-lock decision.
 
 [ADR 0018 — Game identity provenance](0018-game-identity-provenance.md) keeps Java/Bedrock subjects distinct, gates authenticated enrollment and separates pinned candidate artifact integrity from real client qualification.
+
+[ADR 0019 — Private node trust](0019-private-node-trust.md) records user-authorized parallel infrastructure development, mTLS/key/certificate-bound enrollment, replay/rotation/revocation and the initial inventory-only boundary.

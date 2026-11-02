@@ -1,0 +1,17 @@
+{
+  "name": "@craftlayer/minecraft-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@craftlayer/contracts": "workspace:*",
+    "@craftlayer/node-protocol": "workspace:*",
+    "zod": "4.6.7"
+  }
+}

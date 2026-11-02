@@ -43,7 +43,10 @@
     "minecraft:identity:verify": "node --import tsx scripts/minecraft/identity-fixture.ts verify",
     "prototype:up": "node scripts/prototype.mjs up",
     "prototype:down": "node scripts/prototype.mjs down",
-    "prototype:refresh": "node scripts/prototype.mjs refresh"
+    "prototype:refresh": "node scripts/prototype.mjs refresh",
+    "node:pki:fixture": "node --import tsx scripts/minecraft/node-fixtures.ts",
+    "node:keygen": "node apps/minecraft-node/dist/main.js keygen",
+    "node:run": "node apps/minecraft-node/dist/main.js run"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",
