@@ -12,7 +12,7 @@ Only this task's template/contracts/service/API/SDK/UI, permission migration/har
 
 ## Checks and evidence
 
-Exact final command results are in [build log](../build-log.md). Pure tests cover manifest parity, strict inputs, scope/digest/time and unsafe capacity/conflicts. Disposable DB/API verifies current dual permission revocation, child/viewer/foreign/cross-project placement, CSRF/schema/OpenAPI and no execution endpoint. Production-image browser test adds conflict preview/input-change clearing and retains all node/server flows. Actual local prototype API/DOM preview reports its occupied web-port conflict; it allocates nothing. No physical quota/reservation/job/world/rollback/backup/restore or production evidence is implied.
+Exact final command results are in [build log](../build-log.md). Pure tests cover manifest parity, strict inputs, scope/digest/time and unsafe capacity/conflicts. Disposable DB/API verifies current dual permission revocation, child/viewer/foreign/cross-project placement, CSRF/schema/OpenAPI and no execution endpoint. Production-image browser test adds conflict preview/input-change clearing and retains all node/server flows. Actual local prototype API/DOM preview reports its occupied web-port conflict; it allocates nothing. No physical quota/reservation/job/world/rollback/backup/restore or production evidence is implied. Post-publication, prototype :3001 health/current node capacity/planning pass. The older :3000 app returns connection refused; read-only Docker inspection shows its original containers already exited about eight hours earlier. Leave them stopped; no original installation restart/migration was performed.
 
 ## Decisions and blockers
 
