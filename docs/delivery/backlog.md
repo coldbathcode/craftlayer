@@ -107,6 +107,8 @@ CL-F25-02 checkpoint D adds durable broker creation provenance, lifecycle, retai
 
 CL-F25-02 checkpoint E adds repeatable real local non-Minecraft Docker lifecycle/compensation/lost-ack/preservation checks via `pnpm test:node:broker`. Persistent Minecraft quota/identity/recovery is still unqualified. Next: durable controller jobs and current authority integration. See [broker runbook](../development/node-broker.md).
 
+CL-F25-03 checkpoint A adds immutable disabled deployment intake, current adult actor/session/node/dispatch binding and atomic audit/reference-only outbox. No lease/signer/worker/effect route exists. Next: durable physical job/attempt/fence/current-permit transport. See [intake runbook](../development/deployment-intents.md) and [progress review](../reviews/F25-secure-nodes.md).
+
 ## Status rules
 
 - `Not started`: no implementation claim. `In progress`: active work with owner and branch recorded in status. `Blocked`: missing prerequisite, documented with next resolution action. `Implemented`: code exists but acceptance is incomplete. `Verified`: required evidence exists. `Accepted`: chapter checkpoint reviewed.

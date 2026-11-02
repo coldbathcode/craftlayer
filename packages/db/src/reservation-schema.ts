@@ -112,6 +112,11 @@ export const minecraftReservationOperations = pgTable(
   },
   (t) => [
     unique().on(t.organizationId, t.id),
+    unique("minecraft_reservation_operations_binding").on(
+      t.organizationId,
+      t.reservationId,
+      t.id,
+    ),
     unique().on(t.organizationId, t.actorId, t.kind, t.requestKey),
     foreignKey({
       columns: [

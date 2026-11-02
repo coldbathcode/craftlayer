@@ -100,3 +100,6 @@ Read the current status before choosing a task. Specifications are proposed impl
 [Constrained broker](development/node-broker.md) records private compiler/Engine primitives, owned-resource requirements and unsupported persistent quota gates.
 
 - [Broker ownership decision](architecture/decisions/0023-node-broker-ownership.md) — private intent/IDs, retained-world rollback and truthful receipts.
+
+- [Deployment controller intake](development/deployment-intents.md) — private durable disabled metadata and remaining dispatch gates.
+- [F2.5 progress review](reviews/F25-secure-nodes.md) — local evidence and incomplete release criteria.

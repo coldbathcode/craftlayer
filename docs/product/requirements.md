@@ -104,3 +104,5 @@ PR-031 reservation primitives now have real PostgreSQL race/tenant/current-autho
 CL-F25-02/C implements fixed private image/resource/mount/network policy and selected Engine methods for PR-030–032. Recording fixtures prove protocol/policy negatives only; public dispatch, ownership recovery, real persistent quota and Minecraft/restore qualification remain gated.
 
 CL-F25-02/D local evidence adds creation-proven journal ownership, no blind retry after unknown writes, manually stopped state preservation and evidence-bearing rolled-back outcomes distinct from success. World/backups/allocated reservations remain retained after runtime compensation. Real Minecraft/recovery/host release requirements remain unverified.
+
+CL-F25-03/A implements the durable intake portion of PR-028/032 only: current scoped adult request, exact immutable allocation/dispatch binding, atomic audit/outbox and idempotent pending metadata. SQL/contracts force execution disabled; no server-provisioning completion, world readiness or later release requirement is considered met.

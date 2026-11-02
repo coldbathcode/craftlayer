@@ -5,6 +5,9 @@ import {
   type Principal,
 } from "@craftlayer/auth";
 import {
+  deploymentIntentAccepted,
+  deploymentIntentRequest,
+  deploymentIntentView,
   nodeCapacity,
   qualifiedReservationAdmission,
   reservationReceipt,
@@ -759,5 +762,222 @@ export class ReservationLedger {
         );
       return this.#event(c, row, p, kind, key, input);
     });
+  }
+  /** Durable metadata intake only. No signer, queue publisher or native dispatch is attached. */
+  async queueDeployment(
+    token: string,
+    org: string,
+    input: unknown,
+    key: string,
+  ) {
+    const v = deploymentIntentRequest.parse(input);
+    z.uuid().parse(key);
+    const located = await this.#locate(
+      token,
+      org,
+      "minecraft_reservations",
+      v.reservation_id,
+    );
+    if (!located.node_id || !located.environment_id) deny("NOT_FOUND", 404);
+    return this.#scope(
+      token,
+      org,
+      located.project_id,
+      located.node_id,
+      located.environment_id,
+      async (c, p, _a, n) => {
+        await this.#stopped(c, org, located.environment_id as string);
+        const row = await this.#row(c, org, v.reservation_id),
+          requestHash = nodeDigest(v);
+        const old = (
+          await c.query<{
+            id: string;
+            request_hash: string;
+            reservation_id: string;
+          }>(
+            "select id,request_hash,reservation_id from minecraft_deployment_intents where organization_id=$1 and actor_id=$2 and request_key=$3",
+            [org, p.user.id, key],
+          )
+        ).rows[0];
+        if (
+          old &&
+          (old.request_hash !== requestHash || old.reservation_id !== row.id)
+        )
+          deny("IDEMPOTENCY_CONFLICT");
+        // The intake preserves the initiating current session; it cannot launder a revoked request.
+        if (row.actor_id !== p.user.id || row.session_id !== p.sessionId)
+          deny("DEPLOYMENT_SESSION_DENIED", 403);
+        if (
+          row.state !== "allocated" ||
+          row.version !== v.reservation_version ||
+          n.state !== "active" ||
+          row.node_version !== n.version ||
+          row.credential_version !== n.credential_version ||
+          n.credential_expires_at.getTime() <= this.#now()
+        )
+          deny("DEPLOYMENT_INTAKE_DENIED");
+        if (old)
+          return deploymentIntentAccepted.parse({
+            operation_id: old.id,
+            deployment_id: row.deployment_id,
+            reservation_id: row.id,
+            state: "pending_qualification",
+            effects: "none",
+            execution_enabled: false,
+          });
+        const dispatch = (
+          await c.query<{
+            actor_id: string;
+            session_id: string;
+            kind: string;
+            reservation_id: string;
+          }>(
+            "select actor_id,session_id,kind,reservation_id from minecraft_reservation_operations where organization_id=$1 and id=$2",
+            [org, v.dispatch_operation_id],
+          )
+        ).rows[0];
+        if (
+          dispatch?.kind !== "dispatch" ||
+          dispatch.reservation_id !== row.id ||
+          dispatch.actor_id !== p.user.id ||
+          dispatch.session_id !== p.sessionId
+        )
+          deny("DEPLOYMENT_DISPATCH_BINDING_DENIED");
+        if (
+          (
+            await c.query(
+              "select 1 from minecraft_deployment_intents where organization_id=$1 and reservation_id=$2",
+              [org, row.id],
+            )
+          ).rowCount
+        )
+          deny("DEPLOYMENT_ALREADY_REQUESTED");
+        const count = (
+          await c.query<{ recent: number; daily: number }>(
+            "select count(*) filter(where actor_id=$3 and created_at>$4)::int recent,count(*)::int daily from minecraft_deployment_intents where organization_id=$1 and project_id=$2 and created_at>$5",
+            [
+              org,
+              row.project_id,
+              p.user.id,
+              new Date(this.#now() - 60000),
+              new Date(this.#now() - 86400000),
+            ],
+          )
+        ).rows[0];
+        if (!count || count.recent >= 12 || count.daily >= 10000)
+          deny("DEPLOYMENT_LIMIT", 429);
+        const id = randomUUID(),
+          now = new Date(this.#now());
+        await c.query(
+          "insert into minecraft_deployment_intents(id,organization_id,project_id,environment_id,node_id,reservation_id,dispatch_operation_id,actor_id,session_id,request_key,request_hash,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
+          [
+            id,
+            org,
+            row.project_id,
+            row.environment_id,
+            row.node_id,
+            row.id,
+            v.dispatch_operation_id,
+            p.user.id,
+            p.sessionId,
+            key,
+            requestHash,
+            now,
+          ],
+        );
+        await c.query(
+          "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,$2,'server.deployment_requested',$3,'allowed',$4)",
+          [
+            org,
+            p.user.id,
+            row.deployment_id,
+            {
+              operation_id: id,
+              reservation_id: row.id,
+              source: "deployment_intake",
+              effects: "none",
+            },
+          ],
+        );
+        await c.query(
+          "insert into minecraft_deployment_intent_outbox(id,organization_id,intent_id,schema_version,created_at) values($1,$2,$3,1,$4)",
+          [randomUUID(), org, id, now],
+        );
+        return deploymentIntentAccepted.parse({
+          operation_id: id,
+          deployment_id: row.deployment_id,
+          reservation_id: row.id,
+          state: "pending_qualification",
+          effects: "none",
+          execution_enabled: false,
+        });
+      },
+    );
+  }
+  async deploymentIntent(token: string, org: string, id: string) {
+    z.uuid().parse(id);
+    const located = await this.options.auth.guardOrganization(
+      token,
+      org,
+      "organization:read",
+      () =>
+        this.#tx(org, async (c) => {
+          const r = (
+            await c.query<{ reservation_id: string }>(
+              "select reservation_id from minecraft_deployment_intents where organization_id=$1 and id=$2",
+              [org, id],
+            )
+          ).rows[0];
+          if (!r) deny("NOT_FOUND", 404);
+          return r;
+        }),
+    );
+    const scope = await this.#locate(
+      token,
+      org,
+      "minecraft_reservations",
+      located.reservation_id,
+    );
+    if (!scope.node_id || !scope.environment_id) deny("NOT_FOUND", 404);
+    return this.#scope(
+      token,
+      org,
+      scope.project_id,
+      scope.node_id,
+      scope.environment_id,
+      async (c) => {
+        const r = (
+          await c.query<{
+            id: string;
+            deployment_id: string;
+            reservation_id: string;
+            project_id: string;
+            environment_id: string;
+            node_id: string;
+            server_id: string;
+            world_id: string;
+            created_at: Date;
+          }>(
+            "select i.*,r.deployment_id,r.server_id,r.world_id from minecraft_deployment_intents i join minecraft_reservations r on (r.organization_id,r.id)=(i.organization_id,i.reservation_id) where i.organization_id=$1 and i.id=$2",
+            [org, id],
+          )
+        ).rows[0];
+        if (!r) deny("NOT_FOUND", 404);
+        return deploymentIntentView.parse({
+          operation_id: r.id,
+          deployment_id: r.deployment_id,
+          reservation_id: r.reservation_id,
+          project_id: r.project_id,
+          environment_id: r.environment_id,
+          node_id: r.node_id,
+          server_id: r.server_id,
+          world_id: r.world_id,
+          created_at: r.created_at.toISOString(),
+          state: "pending_qualification",
+          effects: "none",
+          execution_enabled: false,
+        });
+      },
+    );
   }
 }
