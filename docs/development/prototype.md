@@ -24,7 +24,7 @@ The parent can inspect two simulated servers, current capture provenance/freshne
 5. Switch organization/world or sign out; prior private data must clear. A new organization can be created through the normal Account UI if you want to explore an empty scope.
 6. Optional metadata-only registration removal requires the exact server name; it retains the synthetic record/history and never stops/deletes a Minecraft container. Re-adopt the same approved source if needed.
 
-Requests are only unresolved names, not authenticated UUID/XUID or web-to-game ownership bindings. They cannot be promoted by browser fields or a `/verify` route. Their 24-hour expiry is visible, and stored history is retained. The preview caps each server at 200 unexpired pending requests, pages of 50, and twelve actor/environment writes/minute; no automatic retention purge is implemented yet. Repeating the same parsed name/edition with a new key while pending returns an explanatory conflict; replaying its original key returns the same receipt. Names remain unverified, and a new request is possible after expiry.
+Requests are only unresolved names, not authenticated UUID/XUID or web-to-game ownership bindings. They cannot be promoted by browser fields or a `/verify` route. Their 24-hour expiry is visible, and stored history is retained. The preview caps each server at 200 unexpired pending requests, newest-first pages of 50, and twelve actor/environment writes/minute; no automatic retention purge is implemented yet. Repeating the same parsed name/edition with a new key while pending returns an explanatory conflict; replaying its original key returns the same receipt. Names remain unverified, and a new request is possible after expiry.
 
 ## Refresh, stop and resume
 
@@ -69,3 +69,5 @@ Rotation/revocation in the dashboard changes accepted credentials only. Revoking
 ### Preview a deployment
 
 On Hosts, select the connected local host, then **Plan a Minecraft server**. Select a Minecraft access scope and proposed game ports, then **Preview deployment**. Try Java TCP port 3001 (or the prototype web port) to see a real local Docker conflict; choose another port to see the remaining native-port qualification gap. The preview also shows required memory/storage, pinned candidate versions and open access/backup/network/executor gates. Changing a field clears the previous result. A 30s preview never accepts EULA, reserves resources or grants permission to execute. See [planning runbook](minecraft-provisioning.md).
+
+Pending-request pagination uses an immutable server-scoped timestamp/UUID anchor. Newer requests appear on refresh; they do not shift an older-page traversal. After upgrading from UUID-only order, reopen the server to start at page one. All pending/expired records remain retained.

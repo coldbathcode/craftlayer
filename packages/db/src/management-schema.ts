@@ -134,6 +134,12 @@ export const minecraftIdentityEnrollments = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => [
+    index("minecraft_identity_enrollments_history").on(
+      t.organizationId,
+      t.serverId,
+      t.createdAt.desc(),
+      t.id.desc(),
+    ),
     index("minecraft_identity_enrollments_expiry").on(
       t.organizationId,
       t.serverId,

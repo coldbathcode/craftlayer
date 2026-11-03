@@ -207,3 +207,9 @@ Completed the authorized runtime implementation previously preserved at entry. D
 Concurrent new-key submissions for the same server/edition/schema-parsed name now allow one active pending request. Others receive `ENROLLMENT_PENDING`/409 without another operation, audit/outbox entry, source read or quota consumption. Original-key replay stays current-authority checked and does not renew expiry; after expiry a new key can save a fresh unverified request while retaining history. Exact parsed names do not establish account equivalence. Tests/evidence are in the build log and [handoff](handoffs/REV-03-enrollment-deduplication.md).
 
 Next local metadata checkpoint: chronological stable pending-request pagination. Audited retention/archival and real identity/access/approval/storage/game/backup/restore/private installed composition remain open. Chapter 03 is verified with owner review pending; Chapter 04 and production remain gated.
+
+## REV-06 — stable newest-first enrollment history, 2026-11-03
+
+Enrollment history now orders by creation time/UUID descending. Existing UUID cursors resolve to an immutable same-server tuple in PostgreSQL, preserving exact timestamp precision and stable older-page traversal after newer arrivals. SQL 0025/Drizzle adds the scoped history index; all history/grants/RLS and false identity/access remain. Restart pagination after upgrading from UUID-only ordering. Exact evidence is in build log and [handoff](handoffs/REV-06-enrollment-history.md).
+
+Local node composition remains the next F25 integration area; it must fail closed without actual approval/storage/game/identity/recovery qualification. Withdrawal, audited archival and real family release remain unfinished. No Chapter 04 or production operation is authorized.

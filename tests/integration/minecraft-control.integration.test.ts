@@ -949,7 +949,11 @@ async function operationLimitFixture(
     server: string;
     operation: string;
     seed: (count: number, ageMs: number) => Promise<void>;
-    seedEnrollments: (count: number, ageMs: number) => Promise<void>;
+    seedEnrollments: (
+      count: number,
+      ageMs: number,
+      microseconds?: number,
+    ) => Promise<void>;
     advance: (ms: number) => void;
     observe: (
       key?: string,
@@ -1013,11 +1017,11 @@ async function operationLimitFixture(
       advance: (ms) => {
         now += ms;
       },
-      seedEnrollments: async (count, age) => {
+      seedEnrollments: async (count, age, microseconds = 0) => {
         await tx(runtime, org, (c) =>
           c.query(
-            "with seeded as (insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) select gen_random_uuid(),o.organization_id,o.project_id,o.environment_id,o.server_id,o.actor_id,o.session_id,'identity_enroll',gen_random_uuid(),repeat('a',64),'succeeded',0,$3,$3,$3 from management_operations o cross join generate_series(1,$2) where o.id=$1 returning *) insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) select gen_random_uuid(),organization_id,project_id,environment_id,server_id,actor_id,id,'java','Historical',$3,$3::timestamptz+interval '24 hours' from seeded",
-            [receipt.operation_id, count, new Date(now - age)],
+            "with seeded as (insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) select gen_random_uuid(),o.organization_id,o.project_id,o.environment_id,o.server_id,o.actor_id,o.session_id,'identity_enroll',gen_random_uuid(),repeat('a',64),'succeeded',0,$3,$3,$3 from management_operations o cross join generate_series(1,$2) where o.id=$1 returning *) insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) select gen_random_uuid(),organization_id,project_id,environment_id,server_id,actor_id,id,'java','Historical',$3::timestamptz+($4::int*interval '1 microsecond'),$3::timestamptz+interval '24 hours'+($4::int*interval '1 microsecond') from seeded",
+            [receipt.operation_id, count, new Date(now - age), microseconds],
           ),
         );
       },
@@ -1310,4 +1314,103 @@ it("keeps pending name deduplication within its server and edition without asser
     });
     expect(await f.rows()).toBe(4);
     expect(f.reads()).toBe(0);
+  }));
+
+it("pages newest enrollment history without gaps across tied sub-millisecond timestamps and new arrivals", () =>
+  operationLimitFixture(async (f) => {
+    const ids = () =>
+      tx(runtime, org, async (c) =>
+        (
+          await c.query<{ id: string }>(
+            "select id from minecraft_identity_enrollments where organization_id=$1 and server_id=$2",
+            [org, f.server],
+          )
+        ).rows.map((r) => r.id),
+      );
+    await f.seedEnrollments(60, 7200000, 7);
+    const older = (await ids()).sort().reverse(),
+      oldSet = new Set(older);
+    await f.seedEnrollments(41, 120000, 7);
+    const newer = (await ids())
+        .filter((id) => !oldSet.has(id))
+        .sort()
+        .reverse(),
+      expected = [...newer, ...older],
+      first = await f.service.identityEnrollments(f.token, org, f.server);
+    expect(first.items.map((r) => r.id)).toEqual(expected.slice(0, 50));
+    expect(first.next_cursor).toBe(expected[49]);
+    if (!first.next_cursor) throw new Error("First cursor missing");
+    f.advance(1);
+    const arrival = await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      { edition: "java", requested_name: "NewestPlayer" },
+      randomUUID(),
+    );
+    const second = await f.service.identityEnrollments(
+      f.token,
+      org,
+      f.server,
+      first.next_cursor,
+    );
+    expect(second.items.map((r) => r.id)).toEqual(expected.slice(50, 100));
+    expect(second.next_cursor).toBe(expected[99]);
+    if (!second.next_cursor) throw new Error("Second cursor missing");
+    const third = await f.service.identityEnrollments(
+      f.token,
+      org,
+      f.server,
+      second.next_cursor,
+    );
+    expect(third.items.map((r) => r.id)).toEqual(expected.slice(100));
+    expect(third.next_cursor).toBeNull();
+    const traversed = [...first.items, ...second.items, ...third.items].map(
+      (r) => r.id,
+    );
+    expect(traversed).toEqual(expected);
+    expect(new Set(traversed).size).toBe(101);
+    const last = third.items[0];
+    if (!last) throw new Error("Last row missing");
+    expect(
+      await f.service.identityEnrollments(f.token, org, f.server, last.id),
+    ).toEqual({ items: [], next_cursor: null });
+    expect(
+      (await f.service.identityEnrollments(f.token, org, f.server)).items[0]
+        ?.id,
+    ).toBe(arrival.enrollment_id);
+    expect((await ids()).length).toBe(102);
+    expect(f.reads()).toBe(0);
+  }));
+
+it("rejects another server's history cursor even when both servers are authorized", () =>
+  operationLimitFixture(async (f) => {
+    expect(await f.service.identityEnrollments(f.token, org, f.server)).toEqual(
+      { items: [], next_cursor: null },
+    );
+    await operationLimitFixture(async (other) => {
+      const receipt = await other.service.enrollIdentity(
+        other.token,
+        org,
+        other.server,
+        { edition: "java", requested_name: "OtherPlayer" },
+        randomUUID(),
+      );
+      await expect(
+        f.service.identityEnrollments(
+          f.token,
+          org,
+          f.server,
+          receipt.enrollment_id,
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        f.service.identityEnrollments(
+          f.token,
+          foreignOrg,
+          other.server,
+          receipt.enrollment_id,
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+    });
   }));

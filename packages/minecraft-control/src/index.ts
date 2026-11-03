@@ -677,7 +677,7 @@ export class MinecraftControl {
             created_at: Date;
             expires_at: Date;
           }>(
-            "select id,edition,requested_name,created_at,expires_at from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and ($3::uuid is null or id>$3) order by id limit 51",
+            "select id,edition,requested_name,created_at,expires_at from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and ($3::uuid is null or (created_at,id)<(select created_at,id from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and id=$3)) order by created_at desc,id desc limit 51",
             [org, id, cursor ?? null],
           )
         ).rows;
