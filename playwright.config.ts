@@ -8,6 +8,7 @@ const suite =
       : "foundation";
 export default defineConfig({
   testDir: "tests/e2e",
+  testMatch: `**/${suite}.spec.ts`,
   fullyParallel: true,
   outputDir: `test-results/${suite}`,
   forbidOnly: !!process.env.CI,

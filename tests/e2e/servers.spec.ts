@@ -3,14 +3,24 @@ import { chmod, rm, writeFile } from "node:fs/promises";
 import { type APIRequestContext, expect, test } from "@playwright/test";
 import { nodeFlow } from "./node-flow.js";
 
+if (
+  process.env.CRAFTLAYER_SERVER_E2E !== "1" ||
+  ![
+    "CRAFTLAYER_TEST_URL",
+    "CRAFTLAYER_E2E_INVENTORY_PATH",
+    "CRAFTLAYER_E2E_BOOTSTRAP_TOKEN",
+    "CRAFTLAYER_E2E_NODE_PKI",
+    "CRAFTLAYER_E2E_NODE_PORT",
+  ].every((key) => process.env[key])
+)
+  throw new Error(
+    "Run pnpm test:server-ui: the dashboard suite requires its disposable installation and fixture configuration.",
+  );
+
 test("isolated parent dashboard observes without game controls and clears revoked scope", async ({
   page,
   browser,
 }, info) => {
-  test.skip(
-    process.env.CRAFTLAYER_SERVER_E2E !== "1",
-    "Requires disposable server installation",
-  );
   test.setTimeout(150_000);
   page.setDefaultTimeout(10_000);
   const origin = process.env.CRAFTLAYER_TEST_URL ?? "",

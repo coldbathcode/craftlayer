@@ -213,3 +213,9 @@ Next local metadata checkpoint: chronological stable pending-request pagination.
 Enrollment history now orders by creation time/UUID descending. Existing UUID cursors resolve to an immutable same-server tuple in PostgreSQL, preserving exact timestamp precision and stable older-page traversal after newer arrivals. SQL 0025/Drizzle adds the scoped history index; all history/grants/RLS and false identity/access remain. Restart pagination after upgrading from UUID-only ordering. Exact evidence is in build log and [handoff](handoffs/REV-06-enrollment-history.md).
 
 Local node composition remains the next F25 integration area; it must fail closed without actual approval/storage/game/identity/recovery qualification. Withdrawal, audited archival and real family release remain unfinished. No Chapter 04 or production operation is authorized.
+
+## REV-09 — dashboard browser CI and explicit suite selection, 2026-11-03
+
+The main/PR workflow now includes a separate management-browser job running the existing isolated production-image dashboard journey, with pinned actions/read-only token/15-minute bound and distinct seven-day failure artifacts. Playwright explicitly selects foundation/identity/management specs; absent dashboard fixture configuration fails rather than silently skipping. Exact checks and any hosted outcome are recorded in build log and [handoff](handoffs/REV-09-dashboard-ci.md). Branch protection is not changed or asserted.
+
+Continue private node composition only with fail-closed approval/storage/game/identity/recovery gates. Real family/production readiness, audited retention, remote trusted entry and Chapter 04 remain open/gated. Pre-existing review prose remains preserved and excluded from task publication.
