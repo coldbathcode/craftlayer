@@ -6,16 +6,14 @@ Last updated: 2026-11-03.
 
 The user’s “ok start building craftlayer!” after REC-01 authorizes F0 local implementation (now locally verified; review prepared). Contabo access, backup capture and production changes remain unauthorized. The user’s subsequent “go to the next steps” authorizes F1 local implementation. The user’s “continue” after the F1 review authorizes F2 local implementation and advancement from the F1 local preview. The user’s subsequent request to build VPS deployment/management authorizes local F2.5 and F3 capability development alongside F2. Release dependencies/security/recovery gates remain; no VPS access, enrollment, deployment or world writes are authorized. REC-01 documentation reconciliation is complete. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
 
-## Preserved runtime checkpoint
+## Simulation runtime checkpoint
 
-- Chapters 00–02 implemented/verified; [provider review](../reviews/02-provider-gateway.md), hosted final CI 41292488668 passed at base `9c9981b`.
-- Chapter 03: CL-03-01 through CL-03-06 verified (6/7).
-- Latest evidence: Completed scoped REST replay/SSE, encrypted user/session/org/environment/mission cursors, bounded snapshots/resync, strict event projections, browser-safe parser and reconnecting CLI watch. Current authority is rechecked before bounded enqueue; limits and backpressure bound connections/buffering. pnpm check passed 198 unit tests; final typecheck/lint/docs passed; pnpm test:db passed 85 database/API cases plus migration proofs. Actual HTTP and CLI watch prove replay/dedup, expired-cursor snapshot, foreign/tampered cursor denial, connection/origin caps, prompt session-revocation close and controlled socket-backpressure cleanup. Recovery checkpoint also proves old-fence rejection, no blind prepared-effect retry and exact-evidence conservative adult reconciliation. Recovery hosted CI 41319243310 passed. Actual Redis/container restart drill and final review remain CL-03-07.
-- Next already-authorized coding task: CL-03-07; its dirty runtime/test changes were present before REC-01 and are not accepted/published as part of this documentation checkpoint.
-- Read [Chapter 03](../chapters/03-fleet-engine.md), [ADR 0014](../architecture/decisions/0014-runtime-authority-and-recovery.md) and its runtime/data/security references before continuing.
-- Main UI: http://127.0.0.1:3000/account. Preserve ignored credentials/volumes; preserve existing account state. Tests use disposable installations only.
-- Branch/remote: main → https://github.com/coldbathcode/craftlayer.git. See [build log](build-log.md) for exact task evidence.
-- Chapters 04–11 unimplemented; no live/paid inference, public deployment, real mail or Cloud implementation authorized.
+- Chapters 00–02 implemented/verified and accepted for advancement.
+- Chapter 03: CL-03-01–07 locally verified (7/7); [review prepared](../reviews/03-fleet-engine.md), owner acceptance pending.
+- Final runtime evidence: paired event/mission grants without nested identity leases, provider-budget denial before dispatch, 355 unit and 174 database tests, real disposable CLI/API/worker/SSE with restart, Redis loss, prepared crash, watchdog and conservative reconciliation. Workspace partition acknowledgement: 611 ms against the 20,000 ms simulation target. See [build log](build-log.md) for isolated-publication evidence.
+- F2/F25/F3 local work remains authorized. Chapter 04 and production operations remain gated; simulation evidence does not qualify physical game actions.
+- Preserve ignored credentials/volumes and the unrelated full-project review. The five former CL-03-07 runtime/test files are now deliberately completed/published in this checkpoint.
+- Branch/remote: main → https://github.com/coldbathcode/craftlayer.git. No paid inference, public deployment, mail or Cloud implementation authorized.
 
 ## Unified management reconciliation checkpoint — REC-01
 
@@ -197,3 +195,9 @@ REV-03 remains open for enrollment limits/deduplication and audited retention/ar
 Pending-enrollment admission now counts only unexpired requests against the 200/server budget, preserving current-authority UUID replay, immutable expired history, operation/audit/outbox and false identity/access semantics. ENROLLMENT_LIMIT/429 explains expiry retry. SQL 0024/Drizzle adds scoped range indexes for rolling operation and active enrollment budgets; disposable migration upgrade fixtures include them. Exact checks/publication are in build log and ADR 0028.
 
 REV-03 remains open for semantic deduplication and audited retention/archival. Original runtime CL-03-07 qualification/publication also remains open; it can continue independently of real game-client/host gates. F2/F25 verified identity/access/backups/qualified private composition and production remain gated. No VPS/EULA/game/world action.
+
+## CL-03-07 — simulation runtime fault qualification, 2026-11-03
+
+Completed the authorized runtime implementation previously preserved at entry. Dedicated event-read and mission-read authority now revalidate together without nested identity-pool leases; provider-budget denial is projected accurately. Added 12 concurrent event-page reads, permission revocation, zero-dispatch budget rejection, 100-claim stop race and independent approval rejection evidence. Local-only disposable stack proves parallel CLI/API/SSE execution, persistent stop/API restart, real Redis loss/reconnect, prepared worker crash, partition watchdog and conservative reconciliation; workspace stop acknowledgement was 611 ms against 20,000 ms simulation target. No game/model/catalog calls.
+
+`pnpm check` PASS/0 (355 unit tests); `pnpm test:db` PASS/0 (174 integration tests plus migration proofs); `pnpm test:runtime-stack` PASS/0. Final isolated-publication verification is in the [build log](build-log.md) and [chapter review](../reviews/03-fleet-engine.md). Chapter 03 tasks are locally verified, owner acceptance pending. Chapter 04 remains gated. F2/F25/F3 local work can continue independently; real identity/approval/storage/game/backups/restore/private composition and production gates remain. Unrelated full-project review work remains preserved.

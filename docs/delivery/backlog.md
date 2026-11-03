@@ -1,6 +1,6 @@
 # Engineering backlog
 
-**Chapters 00–02 are implemented and accepted for advancement; CL-03-01–06 verified, CL-03-07 open; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
+**Chapters 00–02 are implemented and accepted for advancement; CL-03-01–07 locally verified with Chapter 03 owner review pending; see [current status](status.md) and [build log](build-log.md).** This is an execution index, not evidence of completed implementation. Detailed implementation and acceptance requirements live at each linked chapter. Sizes indicate relative complexity only. Cloud tasks are optional separate-repository work.
 
 This table preserves the original 84 numbered chapter tasks. The [16-task Minecraft management track](minecraft-track.md) adds F0 → F1 → F2 → F2.5 → F3 before new CL-04 bot work; F0 CL-F0-01–02 are locally verified with review prepared; F1 CL-F1-01–03 are locally verified with review prepared; F2 is now locally authorized/in progress at CL-F2-01 with a runnable pending-identity prototype; F2.5/F3 local capability development is now authorized by the VPS-management request; live operation/release gates remain. F1 depends on 00–01/F0, not bots or model routing. See [reconciliation](unified-reconciliation.md) for reuse and exact scope.
 
@@ -35,7 +35,7 @@ Each original chapter is a conservative dependency chain of seven reviewable tas
 | [CL-03-04](../chapters/03-fleet-engine.md) | Worker claims and bounded runtime | CL-03-03 | L | Verified |
 | [CL-03-05](../chapters/03-fleet-engine.md) | Pause, cancel and emergency stop | CL-03-04 | L | Verified |
 | [CL-03-06](../chapters/03-fleet-engine.md) | Authorized event projection and recovery | CL-03-05 | L | Verified |
-| [CL-03-07](../chapters/03-fleet-engine.md) | Runtime fault suite and review | CL-03-06 | L | Not started |
+| [CL-03-07](../chapters/03-fleet-engine.md) | Runtime fault suite and review | CL-03-06 | L | Locally verified — review prepared; owner acceptance pending |
 | [CL-04-01](../chapters/04-minecraft-adapter.md) | Server, protocol and authentication spike | Chapter 03 + F3 gates; explicit Chapter 04 authorization | L | Not started |
 | [CL-04-02](../chapters/04-minecraft-adapter.md) | Private world Compose profile | CL-04-01 | M | Not started |
 | [CL-04-03](../chapters/04-minecraft-adapter.md) | Bot lifecycle and single-session ownership | CL-04-02 | L | Not started |
@@ -140,3 +140,5 @@ REV-07 maintenance adds compile-time role/delegation permission vocabulary check
 REV-03/A removes lifetime management-operation lockout using rolling 24-hour/environment and existing minute/account budgets with compatible 429 and clearer retry guidance. History/audit/outbox remain retained; full DB window/replay/refusal/expiry tests added. Enrollment limits/deduplication and audited retention/archival remain open; next is expired pending-enrollment capacity (ADR 0028).
 
 REV-03/B reclaims enrollment budget when immutable pending requests expire, retaining all history and denying verification/access. Current-auth UUID replay consumes no slot; active refusal preserves 429/code with expiry guidance. Additive SQL 0024 scoped time-range indexes/Drizzle and real upgrade fixtures support retained history. Semantic deduplication/audited archival remain open; original CL-03-07 qualification can continue independently.
+
+CL-03-07 / REV-01: runtime faults locally verified; paired event/mission grants, budget projection and disposable Redis/restart/crash/partition evidence close the preserved implementation gap. [Chapter review](../reviews/03-fleet-engine.md) is prepared for owner acceptance; Chapter 04 is not authorized. F2/F25/F3 local delivery and REV-03 semantic deduplication remain available next steps.

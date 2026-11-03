@@ -6,6 +6,9 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { pinLocalDocker } from "./lib/local-docker.mjs";
+
+pinLocalDocker();
 
 const root = resolve(import.meta.dirname, ".."),
   directory = await mkdtemp(`${tmpdir()}/craftlayer-runtime-stack-`),
@@ -102,6 +105,65 @@ async function cli(args, input = "") {
       },
     ),
   );
+}
+async function waitFor(read, check, message, iterations = 150) {
+  for (let i = 0; i < iterations; i++) {
+    const value = await read();
+    if (check(value)) return value;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  throw new Error(`${message}; fixture values omitted`);
+}
+async function simpleMission(
+  group,
+  world,
+  name,
+  action = { kind: "fixture.echo", value: "verified" },
+) {
+  const template = (
+    await api("/mission-templates", "POST", {
+      environment_id: world,
+      name,
+      adapter: "simulation",
+      graph: {
+        schema_version: 1,
+        nodes: [{ key: "fault", timeout_ms: 10000, action }],
+      },
+    })
+  ).data;
+  const mission = (
+    await api("/missions", "POST", {
+      name,
+      group_id: group,
+      template_id: template.id,
+    })
+  ).data;
+  await api(`/missions/${mission.id}/execute`, "POST", { expected_version: 1 });
+  return mission.id;
+}
+async function receiptCount(mission) {
+  assert.match(mission, /^[a-f0-9-]{36}$/);
+  const result = await run(
+    "docker",
+    [
+      ...configured,
+      "exec",
+      "-T",
+      "postgres",
+      "sh",
+      "-c",
+      'PGPASSWORD="$RUNTIME_PASSWORD" exec psql -h 127.0.0.1 -U craftlayer_runtime -d craftlayer -At -v ON_ERROR_STOP=1 -v org="$1" -v mission="$2"',
+      "fixture-read",
+      organization,
+      mission,
+    ],
+    {
+      capture: true,
+      input:
+        "BEGIN;\nSELECT set_config('app.organization_id',:'org',true);\nSELECT count(*) FROM runtime_action_receipts WHERE mission_id=:'mission'::uuid;\nROLLBACK;\n",
+    },
+  );
+  return Number(result.split("\n").find((line) => /^\d+$/.test(line)) ?? "0");
 }
 try {
   await run(process.execPath, [`${root}/scripts/setup-local.mjs`], {
@@ -267,6 +329,258 @@ try {
     2,
     "Parallel tasks must use distinct agents",
   );
+
+  phase = "SSE through web proxy";
+  const events = (await api(`/events?environment_id=${world.id}`)).data;
+  assert(
+    events.snapshot.some(
+      (row) => row.id === mission.id && row.state === "succeeded",
+    ),
+  );
+  const streamAbort = new AbortController(),
+    stream = await fetch(
+      `${origin}/api/v1/events/stream?environment_id=${world.id}`,
+      {
+        headers: { origin, cookie, "x-craftlayer-organization": organization },
+        signal: streamAbort.signal,
+      },
+    );
+  assert.equal(stream.status, 200);
+  assert(stream.headers.get("content-type").startsWith("text/event-stream"));
+  const reader = stream.body.getReader(),
+    first = await reader.read();
+  assert(new TextDecoder().decode(first.value).includes("event: snapshot"));
+  streamAbort.abort();
+  await reader.cancel().catch(() => {});
+  reader.releaseLock();
+
+  phase = "persistent stop and API restart";
+  await run("docker", [...configured, "stop", "worker"]);
+  const paused = await simpleMission(group.id, world.id, "Restart with stop");
+  const stop = (
+    await api("/emergency-stop", "POST", {
+      kind: "environment",
+      scope_id: world.id,
+      reason: "Disposable restart proof",
+    })
+  ).data;
+  await run("docker", [...configured, "restart", "api"]);
+  await run("docker", [
+    ...configured,
+    "up",
+    "-d",
+    "--no-build",
+    "--wait",
+    "api",
+    "worker",
+  ]);
+  assert.equal((await api(`/stop-operations/${stop.id}`)).data.latched, true);
+  assert.equal((await api(`/missions/${paused}`)).data.state, "paused");
+  await api(`/emergency-stop/${stop.id}/clear`, "POST", {
+    expected_epoch: stop.epoch,
+    reason: "Fixture restart checked",
+  });
+  await new Promise((r) => setTimeout(r, 1200));
+  const stillPaused = (await api(`/missions/${paused}`)).data;
+  assert.equal(stillPaused.state, "paused");
+  assert(stillPaused.tasks.every((t) => t.attempt_count === 0));
+  await cli([
+    "mission",
+    "resume",
+    organization,
+    paused,
+    String(stillPaused.version),
+    randomUUID(),
+  ]);
+  await waitFor(
+    async () => (await api(`/missions/${paused}`)).data,
+    (m) => m.state === "succeeded",
+    "Explicit resume failed",
+  );
+
+  phase = "Redis queue loss and reconnect without API restart";
+  await run("docker", [...configured, "stop", "worker"]);
+  const redisMission = await simpleMission(group.id, world.id, "Redis repair");
+  const waitKey = `bull:craftlayer-${organization}-${world.id}:wait`;
+  await waitFor(
+    async () =>
+      Number(
+        (
+          await run(
+            "docker",
+            [
+              ...configured,
+              "exec",
+              "-T",
+              "redis",
+              "redis-cli",
+              "LLEN",
+              waitKey,
+            ],
+            { capture: true },
+          )
+        ).trim(),
+      ),
+    (n) => n > 0,
+    "No disposable queued job",
+  );
+  await run(
+    "docker",
+    [...configured, "exec", "-T", "redis", "redis-cli", "FLUSHDB"],
+    { capture: true },
+  );
+  const apiId = (
+    await run("docker", [...configured, "ps", "-q", "api"], { capture: true })
+  ).trim();
+  await run("docker", [...configured, "stop", "redis"]);
+  await waitFor(
+    async () => {
+      try {
+        return (await fetch(`${origin}/api/v1/system/status`)).status;
+      } catch {
+        return 0;
+      }
+    },
+    (code) => code === 503,
+    "API did not detect Redis loss",
+  );
+  assert.equal((await api(`/missions/${redisMission}`)).data.state, "queued");
+  await run("docker", [...configured, "start", "redis"]);
+  await waitFor(
+    async () => {
+      try {
+        return (await fetch(`${origin}/api/v1/system/status`)).status;
+      } catch {
+        return 0;
+      }
+    },
+    (code) => code === 200,
+    "API Redis health did not reconnect",
+  );
+  await run("docker", [...configured, "start", "worker"]);
+  await waitFor(
+    async () => (await api(`/missions/${redisMission}`)).data,
+    (m) => m.state === "succeeded",
+    "Database dispatch repair failed",
+  );
+  assert.equal(
+    (
+      await run("docker", [...configured, "ps", "-q", "api"], { capture: true })
+    ).trim(),
+    apiId,
+  );
+
+  phase = "worker crash after prepared effect";
+  const crashed = await simpleMission(group.id, world.id, "Prepared crash", {
+    kind: "fixture.wait",
+    duration_ms: 8000,
+    value: "crash fixture",
+  });
+  await waitFor(
+    () => receiptCount(crashed),
+    (n) => n === 1,
+    "Worker never prepared crash receipt",
+  );
+  await run("docker", [...configured, "kill", "-s", "SIGKILL", "worker"]);
+  await run("docker", [...configured, "start", "worker"]);
+  await waitFor(
+    async () => (await api(`/missions/${crashed}`)).data,
+    (m) => m.state === "blocked" && m.reason === "uncertain",
+    "Prepared crash did not hold uncertainty",
+  );
+
+  phase = "control-plane partition watchdog";
+  const partitioned = await simpleMission(group.id, world.id, "API partition", {
+    kind: "fixture.wait",
+    duration_ms: 8000,
+    value: "partition fixture",
+  });
+  await waitFor(
+    () => receiptCount(partitioned),
+    (n) => n === 1,
+    "Worker never prepared partition receipt",
+  );
+  const partitionStart = Date.now();
+  await run("docker", [...configured, "stop", "api"]);
+  const stopped = await waitFor(
+    async () => {
+      const logs = await run(
+        "docker",
+        [
+          ...configured,
+          "logs",
+          "--no-color",
+          "--since",
+          new Date(partitionStart).toISOString(),
+          "worker",
+        ],
+        { capture: true },
+      );
+      for (const line of logs.split("\n")) {
+        try {
+          const entry = JSON.parse(line.slice(line.indexOf("{")));
+          if (entry.code === "WORKER_TASK_STATE" && entry.state === "blocked")
+            return entry.time;
+        } catch {}
+      }
+      return 0;
+    },
+    (at) => at >= partitionStart,
+    "Worker did not report bounded control-loss stop",
+    100,
+  );
+  const partitionMs = stopped - partitionStart;
+  assert(partitionMs <= 20000, "Simulation control-loss bound exceeded");
+  await run("docker", [...configured, "start", "api"]);
+  await run("docker", [
+    ...configured,
+    "up",
+    "-d",
+    "--no-build",
+    "--wait",
+    "api",
+  ]);
+  await waitFor(
+    async () => (await api(`/missions/${partitioned}`)).data,
+    (m) => m.state === "blocked" && m.reason === "uncertain",
+    "Partition uncertainty was lost",
+  );
+  phase = "conservative uncertainty review";
+  await cli(["worker", "revoke", organization, credential.worker_id, "1"]);
+  const pending = [];
+  for (const id of [crashed, partitioned]) {
+    const evidence = (await api(`/missions/${id}/recovery`)).data.items[0];
+    assert(evidence);
+    pending.push({ id, evidence });
+  }
+  const safeAfter =
+    Math.max(...pending.map((p) => Date.parse(p.evidence.deadline_at))) + 15001;
+  await waitFor(
+    async () => Date.now(),
+    (at) => at >= safeAfter,
+    "Lease quiescence wait exceeded",
+    200,
+  );
+  for (const { id } of pending) {
+    const evidence = (await api(`/missions/${id}/recovery`)).data.items[0];
+    const result = (
+      await api(`/missions/${id}/recovery/${evidence.attempt_id}`, "POST", {
+        evidence_hash: evidence.evidence_hash,
+        quiescent: true,
+        reason:
+          "Disposable process stopped/revoked; in-memory simulation outcome not asserted",
+      })
+    ).data;
+    assert.equal(result.state, "failed");
+    assert(result.tasks.every((t) => !t.verified));
+  }
+  const budget = (await api(`/runtime-budgets/organization/${organization}`))
+    .data;
+  assert.equal(budget.active_agents, 0);
+  assert.equal(budget.active_missions, 0);
+  console.log(
+    `Simulation partition stop acknowledgement: ${partitionMs} ms (target <=20000 ms; no physical adapter qualification).`,
+  );
   const ids = (
       await run("docker", [...configured, "ps", "-q"], { capture: true })
     )
@@ -315,7 +629,7 @@ try {
       "Credential canary found; values omitted",
     );
   console.log(
-    "Isolated runtime stack PASS: CLI + API + real registered worker, parallel two-agent DAG, protected API-only authority and token/log redaction. No model/catalog/game calls.",
+    "Isolated runtime stack PASS: CLI + API + real registered worker, parallel two-agent DAG, scoped SSE, persistent stop/restart, Redis loss/reconnect, prepared worker crash, control-loss watchdog, conservative reconciliation and token/log redaction. No model/catalog/game calls.",
   );
 } finally {
   try {

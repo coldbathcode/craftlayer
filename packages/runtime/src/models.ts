@@ -556,12 +556,23 @@ export class RuntimeModels extends RuntimeWorkers {
           } catch {}
         }
       } catch (error) {
+        const routing = z
+          .object({
+            name: z.literal("RouterBlocked"),
+            reasons: z.array(z.string()),
+          })
+          .safeParse(error);
+        const budget =
+          routing.success &&
+          routing.data.reasons.some((reason) => reason.startsWith("budget_"));
         return this.modelBlocked(
           prepared.ctx,
           prepared.request,
-          error instanceof AuthError && error.status === 403
-            ? "permission"
-            : "provider",
+          budget
+            ? "budget"
+            : error instanceof AuthError && error.status === 403
+              ? "permission"
+              : "provider",
         );
       }
       await this.tx(prepared.ctx.worker.organization_id, async (c) => {

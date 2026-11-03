@@ -4695,4 +4695,166 @@ describe("registered worker authority and fenced effects", () => {
       await runtime.cleanup(f.org);
     }
   }, 15000);
+  it("serves concurrent event pages without nesting identity-pool leases", async () => {
+    const f = await fixture();
+    try {
+      const pages = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          runtime.eventPage(ownerToken, f.org, f.env.id),
+        ),
+      );
+      expect(pages).toHaveLength(12);
+      for (const page of pages) {
+        expect(page.cursor).toBeTruthy();
+        expect(page.snapshot?.some((m) => m.id === f.mission)).toBe(true);
+      }
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  }, 15000);
+  it("requires dedicated event permission and closes a live projection when role authority changes", async () => {
+    const f = await fixture(),
+      member = await fixtureMember("viewer", f.org),
+      role = await auth.createRole(ownerToken, f.org, {
+        name: "Mission read without events",
+        permissions: ["organization:read", "mission:read", "environment:read"],
+      });
+    try {
+      await grantFixture(
+        member.memberId,
+        "mission:read",
+        f.project.id,
+        f.env.id,
+        f.org,
+      );
+      await auth.setMemberRoles(ownerToken, f.org, member.memberId, [role.id]);
+      expect(
+        (await runtime.getMission(member.token, f.org, f.mission)).id,
+      ).toBe(f.mission);
+      await expect(
+        runtime.eventPage(member.token, f.org, f.env.id),
+      ).rejects.toMatchObject({ status: 403 });
+      const readerRole = await auth.createRole(ownerToken, f.org, {
+        name: "Scoped event reader",
+        permissions: [
+          "organization:read",
+          "mission:read",
+          "environment:read",
+          "event:read",
+        ],
+      });
+      await auth.setMemberRoles(ownerToken, f.org, member.memberId, [
+        readerRole.id,
+      ]);
+      const stream = await runtime.openEvents(member.token, f.org, f.env.id);
+      await stream.poll(() => {});
+      await auth.setMemberRoles(ownerToken, f.org, member.memberId, [role.id]);
+      let emitted = false;
+      await expect(
+        stream.poll(() => {
+          emitted = true;
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(emitted).toBe(false);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("blocks runtime inference on exhausted provider budgets without a dispatched call", async () => {
+    const f = await configuredModel();
+    try {
+      const budget = await providers.getBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+      );
+      await providers.setBudget(
+        ownerToken,
+        f.org,
+        "organization",
+        f.org,
+        budget.version,
+        { ...defaultBudgetLimits, calls: 0 },
+      );
+      expect(await runtime.decide(f.token, 1, f.h)).toEqual({
+        blocked: true,
+        reason: "budget",
+      });
+      expect(modelCalls).toBe(0);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
+  it("linearizes emergency stop against 100 concurrent claims and rejects every post-stop permit", async () => {
+    const f = await fixture(),
+      token = f.enrolled.credential.token;
+    let stop: Awaited<ReturnType<typeof runtime.requestStop>> | undefined;
+    try {
+      const claims = Array.from({ length: 100 }, () =>
+        runtime.claim(token, 1, f.reference),
+      );
+      const settled = Promise.allSettled(claims);
+      stop = await runtime.requestStop(ownerToken, f.org, {
+        kind: "mission",
+        scope_id: f.mission,
+        reason: "Claim race",
+      });
+      const outcomes = await settled,
+        winners = outcomes.flatMap((x) =>
+          x.status === "fulfilled" && x.value.claim ? [x.value.claim] : [],
+        );
+      expect(winners.length).toBeLessThanOrEqual(1);
+      for (const claim of winners) {
+        await expect(
+          runtime.prepareAction(token, 1, handle(claim)),
+        ).rejects.toMatchObject({ status: 403 });
+        await runtime.acknowledgeStopped(token, 1, handle(claim));
+      }
+      expect(
+        (
+          await runtime.inspect(
+            f.org,
+            "select id from runtime_action_receipts where organization_id=$1 and mission_id=$2",
+            [f.org, f.mission],
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      if (stop)
+        await runtime.clearStop(
+          ownerToken,
+          f.org,
+          stop.id,
+          stop.epoch,
+          "Claim race checked",
+        );
+      await runtime.cleanup(f.org);
+    }
+  }, 30000);
+  it("rejects independent approval without producing an effect or retaining inactive capacity", async () => {
+    const f = await approvalFixture();
+    try {
+      const adult = await fixtureMember("org_admin", f.org);
+      await runtime.decideApproval(adult.token, f.org, f.approval.id, "reject");
+      expect(
+        (await runtime.getMission(ownerToken, f.org, f.mission)).state,
+      ).toBe("failed");
+      expect(
+        (await runtime.runtimeBudget(ownerToken, f.org, "organization", f.org))
+          .active_missions,
+      ).toBe(0);
+      expect(
+        (
+          await runtime.inspect(
+            f.org,
+            "select id from runtime_action_receipts where organization_id=$1 and mission_id=$2",
+            [f.org, f.mission],
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      await runtime.cleanup(f.org);
+    }
+  });
 });

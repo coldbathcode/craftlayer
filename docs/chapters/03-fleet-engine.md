@@ -1,6 +1,6 @@
 # Chapter 03 — Fleet engine
 
-**Status:** in progress; user authorized Chapter 03. **Implementation evidence:** [build log](../delivery/build-log.md).
+**Status:** locally verified (7/7); owner review pending. Chapter 04 remains separately gated. **Implementation evidence:** [build log](../delivery/build-log.md).
 
 **Milestone:** M1. **Requirements:** PR-007–009, PR-017, PR-021; NFR-02–05.
 
@@ -74,9 +74,9 @@ Each task is initially unchecked. Dependencies below describe the default conser
 
 **Required evidence:** Foreign cursors/channels deny; reconnect deduplicates and snapshots; Redis loss recovers without mission loss.
 
-### [ ] CL-03-07 — Runtime fault suite and review
+### [x] CL-03-07 — Runtime fault suite and review
 
-**Depends on:** CL-03-06. **Size:** L. **Status:** not started.
+**Depends on:** CL-03-06. **Size:** L. **Status:** locally verified; see [chapter review](../reviews/03-fleet-engine.md).
 
 **Implementation:** Run claim/replay races, kill points around effects, provider/budget/approval blocks, stop partitions and restart tests. Document state transitions and operational commands.
 
@@ -99,11 +99,11 @@ Use deterministic/fake services first. Any live inference, public deployment, pu
 
 ## Acceptance criteria
 
-- [ ] Deterministic multi-task mission completes through API/CLI and emits authorized events.
-- [ ] Restart/Redis loss recovers durable state and stale workers cannot commit results.
-- [ ] Pause/cancel/stop meet defined semantics, with stop timing measured under partition.
-- [ ] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
-- [ ] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
+- [x] Deterministic multi-task mission completes through API/CLI and emits authorized events.
+- [x] Restart/Redis loss recovers durable state and stale workers cannot commit results.
+- [x] Pause/cancel/stop meet defined semantics, with stop timing measured under partition.
+- [x] Required tests pass, relevant documentation is updated, and no unreviewed safety regression remains.
+- [x] Every completed task points to concrete evidence; deferred checks are explicitly listed with impact.
 
 ## Demonstration and independent verification
 

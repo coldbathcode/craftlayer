@@ -64,11 +64,12 @@ export class RuntimeEvents extends RuntimeRecovery {
   }
   private async batch<T>(
     grant: ExecutionGrant,
+    eventGrant: ExecutionGrant,
     mission: string | undefined,
     cursor: string | undefined,
     send: (page: Page) => T,
   ): Promise<T> {
-    return this.auth.guardExecution(grant, async (p) => {
+    return this.auth.guardExecutions([grant, eventGrant], async (p) => {
       if (p.user.account_type !== "adult") deny("SIMULATION_ONLY", 403);
       const page = await this.tx(grant.organizationId, async (c) => {
         const org = grant.organizationId,
@@ -186,13 +187,19 @@ export class RuntimeEvents extends RuntimeRecovery {
   ) {
     z.uuid().parse(environment);
     if (mission) z.uuid().parse(mission);
+    const eventGrant = await this.auth.issueExecutionGrant(
+      token,
+      org,
+      "event:read",
+      { kind: "environment", id: environment },
+    );
     const grant = await this.auth.issueExecutionGrant(
       token,
       org,
       "mission:read",
       { kind: "environment", id: environment },
     );
-    await this.auth.guardExecution(grant, async (p) => {
+    await this.auth.guardExecutions([grant, eventGrant], async (p) => {
       if (p.user.account_type !== "adult") deny("SIMULATION_ONLY", 403);
     });
     let position = cursor;
@@ -200,7 +207,7 @@ export class RuntimeEvents extends RuntimeRecovery {
       key: `${org}/${grant.userId}`,
       organization: org,
       poll: <T>(send: (page: Page) => T) =>
-        this.batch(grant, mission, position, (page) => {
+        this.batch(grant, eventGrant, mission, position, (page) => {
           const result = send(page);
           position = page.cursor;
           return result;

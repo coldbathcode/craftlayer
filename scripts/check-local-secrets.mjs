@@ -31,8 +31,11 @@ if (existsSync(".worker-secrets/credential.json")) {
   } catch {
     throw new Error("Worker credential JSON invalid; values omitted");
   }
-  if (typeof credential.token === "string")
+  if (typeof credential.token === "string") {
     credentials.push(Buffer.from(credential.token));
+    const suffix = credential.token.split(".").at(-1);
+    if (suffix && suffix.length >= 32) credentials.push(Buffer.from(suffix));
+  }
 }
 assert(credentials.length >= 8, "Expected generated local credentials");
 const files = execFileSync(
