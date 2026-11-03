@@ -565,11 +565,27 @@ export class MinecraftControl {
           });
         }
         if (!row.registered) denied("SERVER_NOT_REGISTERED");
+        const now = new Date(this.#now());
+        // Pending names are metadata, not canonical game identities. Match only
+        // the parsed edition/name under the existing scoped transaction lock.
+        if (
+          (
+            await c.query(
+              "select 1 from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and edition=$3 and requested_name=$4 and expires_at>$5 limit 1",
+              [org, id, request.edition, request.requested_name, now],
+            )
+          ).rowCount
+        )
+          throw new AuthError(
+            409,
+            "ENROLLMENT_PENDING",
+            "An unexpired request for this name and edition is already pending on this server. Retry after it expires.",
+          );
         await this.#admit(c, org, row.environment_id, p.user.id);
         const count = (
           await c.query<{ total: number }>(
             "select count(*)::int total from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and expires_at>$3",
-            [org, id, new Date(this.#now())],
+            [org, id, now],
           )
         ).rows[0];
         if (!count || count.total >= 200)
@@ -579,8 +595,7 @@ export class MinecraftControl {
             "Too many pending identity requests for this server. Retry after an existing request expires.",
           );
         const operation = randomUUID(),
-          enrollment = randomUUID(),
-          now = new Date(this.#now());
+          enrollment = randomUUID();
         await c.query(
           "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) values($1,$2,$3,$4,$5,$6,$7,'identity_enroll',$8,$9,'succeeded',0,$10,$10,$10)",
           [

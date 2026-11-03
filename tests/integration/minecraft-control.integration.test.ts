@@ -892,6 +892,24 @@ describe("pending Minecraft identity resolution boundary", () => {
         payload: { edition: "java", requested_name: "TestPlayer" },
       });
       expect(result.statusCode).toBe(202);
+      const duplicate = await app.inject({
+        method: "POST",
+        url: path,
+        headers: { ...write, "idempotency-key": randomUUID() },
+        payload: { edition: "java", requested_name: "TestPlayer" },
+      });
+      expect(duplicate.statusCode).toBe(409);
+      expect(duplicate.json().error).toMatchObject({
+        code: "ENROLLMENT_PENDING",
+      });
+      const replay = await app.inject({
+        method: "POST",
+        url: path,
+        headers: write,
+        payload: { edition: "java", requested_name: "TestPlayer" },
+      });
+      expect(replay.statusCode).toBe(202);
+      expect(replay.json()).toEqual(result.json());
       const receipt = result.json(),
         page = (await app.inject({ method: "GET", url: path, headers })).json();
       expect(
@@ -1147,7 +1165,13 @@ it("retains a bounded unexpired enrollment budget, current replay and expiry-bas
       await f.service.enrollIdentity(f.token, org, f.server, body, key),
     ).toEqual(result);
     await expect(
-      f.service.enrollIdentity(f.token, org, f.server, body, randomUUID()),
+      f.service.enrollIdentity(
+        f.token,
+        org,
+        f.server,
+        { ...body, requested_name: "Another Family" },
+        randomUUID(),
+      ),
     ).rejects.toMatchObject({
       status: 429,
       code: "ENROLLMENT_LIMIT",
@@ -1177,4 +1201,113 @@ it("retains a bounded unexpired enrollment budget, current replay and expiry-bas
     ).toBe("succeeded");
     expect(f.reads()).toBe(0);
     expect(await f.rows()).toBe(202);
+  }));
+
+it("deduplicates concurrent pending names across request keys without renewing or repeating metadata", () =>
+  operationLimitFixture(async (f) => {
+    const body = { edition: "bedrock", requested_name: " SharedPlayer " },
+      keys = Array.from({ length: 8 }, () => randomUUID()),
+      results = await Promise.allSettled(
+        keys.map((key) =>
+          f.service.enrollIdentity(f.token, org, f.server, body, key),
+        ),
+      ),
+      accepted = results.flatMap((r, i) =>
+        r.status === "fulfilled" ? [{ receipt: r.value, key: keys[i] }] : [],
+      );
+    expect(accepted).toHaveLength(1);
+    for (const r of results)
+      if (r.status === "rejected")
+        expect(r.reason).toMatchObject({
+          status: 409,
+          code: "ENROLLMENT_PENDING",
+        });
+    const winner = accepted[0];
+    if (!winner?.key) throw new Error("Missing winning request");
+    const before = await f.service.identityEnrollments(f.token, org, f.server);
+    expect(before.items).toHaveLength(1);
+    expect(before.items[0]).toMatchObject({
+      requested_name: "SharedPlayer",
+      identity_verified: false,
+      access_granted: false,
+    });
+    const other = await member("org_admin");
+    await expect(
+      f.service.enrollIdentity(other, org, f.server, body, randomUUID()),
+    ).rejects.toMatchObject({ status: 409, code: "ENROLLMENT_PENDING" });
+    expect(
+      await f.service.enrollIdentity(f.token, org, f.server, body, winner.key),
+    ).toEqual(winner.receipt);
+    expect(await f.rows()).toBe(2); // Adoption and one accepted request only.
+    await tx(runtime, org, async (c) => {
+      for (const table of ["management_outbox", "audit_events"] as const) {
+        const rows = await c.query(
+          table === "management_outbox"
+            ? "select 1 from management_outbox where operation_id=$1"
+            : "select 1 from audit_events where details->>'operation_id'=$1",
+          [winner.receipt.operation_id],
+        );
+        expect(rows.rowCount).toBe(1);
+      }
+    });
+    f.advance(86400000);
+    const next = await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      body,
+      randomUUID(),
+    );
+    expect(next.enrollment_id).not.toBe(winner.receipt.enrollment_id);
+    expect(
+      await f.service.enrollIdentity(f.token, org, f.server, body, winner.key),
+    ).toEqual(winner.receipt);
+    const after = await f.service.identityEnrollments(f.token, org, f.server);
+    expect(after.items).toHaveLength(2);
+    expect(
+      after.items.find((r) => r.id === winner.receipt.enrollment_id),
+    ).toEqual({
+      ...before.items[0],
+      expired: true,
+    });
+    expect(
+      after.items.every((r) => !r.identity_verified && !r.access_granted),
+    ).toBe(true);
+    expect(await f.rows()).toBe(3);
+    expect(f.reads()).toBe(0);
+  }));
+
+it("keeps pending name deduplication within its server and edition without asserting identity equivalence", () =>
+  operationLimitFixture(async (f) => {
+    const body = { edition: "bedrock", requested_name: "SharedPlayer" };
+    await f.service.enrollIdentity(f.token, org, f.server, body, randomUUID());
+    await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      { ...body, edition: "java" },
+      randomUUID(),
+    );
+    // Request comparison is exact after schema parsing, not account resolution.
+    await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      { ...body, requested_name: "sharedplayer" },
+      randomUUID(),
+    );
+    await operationLimitFixture(async (other) => {
+      const result = await other.service.enrollIdentity(
+        other.token,
+        org,
+        other.server,
+        body,
+        randomUUID(),
+      );
+      expect(result.server_id).toBe(other.server);
+      expect(result.server_id).not.toBe(f.server);
+      expect(await other.rows()).toBe(2);
+    });
+    expect(await f.rows()).toBe(4);
+    expect(f.reads()).toBe(0);
   }));
