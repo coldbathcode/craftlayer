@@ -11,6 +11,10 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { registerAuth } from "./auth-routes.js";
+import {
+  type DeploymentApi,
+  registerDeployments,
+} from "./deployment-routes.js";
 import { type MinecraftApi, registerMinecraft } from "./minecraft-routes.js";
 import { type NodeApi, registerNodes } from "./node-routes.js";
 import { type ConnectionApi, registerProviders } from "./provider-routes.js";
@@ -23,6 +27,7 @@ export async function buildApp(options: {
   runtime?: RuntimeApi;
   minecraft?: MinecraftApi;
   nodes?: NodeApi;
+  deployments?: DeploymentApi;
   publicUrl?: string;
 }) {
   const app = Fastify({
@@ -163,12 +168,19 @@ export async function buildApp(options: {
       options.nodes,
       options.publicUrl ?? "http://127.0.0.1:3000",
     );
+  if (options.deployments && options.auth)
+    await registerDeployments(
+      app,
+      options.deployments,
+      options.publicUrl ?? "http://127.0.0.1:3000",
+    );
   if (options.minecraft && options.auth)
     await registerMinecraft(
       app,
       options.minecraft,
       options.publicUrl ?? "http://127.0.0.1:3000",
       options.nodes,
+      options.deployments,
     );
   await app.ready();
   return app;

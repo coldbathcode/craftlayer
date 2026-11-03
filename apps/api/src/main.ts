@@ -7,6 +7,7 @@ import {
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
 import {
+  DeploymentAdmissions,
   InventoryFileSource,
   MinecraftControl,
   NodeControl,
@@ -71,6 +72,10 @@ try {
     auth,
     source: new InventoryFileSource(config.CRAFTLAYER_MINECRAFT_INVENTORY_FILE),
   });
+  const deployments = new DeploymentAdmissions({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+  });
   const nodes = new NodeControl({
     databaseUrl: config.DATABASE_URL,
     auth,
@@ -134,6 +139,7 @@ try {
     await runtime.close();
     await minecraft.close();
     await nodes.close();
+    await deployments.close();
   };
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
@@ -146,12 +152,13 @@ try {
     runtime,
     minecraft,
     nodes,
+    deployments,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
     readiness: async () => {
       const [db, pong] = await within(
         Promise.all([
           pool.query(
-            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null and to_regclass('public.minecraft_servers') is not null and to_regclass('public.minecraft_nodes') is not null as migrated",
+            "select to_regclass('public.organizations') is not null and to_regclass('public.provider_connections') is not null and to_regclass('public.runtime_idempotency') is not null and to_regclass('public.minecraft_servers') is not null and to_regclass('public.minecraft_nodes') is not null and to_regclass('public.minecraft_deployment_authorizations') is not null as migrated",
           ),
           redis.isReady ? redis.ping() : Promise.resolve(null),
         ]),
@@ -170,6 +177,7 @@ try {
     await runtime.close();
     await minecraft.close();
     await nodes.close();
+    await deployments.close();
   };
   installShutdown(() => close(), log);
   await app.listen({

@@ -1,6 +1,6 @@
 # Current delivery status
 
-Last updated: 2026-11-02.
+Last updated: 2026-11-03.
 
 ## Authorized scope
 
@@ -148,3 +148,10 @@ The real disposable DB/TLS/Redis journey now uses the no-identity gateway plus r
 Added SQL 0023/Drizzle/contracts and key-free human DeploymentAdmissions. Original current adult/session, dual canonical scopes, allocated intent/node/key and stop snapshot bind one private immutable sealed-grant authority with at-most-120s expiry, audit and reference-only outbox. Projections expose no grant/signature; metadata replay does not remint grants. Expired/stale authority cannot be extended, and allocations remain retained. Gateway issueAdmission loads this reference and signs only after fresh delegated identity/qualification/stop checks; SQL links the exact original grants and caps command lease to authority expiry. Legacy private prepare remains compatible and unexposed.
 
 The real DB/remote-authority/TLS/Redis journey now begins with a human admission requiring no control key and a gateway issuer with no identity service. Five additional DB cases and two contract cases cover concurrency/reopen/current roles/session/tenant/stop/expiry/default denial, retained allocations, RLS/immutable/FK/sealed-scope/job-link protection and no secret projection. No HTTP, worker/polling or entrypoint activation yet; qualification/approval remains fake. Next authorized work: canonical HTTP/SDK metadata and background dispatch/polling, then real approval/storage/game/recovery gates. Exact checks are in build log.
+
+
+## CL-F25-03 checkpoint F — local HTTP/SDK metadata
+
+Completed the pre-existing unfinished key-free HTTP/SDK admission wiring. Strict local POST admission returns a durable metadata-only operation; safe admission/job GETs and generic operation lookup enforce current adult dual scopes. Origin/CSRF, UUID organization/idempotency headers, strict client inputs, non-cacheable secret-free projections and remote-entry blocking apply. API readiness checks authority schema; node/gateway command routes stay uninstalled. No new migration, background dispatch, physical provision route, wizard or production qualification.
+
+Verification and publication are recorded in the latest [build-log entry](build-log.md) and [handoff](handoffs/F25-http-metadata.md). Next authorized task: gateway-side durable outbox dispatch/polling and expiry handling while retaining key isolation and conservative uncertainty; then independent approval and real storage/game/identity/backup/restore gates. F2/F25 release criteria remain incomplete. No VPS/EULA/world/paid inference action. Pre-existing CL-03-07 and full-project-review edits remain preserved/excluded; whole-tree cleanliness cannot be claimed.

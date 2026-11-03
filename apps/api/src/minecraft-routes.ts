@@ -3,6 +3,8 @@ import {
   adoptionCommit,
   adoptionPlan,
   adoptionRequest,
+  deploymentAdmissionView,
+  deploymentJobView,
   errorSchema,
   identityEnrollmentAccepted,
   identityEnrollmentPage,
@@ -24,6 +26,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import type { DeploymentApi } from "./deployment-routes.js";
 import type { NodeApi } from "./node-routes.js";
 export type MinecraftApi = Pick<MinecraftControl, keyof MinecraftControl>;
 export async function registerMinecraft(
@@ -31,6 +34,7 @@ export async function registerMinecraft(
   control: MinecraftApi,
   publicUrl: string,
   nodes?: NodeApi,
+  deployments?: DeploymentApi,
 ) {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const enabled = ["localhost", "127.0.0.1", "[::1]"].includes(
@@ -200,19 +204,34 @@ export async function registerMinecraft(
       schema: {
         params,
         response: {
-          200: z.union([operationView, nodeOperationView]),
+          200: z.union([
+            operationView,
+            nodeOperationView,
+            deploymentAdmissionView,
+            deploymentJobView,
+          ]),
           ...errors,
         },
       },
     },
     async (r) => {
-      try {
-        return await control.operation(token(r), org(r), r.params.id);
-      } catch (e) {
-        if (nodes && e instanceof AuthError && e.status === 404)
-          return nodes.operation(token(r), org(r), r.params.id);
-        throw e;
+      const lookups = [
+        () => control.operation(token(r), org(r), r.params.id),
+        ...(nodes
+          ? [() => nodes.operation(token(r), org(r), r.params.id)]
+          : []),
+        ...(deployments
+          ? [() => deployments.operation(token(r), org(r), r.params.id)]
+          : []),
+      ];
+      for (const lookup of lookups) {
+        try {
+          return await lookup();
+        } catch (e) {
+          if (!(e instanceof AuthError) || e.status !== 404) throw e;
+        }
       }
+      throw new AuthError(404, "NOT_FOUND", "Operation not found.");
     },
   );
   for (const action of ["observe", "unregister"] as const)

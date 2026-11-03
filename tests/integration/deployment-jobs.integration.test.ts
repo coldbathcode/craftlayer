@@ -4,7 +4,8 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { buildApp } from "../../apps/api/src/app.js";
 import { buildExecutionAuthorityApp } from "../../apps/api/src/execution-authority-app.js";
 import { buildNodeAgentApp } from "../../apps/api/src/node-agent-app.js";
 import { ConstrainedDockerBroker } from "../../apps/minecraft-node/src/broker.js";
@@ -24,6 +25,7 @@ import {
   DeploymentAdmissions,
   DeploymentJobs,
   type DeploymentQualificationContext,
+  MinecraftControl,
 } from "../../packages/minecraft-control/src/index.js";
 import { RemoteDeploymentAuthorizer } from "../../packages/minecraft-control/src/remote-authorizer.js";
 import {
@@ -35,6 +37,7 @@ import {
   signNodeValue,
   verifyNodeValue,
 } from "../../packages/node-protocol/src/index.js";
+import { ApiError, deploymentClient } from "../../packages/sdk/src/index.js";
 import { createNodeFixture } from "../../scripts/minecraft/node-fixtures.js";
 import { reservationHarness } from "./fixtures/reservations.js";
 
@@ -1525,6 +1528,401 @@ it("SQL rejects altered sealed actor/scope and job-authority links before unique
         ).rowCount,
       ).toBe(1);
     } finally {
+      await admissions.close();
+    }
+  }));
+
+it("guards HTTP authority admission with current scope, Origin/CSRF, strict metadata and UUID replay", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      app = await buildApp({
+        auth: h.auth,
+        deployments: admissions,
+        readiness: async () => true,
+      }),
+      path = "/api/v1/servers/provision/admissions",
+      key = randomUUID(),
+      headers = {
+        cookie: `craftlayer_session=${f.adult}`,
+        origin: "http://127.0.0.1:3000",
+        "x-csrf-token": h.auth.csrfToken(f.adult),
+        "x-craftlayer-organization": f.org,
+        "idempotency-key": key,
+      },
+      payload = { intent_id: f.intent.operation_id };
+    try {
+      for (const [changed, status] of [
+        [{ cookie: "" }, 401],
+        [
+          {
+            cookie: `craftlayer_session=${f.child}`,
+            "x-csrf-token": h.auth.csrfToken(f.child),
+          },
+          403,
+        ],
+        [
+          {
+            cookie: `craftlayer_session=${f.viewer}`,
+            "x-csrf-token": h.auth.csrfToken(f.viewer),
+          },
+          403,
+        ],
+        [{ origin: "https://foreign.invalid" }, 403],
+        [{ "x-csrf-token": "" }, 403],
+        [{ "x-craftlayer-organization": f.foreignOrg }, 404],
+        [{ "x-craftlayer-organization": "" }, 400],
+        [{ "idempotency-key": "" }, 400],
+      ] as const) {
+        const r = await app.inject({
+          method: "POST",
+          url: path,
+          headers: { ...headers, ...changed },
+          payload,
+        });
+        expect(r.statusCode).toBe(status);
+      }
+      for (const extra of [
+        { approval_hash: "b".repeat(64) },
+        { qualified: true },
+        { command: "start" },
+        { organization_id: f.org },
+        { node_grant: {} },
+      ]) {
+        expect(
+          (
+            await app.inject({
+              method: "POST",
+              url: path,
+              headers,
+              payload: { ...payload, ...extra },
+            })
+          ).statusCode,
+        ).toBe(400);
+      }
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_authorizations"))
+            .rowCount,
+        ).toBe(0);
+      });
+      const responses = await Promise.all(
+        Array.from({ length: 4 }, () =>
+          app.inject({ method: "POST", url: path, headers, payload }),
+        ),
+      );
+      for (const r of responses) {
+        expect(r.statusCode).toBe(202);
+        expect(r.headers["cache-control"]).toBe("no-store");
+        expect(r.headers["x-request-id"]).toBeTruthy();
+      }
+      const admission = responses[0]?.json();
+      expect(new Set(responses.map((r) => r.json().operation_id)).size).toBe(1);
+      expect(admission).toMatchObject({
+        effects: "metadata_only",
+        authorization_state: "active",
+        job_id: null,
+      });
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: path,
+            headers: { ...headers, "idempotency-key": randomUUID() },
+            payload,
+          })
+        ).statusCode,
+      ).toBe(409);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `${path}/${admission.operation_id}`,
+            headers,
+          })
+        ).json(),
+      ).toEqual(admission);
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_authorizations"))
+            .rowCount,
+        ).toBe(1);
+        expect(
+          (
+            await c.query(
+              "select 1 from minecraft_deployment_authorization_outbox",
+            )
+          ).rowCount,
+        ).toBe(1);
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(0);
+      });
+      const schema = (
+        await app.inject({ method: "GET", url: "/api/v1/openapi.json" })
+      ).json();
+      expect(schema.openapi).toBe("3.1.0");
+      expect(schema.paths[path].post.parameters).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            in: "header",
+            name: "idempotency-key",
+            required: true,
+          }),
+          expect.objectContaining({
+            in: "header",
+            name: "x-craftlayer-organization",
+            required: true,
+          }),
+        ]),
+      );
+      expect(
+        schema.paths[path].post.requestBody.content["application/json"].schema
+          .additionalProperties,
+      ).toBe(false);
+      expect(
+        schema.paths["/api/v1/servers/provision/jobs/{id}"].get,
+      ).toBeDefined();
+      expect(schema.paths["/node/v1/commands/exchange"]).toBeUndefined();
+    } finally {
+      await app.close();
+      await admissions.close();
+    }
+  }));
+
+it("reads issued and settled deployment metadata through actual HTTP/SDK without exposing sealed authority or weakening operation permissions", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      minecraft = new MinecraftControl({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      app = await buildApp({
+        auth: h.auth,
+        deployments: admissions,
+        minecraft,
+        nodes: f.nodes,
+        readiness: async () => true,
+      }),
+      nativeFetch = globalThis.fetch;
+    try {
+      const base = await app.listen({ host: "127.0.0.1", port: 0 });
+      // Supply browser cookies and Origin explicitly in this Node-only SDK journey.
+      vi.stubGlobal(
+        "fetch",
+        (input: string | URL | Request, init?: RequestInit) =>
+          nativeFetch(new URL(String(input), base), {
+            ...init,
+            headers: {
+              ...Object.fromEntries(new Headers(init?.headers)),
+              cookie: `craftlayer_session=${f.adult}`,
+              origin: "http://127.0.0.1:3000",
+            },
+          }),
+      );
+      const client = deploymentClient(f.org, h.auth.csrfToken(f.adult)),
+        admission = await client.admit(f.intent.operation_id, randomUUID());
+      expect(await client.operation(admission.operation_id)).toEqual(admission);
+      const job = await f.jobs.issueAdmission(f.org, admission.operation_id);
+      expect(await client.job(job.operation_id)).toEqual(job);
+      expect(await client.operation(job.operation_id)).toEqual(job);
+      expect(await client.admission(admission.operation_id)).toMatchObject({
+        job_id: job.operation_id,
+      });
+      const command = signedNodeCommand.parse(
+        await f.jobs.exchange(f.request(job), f.peer),
+      );
+      await f.jobs.recordReceipt(f.receipt(command, "not_dispatched"), f.peer);
+      expect(await client.job(job.operation_id)).toMatchObject({
+        state: "not_dispatched",
+        receipt_state: "not_dispatched",
+      });
+      for (const view of [
+        await client.job(job.operation_id),
+        await client.admission(admission.operation_id),
+      ]) {
+        for (const forbidden of [
+          "node_grant",
+          "server_grant",
+          "signature",
+          "session_id",
+          "actor_id",
+          'receipt"',
+          'command"',
+        ])
+          expect(JSON.stringify(view)).not.toContain(forbidden);
+      }
+      const paths = [
+        `/api/v1/servers/provision/admissions/${admission.operation_id}`,
+        `/api/v1/servers/provision/jobs/${job.operation_id}`,
+        `/api/v1/operations/${admission.operation_id}`,
+        `/api/v1/operations/${job.operation_id}`,
+      ];
+      for (const path of paths) {
+        for (const [token, organization, status] of [
+          ["", f.org, 401],
+          [f.child, f.org, 403],
+          [f.viewer, f.org, 403],
+          [f.adult, f.foreignOrg, 404],
+        ] as const) {
+          expect(
+            (
+              await app.inject({
+                method: "GET",
+                url: path,
+                headers: {
+                  cookie: `craftlayer_session=${token}`,
+                  "x-craftlayer-organization": organization,
+                },
+              })
+            ).statusCode,
+          ).toBe(status);
+        }
+      }
+      await h.tx(h.identity, f.org, (c) =>
+        c.query(
+          "delete from role_permissions where organization_id=$1 and permission='server:provision'",
+          [f.org],
+        ),
+      );
+      await expect(client.job(job.operation_id)).rejects.toMatchObject({
+        status: 403,
+      });
+      await expect(
+        client.operation(admission.operation_id),
+      ).rejects.toBeInstanceOf(ApiError);
+      await expect(client.operation(job.operation_id)).rejects.toMatchObject({
+        status: 403,
+      });
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (
+            await c.query(
+              "select state from minecraft_reservations where id=$1",
+              [f.r.reservation_id],
+            )
+          ).rows[0]?.state,
+        ).toBe("allocated");
+      });
+    } finally {
+      vi.unstubAllGlobals();
+      await app.close();
+      await minecraft.close();
+      await admissions.close();
+    }
+  }));
+
+it("keeps expired HTTP admissions historical, remote management blocked and browser command routes absent", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      app = await buildApp({
+        auth: h.auth,
+        deployments: admissions,
+        readiness: async () => true,
+      }),
+      remote = await buildApp({
+        auth: h.auth,
+        deployments: admissions,
+        publicUrl: "https://management.invalid",
+        readiness: async () => true,
+      }),
+      path = "/api/v1/servers/provision/admissions",
+      headers = {
+        cookie: `craftlayer_session=${f.adult}`,
+        origin: "http://127.0.0.1:3000",
+        "x-csrf-token": h.auth.csrfToken(f.adult),
+        "x-craftlayer-organization": f.org,
+        "idempotency-key": randomUUID(),
+      },
+      payload = { intent_id: f.intent.operation_id };
+    try {
+      const created = await app.inject({
+        method: "POST",
+        url: path,
+        headers,
+        payload,
+      });
+      expect(created.statusCode).toBe(202);
+      const a = created.json();
+      const disabled = new DeploymentJobs({
+        databaseUrl: url,
+        authorizer: h.auth,
+        controlPrivateKey: f.control.private_key,
+        policy: f.options.policy,
+        clock: f.now,
+      });
+      try {
+        await expect(
+          disabled.issueAdmission(f.org, a.operation_id),
+        ).rejects.toMatchObject({ code: "DEPLOYMENT_UNQUALIFIED" });
+      } finally {
+        await disabled.close();
+      }
+      for (const [method, target] of [
+        ["GET", `${path}/${a.operation_id}`],
+        ["POST", path],
+      ] as const) {
+        const denied = await remote.inject({
+          method,
+          url: target,
+          headers: { ...headers, origin: "https://management.invalid" },
+          ...(method === "POST" ? { payload } : {}),
+        });
+        expect(denied.statusCode).toBe(503);
+        expect(denied.json().error.code).toBe("MANAGEMENT_REMOTE_UNQUALIFIED");
+      }
+      for (const target of [
+        "/node/v1/commands/exchange",
+        "/node/v1/commands/receipt",
+        "/api/v1/servers/provision/jobs",
+        "/api/v1/servers/provision",
+      ]) {
+        expect(
+          (await app.inject({ method: "POST", url: target, headers, payload }))
+            .statusCode,
+        ).toBe(404);
+      }
+      f.advance(120001);
+      expect(
+        (
+          await app.inject({
+            method: "GET",
+            url: `${path}/${a.operation_id}`,
+            headers,
+          })
+        ).json(),
+      ).toMatchObject({
+        authorization_state: "expired",
+        job_id: null,
+        expires_at: a.expires_at,
+      });
+      expect(
+        (await app.inject({ method: "POST", url: path, headers, payload }))
+          .statusCode,
+      ).toBe(409);
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(0);
+      });
+      expect(
+        (await f.ledger.get(f.adult, f.org, f.r.reservation_id)).state,
+      ).toBe("allocated");
+    } finally {
+      await remote.close();
+      await app.close();
       await admissions.close();
     }
   }));

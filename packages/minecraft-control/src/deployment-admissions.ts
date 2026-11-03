@@ -7,6 +7,7 @@ import {
 import {
   deploymentAdmissionRequest,
   deploymentAdmissionView,
+  deploymentJobView,
 } from "@craftlayer/contracts";
 import { canAccess } from "@craftlayer/core";
 import { nodeDigest } from "@craftlayer/node-protocol";
@@ -342,5 +343,60 @@ export class DeploymentAdmissions {
       if (!row) deny("NOT_FOUND", 404);
       return this.#view(row);
     });
+  }
+  async job(token: string, org: string, id: string) {
+    z.uuid().parse(id);
+    const located = await this.options.auth.guardOrganization(
+      token,
+      org,
+      "organization:read",
+      () =>
+        this.#tx(org, async (c) => {
+          const row = (
+            await c.query<{ intent_id: string }>(
+              "select intent_id from minecraft_deployment_jobs where organization_id=$1 and id=$2",
+              [org, id],
+            )
+          ).rows[0];
+          if (!row) deny("NOT_FOUND", 404);
+          return row;
+        }),
+    );
+    const r = await this.#locate(token, org, located.intent_id);
+    return this.#scope(token, org, r, async (c) => {
+      const row = (
+        await c.query<{ created_at: Date; lease_expires_at: Date }>(
+          "select j.id operation_id,j.intent_id,r.deployment_id,r.server_id,r.world_id,j.node_id,j.project_id,j.environment_id,j.state,j.command_hash,j.lease_expires_at,j.created_at,j.receipt->'payload'->>'state' receipt_state from minecraft_deployment_jobs j join minecraft_reservations r on (r.organization_id,r.id)=(j.organization_id,j.reservation_id) where j.organization_id=$1 and j.id=$2",
+          [org, id],
+        )
+      ).rows[0];
+      if (!row) deny("NOT_FOUND", 404);
+      return deploymentJobView.parse({
+        ...row,
+        created_at: row.created_at.toISOString(),
+        lease_expires_at: row.lease_expires_at.toISOString(),
+      });
+    });
+  }
+  async operation(token: string, org: string, id: string) {
+    const kind = await this.options.auth.guardOrganization(
+      token,
+      org,
+      "organization:read",
+      () =>
+        this.#tx(org, async (c) => {
+          const row = (
+            await c.query<{ kind: string }>(
+              "select 'admission' kind from minecraft_deployment_authorizations where organization_id=$1 and id=$2 union all select 'job' kind from minecraft_deployment_jobs where organization_id=$1 and id=$2 limit 1",
+              [org, z.uuid().parse(id)],
+            )
+          ).rows[0];
+          if (!row) deny("NOT_FOUND", 404);
+          return row.kind;
+        }),
+    );
+    return kind === "admission"
+      ? this.get(token, org, id)
+      : this.job(token, org, id);
   }
 }

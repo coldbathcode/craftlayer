@@ -72,6 +72,8 @@ export async function identityRequest<T extends z.ZodType>(
     );
   return parsed.data;
 }
+
+export { deploymentClient } from "./deployments.js";
 export { minecraftClient } from "./minecraft.js";
 export { nodeClient } from "./nodes.js";
 export * from "./runtime.js";

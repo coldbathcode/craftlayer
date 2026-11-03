@@ -123,3 +123,6 @@ CL-F25-03 checkpoint E adds API-side key-free sealed original-authority admissio
 - Do not use a checked checkbox as a substitute for evidence. Link task IDs to test/review artifacts.
 - Failed or unavailable checks prevent verification of their associated requirements. Do not count specification completion as software completion.
 - When GitHub exists, create one issue per task (or a chapter epic with linked task issues), preserve these IDs in titles, and copy exact proof requirements. GitHub does not replace checked-in architecture/status.
+
+
+CL-F25-03 checkpoint F completes local metadata-only HTTP/SDK admission and admission/job/operation status with strict headers/input, current adult dual scope, Origin/CSRF and secret-free projections. Remote entry/physical routes remain unavailable. Next: gateway background dispatch/polling/expiry with retained allocations and key isolation, followed by real approval/storage/game/recovery qualification. See [HTTP metadata handoff](handoffs/F25-http-metadata.md).
