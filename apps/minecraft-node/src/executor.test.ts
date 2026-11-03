@@ -5,9 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
+  deploymentJobView,
   type NodeCommand,
   type NodeExecutionPolicy,
   nodeAgentRequest,
+  nodePollResponse,
   signedNodeCommandReceipt,
 } from "@craftlayer/contracts";
 import {
@@ -17,6 +19,7 @@ import {
   verifyNodeValue,
 } from "@craftlayer/node-protocol";
 import { expect, it } from "vitest";
+import { NodeCommandRunner } from "./command-runner.js";
 import {
   type CommandBroker,
   type ExecutionAuthority,
@@ -548,4 +551,225 @@ it("survives a real process kill after dispatch intent; an operator lock review 
       child.kill("SIGKILL");
       await exited;
     }
+  }));
+
+function deliveryFixture(
+  f: Awaited<ReturnType<typeof setup>>,
+  command: NodeCommand,
+) {
+  let settled = false,
+    posts = 0,
+    polls = 0,
+    fetches = 0;
+  const acknowledgement = (
+    receipt: ReturnType<typeof signedNodeCommandReceipt.parse>,
+    state = receipt.payload.state,
+  ) =>
+    deploymentJobView.parse({
+      ...Object.fromEntries(
+        [
+          "operation_id",
+          "deployment_id",
+          "server_id",
+          "world_id",
+          "node_id",
+          "project_id",
+          "command_hash",
+        ].map((key) => [
+          key,
+          receipt.payload[key as keyof typeof receipt.payload],
+        ]),
+      ),
+      intent_id: randomUUID(),
+      environment_id: randomUUID(),
+      state,
+      receipt_state: receipt.payload.state,
+      lease_expires_at: command.expires_at,
+      created_at: command.issued_at,
+    });
+  const transport = {
+    poll: async () => {
+      polls++;
+      return nodePollResponse.parse({
+        schema_version: 1,
+        purpose: "node.command.poll.response.v1",
+        control_id: f.policy.control_id,
+        organization_id: f.policy.organization_id,
+        project_id: f.policy.project_id,
+        node_id: f.policy.node_id,
+        credential_version: 1,
+        issued_at: command.issued_at,
+        expires_at: command.expires_at,
+        request_hash: "a".repeat(64),
+        jobs: settled
+          ? []
+          : [
+              {
+                operation_id: command.operation_id,
+                command_hash: nodeDigest(command),
+                expires_at: command.expires_at,
+              },
+            ],
+      });
+    },
+    fetch: async () => {
+      fetches++;
+      return f.signed(command);
+    },
+    submitReceipt: async (
+      receipt: ReturnType<typeof signedNodeCommandReceipt.parse>,
+    ) => {
+      settled = true;
+      posts++;
+      return acknowledgement(receipt);
+    },
+  };
+  return {
+    transport,
+    acknowledgement,
+    counts: () => ({ posts, polls, fetches }),
+  };
+}
+it("delivers a persisted receipt after lost settlement acknowledgement and reopen without any expired-command retry", () =>
+  fixture(async (f) => {
+    let executor = f.create();
+    await executor.open();
+    const command = f.make(),
+      d = deliveryFixture(f, command);
+    let fail = true;
+    const transport = {
+      ...d.transport,
+      submitReceipt: async (
+        receipt: ReturnType<typeof signedNodeCommandReceipt.parse>,
+      ) => {
+        const ack = await d.transport.submitReceipt(receipt);
+        if (fail) {
+          fail = false;
+          throw new Error("lost receipt acknowledgement");
+        }
+        return ack;
+      },
+    };
+    await expect(
+      new NodeCommandRunner(transport, executor).tick(),
+    ).rejects.toThrow("lost receipt");
+    expect((await executor.receiptDelivery()).receipts).toHaveLength(1);
+    expect(f.effects()).toBe(1);
+    await executor.close();
+    f.advance(31000);
+    f.revoke();
+    executor = f.create();
+    await executor.open();
+    expect(await new NodeCommandRunner(transport, executor).tick()).toBe(
+      "idle",
+    );
+    expect(await new NodeCommandRunner(transport, executor).tick()).toBe(
+      "idle",
+    );
+    expect(d.counts()).toEqual({ posts: 2, polls: 3, fetches: 1 });
+    expect((await executor.receiptDelivery()).receipts).toEqual([]);
+    expect(f.effects()).toBe(1);
+  }));
+it("delivers retained evidence while durably stopped and never polls or clears the stop", () =>
+  fixture(async (f) => {
+    const executor = f.create();
+    await executor.open();
+    const command = f.make(),
+      receipt = await executor.execute(f.signed(command)),
+      d = deliveryFixture(f, command);
+    await executor.latchStop();
+    expect(await new NodeCommandRunner(d.transport, executor).tick()).toBe(
+      "blocked",
+    );
+    expect(d.counts()).toEqual({ posts: 1, polls: 0, fetches: 0 });
+    expect(await executor.receiptDelivery()).toEqual({
+      receipts: [],
+      blocked: true,
+    });
+    await expect(executor.execute(f.signed(command))).rejects.toThrow(
+      "STOPPED",
+    );
+    expect(receipt.payload.state).toBe("succeeded");
+    expect(f.effects()).toBe(1);
+  }));
+it("retains native uncertainty after successful receipt delivery and refuses contradictory acknowledgements", () =>
+  fixture(async (f) => {
+    let effects = 0;
+    const executor = f.create({
+      broker: {
+        apply: async (_v, guard) => {
+          await guard();
+          effects++;
+          throw new Error("unknown daemon acknowledgement");
+        },
+      },
+    });
+    await executor.open();
+    const command = f.make(),
+      d = deliveryFixture(f, command);
+    const held = {
+      ...d.transport,
+      submitReceipt: async () => {
+        throw new Error("unavailable");
+      },
+    };
+    await expect(new NodeCommandRunner(held, executor).tick()).rejects.toThrow(
+      "unavailable",
+    );
+    const receipt = (await executor.receiptDelivery()).receipts[0];
+    if (!receipt) throw new Error("Receipt missing");
+    expect(receipt.payload.state).toBe("uncertain");
+    for (const changed of [
+      { node_id: randomUUID() },
+      { command_hash: "0".repeat(64) },
+      { state: "issued" },
+      { receipt_state: "succeeded" },
+    ])
+      await expect(
+        executor.acknowledgeReceipt(receipt, {
+          ...d.acknowledgement(receipt),
+          ...changed,
+        }),
+      ).rejects.toThrow("ACK_DENIED");
+    expect((await executor.receiptDelivery()).receipts).toHaveLength(1);
+    expect(await new NodeCommandRunner(d.transport, executor).tick()).toBe(
+      "blocked",
+    );
+    expect(await executor.receiptDelivery()).toEqual({
+      receipts: [],
+      blocked: true,
+    });
+    expect(d.counts()).toEqual({ posts: 1, polls: 1, fetches: 1 });
+    expect(effects).toBe(1);
+  }));
+it("atomically upgrades legacy execution journals while preserving signed receipts, resource fences and durable stop", () =>
+  fixture(async (f) => {
+    let executor = f.create();
+    await executor.open();
+    const command = f.make(),
+      receipt = await executor.execute(f.signed(command));
+    await executor.latchStop();
+    await executor.close();
+    const file = join(f.root, "journal", "execution.json"),
+      legacy = JSON.parse(await readFile(file, "utf8"));
+    legacy.schema_version = 1;
+    for (const record of Object.values(legacy.commands) as {
+      acknowledged_receipt_hash?: string | null;
+    }[])
+      delete record.acknowledged_receipt_hash;
+    await writeFile(file, JSON.stringify(legacy));
+    executor = f.create();
+    await executor.open();
+    const upgraded = JSON.parse(await readFile(file, "utf8"));
+    expect(upgraded).toMatchObject({
+      schema_version: 2,
+      stopped: true,
+      stop_generation: legacy.stop_generation,
+      resources: legacy.resources,
+    });
+    expect(await executor.receiptDelivery()).toEqual({
+      receipts: [receipt],
+      blocked: true,
+    });
+    expect(f.effects()).toBe(1);
   }));

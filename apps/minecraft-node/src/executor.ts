@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import {
+  deploymentJobView,
   type NodeCommand,
   type NodeExecutionPolicy,
   nodeExecutionPolicy,
@@ -101,6 +102,11 @@ export class NodeCommandExecutor {
     });
   }
   #state(state: ExecutionSnapshot, v: NodeCommand, now: number) {
+    this.#journalState(state, now);
+    if (state.stopped || state.stop_generation !== v.stop_generation)
+      deny("NODE_EXECUTION_STOPPED");
+  }
+  #journalState(state: ExecutionSnapshot, now: number) {
     const p = this.#policy;
     if (
       state.node_id !== p.node_id ||
@@ -111,10 +117,91 @@ export class NodeCommandExecutor {
       state.policy_floor !== p.policy_revision
     )
       deny("NODE_EXECUTION_BINDING_DENIED");
-    if (state.stopped || state.stop_generation !== v.stop_generation)
-      deny("NODE_EXECUTION_STOPPED");
-    if (now < state.last_wall_ms) deny("NODE_CLOCK_ROLLBACK");
+    if (!Number.isSafeInteger(now) || now < state.last_wall_ms)
+      deny("NODE_CLOCK_ROLLBACK");
     state.last_wall_ms = now;
+  }
+  async receiptDelivery() {
+    return this.#store.transaction((s) => {
+      this.#journalState(s, this.#now());
+      for (const r of Object.values(s.commands)) {
+        if (
+          r.acknowledged_receipt_hash !== null &&
+          (!r.receipt || r.acknowledged_receipt_hash !== nodeDigest(r.receipt))
+        )
+          deny("NODE_RECEIPT_JOURNAL_DENIED");
+      }
+      const receipts = Object.values(s.commands)
+        .filter((r) => r.receipt && r.acknowledged_receipt_hash === null)
+        .sort((a, b) =>
+          a.command.command_id.localeCompare(b.command.command_id),
+        );
+      for (const r of receipts) {
+        if (
+          r.command.credential_version !== this.#policy.credential_version ||
+          r.command.policy_revision !== this.#policy.policy_revision
+        )
+          deny("NODE_RECEIPT_RECONCILIATION_REQUIRED");
+        if (
+          !r.receipt ||
+          !verifyNodeValue(
+            r.receipt.payload,
+            r.receipt.signature,
+            this.#policy.node_public_key,
+          ) ||
+          r.receipt.payload.command_hash !== r.digest ||
+          nodeDigest(r.command) !== r.digest
+        )
+          deny("NODE_RECEIPT_JOURNAL_DENIED");
+      }
+      return {
+        receipts: receipts
+          .slice(0, 8)
+          .map((r) => signedNodeCommandReceipt.parse(r.receipt)),
+        blocked:
+          !this.#policy.enabled ||
+          s.stopped ||
+          Object.values(s.resources).some((r) => r.unresolved !== null),
+      };
+    });
+  }
+  async acknowledgeReceipt(input: unknown, acknowledgement: unknown) {
+    const receipt = signedNodeCommandReceipt.parse(input),
+      v = receipt.payload,
+      ack = deploymentJobView.parse(acknowledgement),
+      digest = nodeDigest(receipt);
+    return this.#store.transaction((s) => {
+      this.#journalState(s, this.#now());
+      const r = s.commands[v.command_id];
+      if (
+        !r?.receipt ||
+        nodeDigest(r.receipt) !== digest ||
+        v.command_hash !== r.digest ||
+        !verifyNodeValue(v, receipt.signature, this.#policy.node_public_key)
+      )
+        deny("NODE_RECEIPT_ACK_DENIED");
+      for (const key of [
+        "operation_id",
+        "deployment_id",
+        "server_id",
+        "world_id",
+        "project_id",
+        "node_id",
+        "command_hash",
+      ] as const)
+        if (ack[key] !== v[key]) deny("NODE_RECEIPT_ACK_DENIED");
+      if (
+        ack.receipt_state !== v.state ||
+        (ack.state !== v.state && ack.state !== "uncertain")
+      )
+        deny("NODE_RECEIPT_ACK_DENIED");
+      if (
+        r.acknowledged_receipt_hash !== null &&
+        r.acknowledged_receipt_hash !== digest
+      )
+        deny("NODE_RECEIPT_ACK_DENIED");
+      r.acknowledged_receipt_hash = digest;
+    });
   }
   #receipt(
     v: NodeCommand,
@@ -320,6 +407,7 @@ export class NodeCommandExecutor {
         intent_hash: logical,
         state: "prepared",
         receipt: null,
+        acknowledged_receipt_hash: null,
       };
       return null;
     });

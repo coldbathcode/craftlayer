@@ -23,9 +23,14 @@ const record = z.strictObject({
     "uncertain",
   ]),
   receipt: signedNodeCommandReceipt.nullable(),
+  acknowledged_receipt_hash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .nullable()
+    .default(null),
 });
 const snapshot = z.strictObject({
-  schema_version: z.literal(1),
+  schema_version: z.literal(2),
   node_id: z.uuid(),
   organization_id: z.uuid(),
   project_id: z.uuid(),
@@ -53,6 +58,17 @@ const snapshot = z.strictObject({
     .refine((v) => Object.keys(v).length <= 128),
 });
 export type ExecutionSnapshot = z.infer<typeof snapshot>;
+const storedSnapshot = z
+  .union([
+    snapshot,
+    snapshot.extend({
+      schema_version: z.literal(1),
+      commands: z
+        .record(z.uuid(), record.omit({ acknowledged_receipt_hash: true }))
+        .refine((v) => Object.keys(v).length <= 128),
+    }),
+  ])
+  .transform((v) => snapshot.parse({ ...v, schema_version: 2 }));
 const maxBytes = 512 * 1024;
 
 /** Operator-private, bounded, fsynced snapshots. A missing/corrupt old store never resets safety state. */
@@ -76,7 +92,7 @@ export class ExecutionStore {
     try {
       if (created)
         await this.#write({
-          schema_version: 1,
+          schema_version: 2,
           node_id: this.policy.node_id,
           organization_id: this.policy.organization_id,
           project_id: this.policy.project_id,
@@ -123,7 +139,9 @@ export class ExecutionStore {
         stat.size > maxBytes
       )
         throw new Error("NODE_EXECUTION_STORE_NOT_PRIVATE");
-      const value = snapshot.parse(JSON.parse(await file.readFile("utf8")));
+      const value = storedSnapshot.parse(
+        JSON.parse(await file.readFile("utf8")),
+      );
       if (
         value.node_id !== this.policy.node_id ||
         value.organization_id !== this.policy.organization_id ||

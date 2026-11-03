@@ -167,3 +167,9 @@ Next authorized local task: signed node polling/discovery of exact issued job re
 Added optional fixed signed/pinned-mTLS polling for at most one exact issued job reference, with current node/key/scope, policy/heartbeat/stop checks and bounded nonce retention. Node validates controller signature/request digest/scope/lifetime. Discovery cannot issue/renew/dispatch work or bypass fresh original human authority at fetch/permit. Native scratch journey now discovers its job outbound; exact checks are in build log. Installed inventory main/Compose remains unchanged.
 
 Next local checkpoint: bounded node orchestration with durable receipt replay and no blind retry of uncertain effects, then private installed composition and independent approval/real storage/game/recovery sources. Production/family gates remain; no VPS/game/world/EULA action.
+
+## CL-F25-03 checkpoint I — journal-aware node execution and receipt delivery
+
+Added private sequential node runner, bounded durable receipt drain/acknowledgement before discovery and exact command execution. Lost receipt acknowledgement/reopen replays metadata only, including after expiry/requester revocation. Local stop and unresolved intent remain blocking; receipt upload cannot clear uncertainty. Strict local journal v2 preserves/upgrades v1 signed evidence, resources/fences/stops/version floors; older readers require a forward fix, never journal reset. Existing native scratch journey now drops settlement acknowledgement, reopens the executor and drains without recreating resources. Exact checks/publication are in build log.
+
+Next local work: private installed composition/credential recovery and real independent approval/storage/game identity/backup/restore sources; applicable maintenance/review findings remain. No production/family readiness, installed mutable main/Compose, VPS/EULA/world action or Chapter 04 advancement is implied.

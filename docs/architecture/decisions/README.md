@@ -48,3 +48,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0025 — Remote execution authority](0025-remote-execution-authority.md).
 
 - [0026 — Deployment background dispatch](0026-deployment-background-dispatch.md).
+
+- [0027 — Durable node receipt delivery](0027-node-receipt-delivery.md).

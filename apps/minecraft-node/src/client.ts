@@ -302,7 +302,8 @@ export class NodeTransport {
         view.world_id !== v.world_id ||
         view.project_id !== v.project_id ||
         view.node_id !== v.node_id ||
-        view.receipt_state !== v.state
+        view.receipt_state !== v.state ||
+        (view.state !== v.state && view.state !== "uncertain")
       )
         throw new Error("DENIED");
       return view;

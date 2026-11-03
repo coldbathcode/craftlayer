@@ -15,6 +15,7 @@ import {
   BrokerPolicy,
 } from "../../apps/minecraft-node/src/broker-policy.js";
 import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
+import { NodeCommandRunner } from "../../apps/minecraft-node/src/command-runner.js";
 import { CommandTransport } from "../../apps/minecraft-node/src/command-transport.js";
 import { NodeCommandExecutor } from "../../apps/minecraft-node/src/executor.js";
 import { AuthError } from "../../packages/auth/src/index.js";
@@ -1085,7 +1086,26 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       broker,
     });
     await executor.open();
-    const receipt = await executor.execute(command);
+    let receiptPosts = 0;
+    const delivery = {
+      poll: (signal?: AbortSignal) => transport.poll(signal),
+      fetch: (id: string, hash: string, signal?: AbortSignal) =>
+        transport.fetch(id, hash, signal),
+      submitReceipt: async (
+        receipt: Parameters<CommandTransport["submitReceipt"]>[0],
+        signal?: AbortSignal,
+      ) => {
+        const ack = await transport.submitReceipt(receipt, signal);
+        if (++receiptPosts === 1)
+          throw new Error("simulated lost settlement acknowledgement");
+        return ack;
+      },
+    };
+    await expect(
+      new NodeCommandRunner(delivery, executor).tick(),
+    ).rejects.toThrow("lost settlement");
+    const receipt = (await executor.receiptDelivery()).receipts[0];
+    if (!receipt) throw new Error("Durable pending receipt missing");
     expect(receipt.payload.state).toBe("succeeded");
     expect(resources).toHaveLength(2);
     const resource = resources.find((r) => r.kind === "container");
@@ -1102,7 +1122,20 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       specification_matches: true,
       running: false,
     });
-    expect(await executor.execute(command)).toEqual(receipt);
+    await executor.close();
+    executor = new NodeCommandExecutor({
+      directory: join(root, "execution"),
+      policy,
+      signingKey: f.agent.private_key,
+      authority: transport,
+      broker,
+    });
+    await executor.open();
+    expect(await new NodeCommandRunner(delivery, executor).tick()).toBe("idle");
+    expect(receiptPosts).toBe(2);
+    expect((await executor.receiptDelivery()).receipts).toEqual([]);
+    expect(await new NodeCommandRunner(delivery, executor).tick()).toBe("idle");
+    expect(receiptPosts).toBe(2);
     expect(resources).toHaveLength(2);
     const ack = await transport.submitReceipt(receipt);
     expect(ack).toMatchObject({
