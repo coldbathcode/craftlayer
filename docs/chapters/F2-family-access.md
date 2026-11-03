@@ -74,3 +74,5 @@ Contracts/schema/API/SDK and operator instructions for implemented capabilities;
 ## Review checkpoint and next handoff
 
 Review applicable security/recovery and acceptance evidence before authorizing the next phase. Documentation or fake-only proof is not production readiness. Report exact next task and outstanding production/manual gates; never silently cross a phase boundary. Preserve completed original chapters and source inputs.
+
+Local maintenance REV-03/B: the pending-request ceiling now counts 200 unexpired requests/server rather than lifetime history. Expired immutable requests remain, replay keeps current authority and no extra slot, and all responses remain unverified/no access. SQL 0024 adds scoped budget indexes only. This does not complete identity bridge/client compatibility, allowlist or backup/restore tasks; semantic dedupe/archival remain open.

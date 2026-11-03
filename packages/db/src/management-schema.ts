@@ -2,6 +2,7 @@ import {
   boolean,
   char,
   foreignKey,
+  index,
   integer,
   jsonb,
   pgTable,
@@ -69,6 +70,12 @@ export const managementOperations = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [
+    index("management_operations_window").on(
+      t.organizationId,
+      t.environmentId,
+      t.createdAt,
+      t.actorId,
+    ),
     unique().on(t.organizationId, t.id),
     unique().on(t.organizationId, t.serverId, t.id),
     unique().on(t.organizationId, t.actorId, t.kind, t.requestKey),
@@ -127,6 +134,11 @@ export const minecraftIdentityEnrollments = pgTable(
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   },
   (t) => [
+    index("minecraft_identity_enrollments_expiry").on(
+      t.organizationId,
+      t.serverId,
+      t.expiresAt,
+    ),
     unique().on(t.organizationId, t.id),
     unique().on(t.organizationId, t.operationId),
     foreignKey({

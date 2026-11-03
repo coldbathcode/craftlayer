@@ -23,13 +23,13 @@ Environment: macOS arm64, Node 22.23.3/pnpm 10.23.0, Docker 28.2.2, pinned Postg
 
 ## Safety and failure review
 
-Canonical membership/server scope and child ceilings precede pending writes and replay. Strict browser bodies cannot assert UUID/XUID/provenance, web-user binding, paths or commands. SQL rows have forced RLS and composite server/operation/actor FKs; runtime has no update/delete, and pending is the only permitted state. Atomic receipts/audit/reference-only outbox contain no credentials or raw names in audit/queue. A stored request changes no server version/world/allowlist. Expiry is explicit; the 200/server cap and existing operation limits bound retention until a later reviewed purge policy.
+Canonical membership/server scope and child ceilings precede pending writes and replay. Strict browser bodies cannot assert UUID/XUID/provenance, web-user binding, paths or commands. SQL rows have forced RLS and composite server/operation/actor FKs; runtime has no update/delete, and pending is the only permitted state. Atomic receipts/audit/reference-only outbox contain no credentials or raw names in audit/queue. A stored request changes no server version/world/allowlist. Expiry is explicit; the 200 unexpired/server cap and rolling operation budgets bound admission; immutable history still needs a later reviewed retention policy.
 
 The prototype owns a private generated directory and separate Compose namespace/volumes, uses loopback only, and mounts only approved synthetic inventory read-only into API. It has no game connection/socket/world mount. Host launchers reject SSH/TCP Docker contexts and pin the checked local socket. Secrets/browser state are owner-only, ignored and outside Docker builds. Down retains data; no reset/prune/volume-deletion command exists. Rollback is a new reviewed code revert with additive schema/history retained; do not down-migrate/delete records or touch any live world.
 
 ## Performance and user verification
 
-Enrollment pages contain at most 50 rows; each server retains at most 200 requests, with 24-hour expiry and no automatic pruning. Existing twelve actor/environment writes/minute and 10,000 operation ceiling remain. Browser checks cover actual persistence/reload, role differences, captured stale/offline/error states, 390px overflow and keyboard skip/focus; no production load, screen-reader or real-family usability certification.
+Enrollment pages contain at most 50 rows; each server admits at most 200 unexpired pending requests, with 24-hour expiry and no automatic pruning; historical rows remain retained. Existing twelve actor/environment writes/minute and 10,000/environment/rolling-day operation budget remain. Browser checks cover actual persistence/reload, role differences, captured stale/offline/error states, 390px overflow and keyboard skip/focus; no production load, screen-reader or real-family usability certification.
 
 ## Known limitations and unresolved work
 
@@ -43,3 +43,5 @@ CL-F2-01 is still open: authenticated bridge/target-profile receipt trust, actua
 - [x] Chapter/backlog/status/risks/runbooks/handoff reflect incomplete F2 accurately.
 
 Decision: **prototype available for testing; chapter acceptance withheld**. Continue CL-F2-01 within existing local authorization. [Handoff](../delivery/handoffs/F2-prototype.md).
+
+REV-03/B (2026-11-03): isolated `pnpm check` PASS/0 (355 unit cases), `pnpm test:db` PASS/0 (169 cases plus migration proofs through additive budget indexes SQL 0024). Two new real cases preserve expired history and no identity/access while reclaiming admission, retaining active 200 cap/current replay/expiry recovery and all rows. Grants/bridge/allowlist remain unchanged. Semantic dedupe/archival and actual identity/restore gates remain open. [Handoff](../delivery/handoffs/REV-03-enrollment-capacity.md).

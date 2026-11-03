@@ -568,11 +568,16 @@ export class MinecraftControl {
         await this.#admit(c, org, row.environment_id, p.user.id);
         const count = (
           await c.query<{ total: number }>(
-            "select count(*)::int total from minecraft_identity_enrollments where organization_id=$1 and server_id=$2",
-            [org, id],
+            "select count(*)::int total from minecraft_identity_enrollments where organization_id=$1 and server_id=$2 and expires_at>$3",
+            [org, id, new Date(this.#now())],
           )
         ).rows[0];
-        if (!count || count.total >= 200) denied("ENROLLMENT_LIMIT", 429);
+        if (!count || count.total >= 200)
+          throw new AuthError(
+            429,
+            "ENROLLMENT_LIMIT",
+            "Too many pending identity requests for this server. Retry after an existing request expires.",
+          );
         const operation = randomUUID(),
           enrollment = randomUUID(),
           now = new Date(this.#now());

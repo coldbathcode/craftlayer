@@ -931,6 +931,7 @@ async function operationLimitFixture(
     server: string;
     operation: string;
     seed: (count: number, ageMs: number) => Promise<void>;
+    seedEnrollments: (count: number, ageMs: number) => Promise<void>;
     advance: (ms: number) => void;
     observe: (
       key?: string,
@@ -993,6 +994,14 @@ async function operationLimitFixture(
       operation: receipt.operation_id,
       advance: (ms) => {
         now += ms;
+      },
+      seedEnrollments: async (count, age) => {
+        await tx(runtime, org, (c) =>
+          c.query(
+            "with seeded as (insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) select gen_random_uuid(),o.organization_id,o.project_id,o.environment_id,o.server_id,o.actor_id,o.session_id,'identity_enroll',gen_random_uuid(),repeat('a',64),'succeeded',0,$3,$3,$3 from management_operations o cross join generate_series(1,$2) where o.id=$1 returning *) insert into minecraft_identity_enrollments(id,organization_id,project_id,environment_id,server_id,requested_by,operation_id,edition,requested_name,created_at,expires_at) select gen_random_uuid(),organization_id,project_id,environment_id,server_id,actor_id,id,'java','Historical',$3,$3::timestamptz+interval '24 hours' from seeded",
+            [receipt.operation_id, count, new Date(now - age)],
+          ),
+        );
       },
       reads: () => reads,
       seed: async (count, age) => {
@@ -1081,3 +1090,91 @@ it(
     }),
   15000,
 );
+
+it("reclaims expired enrollment capacity without deleting requests or granting identity/access", () =>
+  operationLimitFixture(async (f) => {
+    await f.seedEnrollments(200, 25 * 3600000);
+    const result = await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      { edition: "java", requested_name: "StillPending" },
+      randomUUID(),
+    );
+    expect(result.server_id).toBe(f.server);
+    await tx(runtime, org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select 1 from minecraft_identity_enrollments where server_id=$1",
+            [f.server],
+          )
+        ).rowCount,
+      ).toBe(201);
+      expect(
+        (
+          await c.query(
+            "select state from minecraft_identity_enrollments where id=$1",
+            [result.enrollment_id],
+          )
+        ).rows[0]?.state,
+      ).toBe("pending");
+    });
+    const page = await f.service.identityEnrollments(f.token, org, f.server);
+    expect(page.items.some((r) => r.expired)).toBe(true);
+    expect(
+      page.items.every(
+        (r) =>
+          !r.identity_verified && !r.access_granted && r.state === "pending",
+      ),
+    ).toBe(true);
+    expect(f.reads()).toBe(0);
+    expect(await f.rows()).toBe(202);
+  }));
+it("retains a bounded unexpired enrollment budget, current replay and expiry-based recovery", () =>
+  operationLimitFixture(async (f) => {
+    await f.seedEnrollments(199, 120000);
+    const body = { edition: "bedrock", requested_name: "Pending Family" },
+      key = randomUUID(),
+      result = await f.service.enrollIdentity(
+        f.token,
+        org,
+        f.server,
+        body,
+        key,
+      );
+    expect(
+      await f.service.enrollIdentity(f.token, org, f.server, body, key),
+    ).toEqual(result);
+    await expect(
+      f.service.enrollIdentity(f.token, org, f.server, body, randomUUID()),
+    ).rejects.toMatchObject({
+      status: 429,
+      code: "ENROLLMENT_LIMIT",
+      message: expect.stringContaining("expires"),
+    });
+    f.advance(86400001);
+    const next = await f.service.enrollIdentity(
+      f.token,
+      org,
+      f.server,
+      body,
+      randomUUID(),
+    );
+    expect(next.enrollment_id).not.toBe(result.enrollment_id);
+    await tx(runtime, org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select 1 from minecraft_identity_enrollments where server_id=$1",
+            [f.server],
+          )
+        ).rowCount,
+      ).toBe(201);
+    });
+    expect(
+      (await f.service.operation(f.token, org, result.operation_id)).state,
+    ).toBe("succeeded");
+    expect(f.reads()).toBe(0);
+    expect(await f.rows()).toBe(202);
+  }));

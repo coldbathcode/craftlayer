@@ -191,3 +191,9 @@ Next independent maintenance: REV-03 reclaimable rolling management-operation ad
 Replaced lifetime 10,000 management-operation lockout with a per-environment rolling 24-hour budget, preserving the 12/account/environment/minute limit, current scope/barrier/replay/fence semantics and compatible MANAGEMENT_LIMIT/429. Minute/day messages explain retry. All operation/audit/outbox history stays retained; aging does not settle interrupted work or release infrastructure. Real DB regression seeds old/full-window metadata and proves admission/refusal/replay/expiry/history preservation. Exact checks/publication are in build log and ADR 0028.
 
 REV-03 remains open for enrollment limits/deduplication and audited retention/archival. Next local checkpoint: reclaim expired pending-enrollment capacity without granting identity/access or deleting history. F2/F25 real identity/approval/storage/game/backup/restore/private composition and production gates remain; no live host/world action.
+
+## REV-03 checkpoint B — expired enrollment capacity and lookup indexes
+
+Pending-enrollment admission now counts only unexpired requests against the 200/server budget, preserving current-authority UUID replay, immutable expired history, operation/audit/outbox and false identity/access semantics. ENROLLMENT_LIMIT/429 explains expiry retry. SQL 0024/Drizzle adds scoped range indexes for rolling operation and active enrollment budgets; disposable migration upgrade fixtures include them. Exact checks/publication are in build log and ADR 0028.
+
+REV-03 remains open for semantic deduplication and audited retention/archival. Original runtime CL-03-07 qualification/publication also remains open; it can continue independently of real game-client/host gates. F2/F25 verified identity/access/backups/qualified private composition and production remain gated. No VPS/EULA/game/world action.

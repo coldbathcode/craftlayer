@@ -24,7 +24,7 @@ The parent can inspect two simulated servers, current capture provenance/freshne
 5. Switch organization/world or sign out; prior private data must clear. A new organization can be created through the normal Account UI if you want to explore an empty scope.
 6. Optional metadata-only registration removal requires the exact server name; it retains the synthetic record/history and never stops/deletes a Minecraft container. Re-adopt the same approved source if needed.
 
-Requests are only unresolved names, not authenticated UUID/XUID or web-to-game ownership bindings. They cannot be promoted by browser fields or a `/verify` route. Their 24-hour expiry is visible, and stored history is retained. The preview caps each server at 200 retained requests, pages of 50, and twelve actor/environment writes/minute; no automatic retention purge is implemented yet.
+Requests are only unresolved names, not authenticated UUID/XUID or web-to-game ownership bindings. They cannot be promoted by browser fields or a `/verify` route. Their 24-hour expiry is visible, and stored history is retained. The preview caps each server at 200 unexpired pending requests, pages of 50, and twelve actor/environment writes/minute; no automatic retention purge is implemented yet.
 
 ## Refresh, stop and resume
 

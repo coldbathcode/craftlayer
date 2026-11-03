@@ -114,3 +114,5 @@ Migrations `0005_provider_connections.sql` through `0007_provider_budget_ledger.
 ## Implemented pending identity requests
 
 SQL 0017 and management Drizzle metadata add immutable `minecraft_identity_enrollments`, forced RLS, server/operation/actor tenant FKs and pending-only state. No verified identity/access columns exist. Scoped cursor pages expose bounded metadata with false verification/access flags. Actor/session, UUID replay and atomic audit/outbox reuse the current management guard. Names are resolution requests, never authentication or ownership proof. See [ADR 0018](decisions/0018-game-identity-provenance.md).
+
+REV-03/B / SQL 0024 adds scoped time-range indexes to existing immutable-history management tables for rolling operation and unexpired pending-enrollment budget lookups. Drizzle metadata matches. It changes no rows, grants, RLS, expiry or verified identity/access contract; expired records remain retained. Prior-schema upgrade fixtures apply these indexes only after the owning tables exist (ADR 0028).
