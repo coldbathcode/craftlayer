@@ -15,6 +15,8 @@ import {
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
   signedNodeJobRequest,
+  signedNodePollRequest,
+  signedNodePollResponse,
 } from "@craftlayer/contracts";
 import { canAccess } from "@craftlayer/core";
 import {
@@ -133,6 +135,7 @@ export class DeploymentJobs {
   #public: string;
   #policy: z.infer<typeof optionsPolicy>;
   #lastWall = 0;
+  #pollRequests = new Map<string, number>();
   constructor(
     private readonly options: {
       databaseUrl: string;
@@ -549,8 +552,10 @@ export class DeploymentJobs {
         state: string;
         credential_version: number;
         expires_at: Date;
+        public_key: string;
+        certificate_sha256: string;
       }>(
-        "select n.state,n.credential_version,k.expires_at from minecraft_nodes n join minecraft_node_credentials k on (k.organization_id,k.node_id)=(n.organization_id,n.id) where n.organization_id=$1 and n.project_id=$2 and n.id=$3 and k.version=$4",
+        "select n.state,n.credential_version,k.expires_at,k.public_key,k.certificate_sha256 from minecraft_nodes n join minecraft_node_credentials k on (k.organization_id,k.node_id)=(n.organization_id,n.id) where n.organization_id=$1 and n.project_id=$2 and n.id=$3 and k.version=$4",
         [
           scope.organization_id,
           scope.project_id,
@@ -567,6 +572,101 @@ export class DeploymentJobs {
           r.expires_at.getTime() <= this.#now()))
     )
       deny("DEPLOYMENT_DISPATCH_SCOPE_DENIED", 403);
+    return r;
+  }
+  /** Authenticated discovery is read-only; it never issues a command, permit or lease. */
+  async poll(input: unknown, peer: NodePeer) {
+    const signed = signedNodePollRequest.parse(input),
+      v = signed.payload,
+      scope = deploymentDispatchScope.parse({
+        organization_id: v.organization_id,
+        project_id: v.project_id,
+        node_id: v.node_id,
+        credential_version: v.credential_version,
+      });
+    return this.#tx(scope.organization_id, async (c) => {
+      const node = await this.#placement(c, scope, true),
+        now = this.#now();
+      if (
+        peer.certificate_sha256 !== node.certificate_sha256 ||
+        !Number.isFinite(peer.certificate_expires_at) ||
+        peer.certificate_expires_at <= now ||
+        v.control_id !== nodeDigest(this.#public) ||
+        !verifyNodeValue(v, signed.signature, node.public_key)
+      )
+        deny("NODE_POLL_IDENTITY_DENIED", 401);
+      if (
+        Date.parse(v.issued_at) > now ||
+        Date.parse(v.expires_at) <= now ||
+        Date.parse(v.expires_at) <= Date.parse(v.issued_at) ||
+        Date.parse(v.expires_at) - Date.parse(v.issued_at) > 5000
+      )
+        deny("NODE_POLL_TIME_DENIED", 401);
+      for (const [key, expiry] of this.#pollRequests)
+        if (expiry <= now) this.#pollRequests.delete(key);
+      const prefix = `${v.organization_id}:${v.node_id}:${v.credential_version}:`,
+        key = prefix + v.request_id;
+      if (this.#pollRequests.has(key)) deny("NODE_POLL_REPLAY", 409);
+      if (
+        this.#pollRequests.size >= 1024 ||
+        [...this.#pollRequests.keys()].filter((k) => k.startsWith(prefix))
+          .length >= 16
+      )
+        deny("NODE_POLL_CAPACITY", 429);
+      this.#pollRequests.set(key, Date.parse(v.expires_at));
+      const rows = (
+        await c.query<{ id: string }>(
+          "select id from minecraft_deployment_jobs where organization_id=$1 and project_id=$2 and node_id=$3 and credential_version=$4 and state='issued' and lease_expires_at>$5 order by created_at,id limit 1",
+          [
+            v.organization_id,
+            v.project_id,
+            v.node_id,
+            v.credential_version,
+            new Date(now),
+          ],
+        )
+      ).rows;
+      const jobs: {
+        operation_id: string;
+        command_hash: string;
+        expires_at: string;
+      }[] = [];
+      for (const row of rows) {
+        const job = await this.#job(c, v.organization_id, row.id);
+        this.#active(job);
+        if ((await this.#stop(c, job)) !== job.stop_hash)
+          deny("DEPLOYMENT_STOP_CHANGED");
+        this.#active(job);
+        jobs.push({
+          operation_id: job.id,
+          command_hash: job.command_hash,
+          expires_at: job.lease_expires_at.toISOString(),
+        });
+      }
+      const time = this.#now(),
+        expires = Math.min(
+          time + 5000,
+          Date.parse(v.expires_at),
+          node.expires_at.getTime(),
+          peer.certificate_expires_at,
+          ...jobs.map((j) => Date.parse(j.expires_at)),
+        );
+      if (expires <= time) deny("NODE_POLL_TIME_DENIED", 401);
+      const payload = {
+        ...scope,
+        schema_version: 1 as const,
+        purpose: "node.command.poll.response.v1" as const,
+        control_id: nodeDigest(this.#public),
+        request_hash: nodeDigest(v),
+        jobs,
+        issued_at: new Date(time).toISOString(),
+        expires_at: new Date(expires).toISOString(),
+      };
+      return signedNodePollResponse.parse({
+        payload,
+        signature: signNodeValue(payload, this.options.controlPrivateKey),
+      });
+    });
   }
   /** Private metadata issuer only. Each reference still passes sealed current authority/qualification. */
   async dispatchPending(

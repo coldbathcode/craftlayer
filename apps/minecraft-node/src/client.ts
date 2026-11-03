@@ -4,12 +4,15 @@ import {
   deploymentJobView,
   type NodeAgentRequest,
   type NodeJobRequest,
+  type NodePollRequest,
   nodeAgentRequest,
   nodeJobRequest,
+  nodePollRequest,
   type SignedNodeCommandReceipt,
   signedNodeCommand,
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
+  signedNodePollResponse,
   signedNodeResponse,
 } from "@craftlayer/contracts";
 import {
@@ -92,7 +95,8 @@ export class NodeTransport {
       | "/node/v1/enroll"
       | "/node/v1/heartbeat"
       | "/node/v1/commands/exchange"
-      | "/node/v1/commands/receipt",
+      | "/node/v1/commands/receipt"
+      | "/node/v1/commands/poll",
     body: string,
     signal?: AbortSignal,
   ) {
@@ -179,6 +183,54 @@ export class NodeTransport {
       );
       req.end(body);
     });
+  }
+  async poll(input: NodePollRequest, signal?: AbortSignal) {
+    const payload = nodePollRequest.parse(input);
+    try {
+      const raw = await this.#post(
+          "/node/v1/commands/poll",
+          JSON.stringify({
+            payload,
+            signature: signNodeValue(payload, this.config.private_key),
+          }),
+          signal,
+        ),
+        signed = signedNodePollResponse.parse(raw),
+        v = signed.payload,
+        now = Date.now();
+      assertNodeTime(v.issued_at, v.expires_at, now);
+      if (
+        Date.parse(v.issued_at) > now ||
+        Date.parse(v.expires_at) - Date.parse(v.issued_at) > 5000 ||
+        Date.parse(v.expires_at) > Date.parse(payload.expires_at) ||
+        v.request_hash !== nodeDigest(payload) ||
+        !verifyNodeValue(v, signed.signature, this.config.control_public_key)
+      )
+        throw new Error("DENIED");
+      for (const key of [
+        "organization_id",
+        "project_id",
+        "node_id",
+        "credential_version",
+        "control_id",
+      ] as const)
+        if (v[key] !== payload[key]) throw new Error("DENIED");
+      if (
+        v.control_id !== nodeDigest(this.config.control_public_key) ||
+        v.jobs.some(
+          (j) =>
+            Date.parse(j.expires_at) <= now ||
+            Date.parse(v.expires_at) > Date.parse(j.expires_at),
+        )
+      )
+        throw new Error("DENIED");
+      return v;
+    } catch {
+      throw new NodeTransportFailure(
+        "NODE_POLL_RESPONSE_UNAVAILABLE_OR_DENIED",
+        false,
+      );
+    }
   }
   /** Separate private command library only; inventory entrypoint never calls these methods. */
   async job(input: NodeJobRequest, signal?: AbortSignal) {

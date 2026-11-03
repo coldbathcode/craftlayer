@@ -7,6 +7,8 @@ import {
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
   signedNodeJobRequest,
+  signedNodePollRequest,
+  signedNodePollResponse,
   signedNodeRequest,
   signedNodeResponse,
 } from "@craftlayer/contracts";
@@ -24,7 +26,7 @@ import {
 /** Separate private mTLS listener. No browser/cookie authentication or Docker access. */
 export async function buildNodeAgentApp(options: {
   control: Pick<NodeControl, "exchange">;
-  jobs?: Pick<DeploymentJobs, "exchange" | "recordReceipt">;
+  jobs?: Pick<DeploymentJobs, "exchange" | "recordReceipt" | "poll">;
   key: Buffer | string;
   cert: Buffer | string;
   ca: Buffer | string;
@@ -86,6 +88,16 @@ export async function buildNodeAgentApp(options: {
   }
   const jobs = options.jobs;
   if (jobs) {
+    app.post(
+      "/node/v1/commands/poll",
+      {
+        schema: {
+          body: signedNodePollRequest,
+          response: { 200: signedNodePollResponse },
+        },
+      },
+      (r) => jobs.poll(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
     app.post(
       "/node/v1/commands/exchange",
       {

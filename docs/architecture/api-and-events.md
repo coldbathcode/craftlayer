@@ -105,3 +105,5 @@ F1 local read-only management routes/OpenAPI 3.1 and schema-validated SDK method
 
 
 CL-F25-03/F adds local `POST /servers/provision/admissions`, `GET /servers/provision/admissions/:id` and `GET /servers/provision/jobs/:id` under `/api/v1`; `/operations/:id` resolves admission/job projections without falling through authorization denials. The SDK validates safe projections and OpenAPI documents required scope/idempotency headers. This is sealed-authority metadata, not a public provision command or independent approval. [Controller runbook](../development/deployment-jobs.md) records exact input, permissions, expiry and absent execution/remote-entry gates.
+
+CL-F25-03/H adds only optional private node `POST /node/v1/commands/poll`, separate from `/api/v1` browser APIs/OpenAPI. Strict signed read-only node request/response purposes bind current node/certificate/control/scope and nonce digest for at most five seconds. Discovery carries at most one redacted job reference and grants no effect permission; fetch and permits retain current sealed-authority checks (ADR 0026).

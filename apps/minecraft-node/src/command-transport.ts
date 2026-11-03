@@ -76,6 +76,25 @@ export class CommandTransport implements ExecutionAuthority {
     this.#command(signed.payload);
     return signed;
   }
+  poll(signal?: AbortSignal) {
+    const p = this.#policy,
+      now = Date.now();
+    return this.#transport.poll(
+      {
+        schema_version: 1,
+        purpose: "node.command.poll.v1",
+        control_id: p.control_id,
+        organization_id: p.organization_id,
+        project_id: p.project_id,
+        node_id: p.node_id,
+        credential_version: p.credential_version,
+        request_id: randomUUID(),
+        issued_at: new Date(now).toISOString(),
+        expires_at: new Date(now + 5000).toISOString(),
+      },
+      signal,
+    );
+  }
   async authorize(
     command: Readonly<NodeCommand>,
     nonce: string,

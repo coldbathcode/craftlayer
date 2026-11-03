@@ -21,6 +21,7 @@ import { AuthError } from "../../packages/auth/src/index.js";
 import {
   signedNodeCommand,
   signedNodeCommandPermit,
+  signedNodePollResponse,
 } from "../../packages/contracts/src/index.js";
 import {
   DeploymentAdmissions,
@@ -879,6 +880,13 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
     const linked = await admissions.get(f.adult, f.org, admitted.operation_id);
     if (!linked.job_id) throw new Error("Background issuance missing");
     const job = await admissions.job(f.adult, f.org, linked.job_id);
+    const discovered = (await transport.poll()).jobs[0];
+    expect(discovered).toEqual({
+      operation_id: job.operation_id,
+      command_hash: job.command_hash,
+      expires_at: job.lease_expires_at,
+    });
+    if (!discovered) throw new Error("Node discovery missing");
     for (const wrong of [
       { ...connection, cert: "", key: "" },
       {
@@ -887,13 +895,17 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         key: await read("other.key"),
       },
       { ...connection, server_certificate_sha256: "0".repeat(64) },
-    ])
+    ]) {
+      await expect(
+        new CommandTransport({ connection: wrong, policy }).poll(),
+      ).rejects.toThrow();
       await expect(
         new CommandTransport({ connection: wrong, policy }).fetch(
           job.operation_id,
           job.command_hash,
         ),
       ).rejects.toThrow();
+    }
     await expect(
       jobs.prepare(
         f.adult,
@@ -1010,7 +1022,10 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         })
       ).status,
     ).toBe(401);
-    const command = await transport.fetch(job.operation_id, job.command_hash),
+    const command = await transport.fetch(
+        discovered.operation_id,
+        discovered.command_hash,
+      ),
       v = command.payload,
       image = JSON.parse(
         await readFile(
@@ -1095,6 +1110,7 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       receipt_state: "succeeded",
     });
     expect(await transport.submitReceipt(receipt)).toEqual(ack);
+    expect((await transport.poll()).jobs).toEqual([]);
     expect(
       await admissions.get(f.adult, f.org, admitted.operation_id),
     ).toMatchObject({ job_id: job.operation_id, effects: "metadata_only" });
@@ -1117,6 +1133,12 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
         ...connection,
         url: `https://127.0.0.1:${a.port}/`,
       });
+      await expect(
+        new CommandTransport({
+          connection: { ...connection, url: `https://127.0.0.1:${a.port}/` },
+          policy,
+        }).poll(),
+      ).rejects.toThrow();
       await expect(
         readOnlyTransport.job(
           f.request(job).payload as Parameters<NodeTransport["job"]>[0],
@@ -1895,6 +1917,7 @@ it("keeps expired HTTP admissions historical, remote management blocked and brow
         expect(denied.json().error.code).toBe("MANAGEMENT_REMOTE_UNQUALIFIED");
       }
       for (const target of [
+        "/node/v1/commands/poll",
         "/node/v1/commands/exchange",
         "/node/v1/commands/receipt",
         "/api/v1/servers/provision/jobs",
@@ -2230,3 +2253,261 @@ it("sweeps expired signed jobs once after actor revocation, retains allocation a
       await wrong.close();
     }
   }));
+
+function pollRequest(
+  f: Awaited<ReturnType<typeof setup>>,
+  changes: Record<string, unknown> = {},
+) {
+  const payload = {
+    schema_version: 1,
+    purpose: "node.command.poll.v1",
+    control_id: nodeDigest(f.control.public_key),
+    organization_id: f.org,
+    project_id: f.project,
+    node_id: f.node,
+    credential_version: 1,
+    request_id: randomUUID(),
+    issued_at: new Date(f.now()).toISOString(),
+    expires_at: new Date(f.now() + 5000).toISOString(),
+    ...changes,
+  };
+  return { payload, signature: signNodeValue(payload, f.agent.private_key) };
+}
+it("discovers only an exact signed assigned job reference and retires discovery after settlement without issuing another command", () =>
+  fixture(async (f) => {
+    expect((await f.jobs.poll(pollRequest(f), f.peer)).payload.jobs).toEqual(
+      [],
+    );
+    const job = await f.prepare(),
+      request = pollRequest(f),
+      response = signedNodePollResponse.parse(
+        await f.jobs.poll(request, f.peer),
+      );
+    expect(
+      verifyNodeValue(
+        response.payload,
+        response.signature,
+        f.control.public_key,
+      ),
+    ).toBe(true);
+    expect(response.payload.request_hash).toBe(nodeDigest(request.payload));
+    expect(response.payload.jobs).toEqual([
+      {
+        operation_id: job.operation_id,
+        command_hash: job.command_hash,
+        expires_at: job.lease_expires_at,
+      },
+    ]);
+    expect(Object.keys(response.payload.jobs[0] ?? {}).sort()).toEqual([
+      "command_hash",
+      "expires_at",
+      "operation_id",
+    ]);
+    await expect(f.jobs.poll(request, f.peer)).rejects.toMatchObject({
+      code: "NODE_POLL_REPLAY",
+    });
+    const command = signedNodeCommand.parse(
+      await f.jobs.exchange(f.request(job), f.peer),
+    );
+    await f.jobs.recordReceipt(f.receipt(command, "not_dispatched"), f.peer);
+    expect((await f.jobs.poll(pollRequest(f), f.peer)).payload.jobs).toEqual(
+      [],
+    );
+    await h.tx(h.runtime, f.org, async (c) => {
+      expect(
+        (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+      ).toBe(1);
+      expect(
+        (await c.query("select state from minecraft_reservations")).rows[0]
+          ?.state,
+      ).toBe("allocated");
+    });
+  }));
+it("denies forged, foreign, expired or wrong-certificate discovery and cannot turn a node hint into revoked human authority", () =>
+  fixture(async (f) => {
+    const job = await f.prepare();
+    for (const changes of [
+      { control_id: "0".repeat(64) },
+      { organization_id: f.foreignOrg },
+      { project_id: randomUUID() },
+      { node_id: randomUUID() },
+      { credential_version: 2 },
+      { issued_at: new Date(f.now() + 1).toISOString() },
+      { expires_at: new Date(f.now()).toISOString() },
+      { expires_at: new Date(f.now() + 5001).toISOString() },
+      { purpose: "node.command.fetch.v1" },
+      { job_id: job.operation_id },
+      { command: "start" },
+    ])
+      await expect(
+        f.jobs.poll(pollRequest(f, changes), f.peer),
+      ).rejects.toThrow();
+    const valid = pollRequest(f);
+    await expect(
+      f.jobs.poll({ ...valid, signature: "A".repeat(86) }, f.peer),
+    ).rejects.toMatchObject({ code: "NODE_POLL_IDENTITY_DENIED" });
+    await expect(
+      f.jobs.poll(valid, { ...f.peer, certificate_sha256: "0".repeat(64) }),
+    ).rejects.toMatchObject({ code: "NODE_POLL_IDENTITY_DENIED" });
+    await expect(
+      f.jobs.poll(valid, { ...f.peer, certificate_expires_at: f.now() }),
+    ).rejects.toMatchObject({ code: "NODE_POLL_IDENTITY_DENIED" });
+    expect((await f.jobs.poll(valid, f.peer)).payload.jobs).toHaveLength(1);
+    await h.tx(h.identity, f.org, (c) =>
+      c.query("update sessions set revoked_at=now() where token_hash=$1", [
+        createHash("sha256").update(f.adult).digest("hex"),
+      ]),
+    );
+    expect(
+      (await f.jobs.poll(pollRequest(f), f.peer)).payload.jobs,
+    ).toHaveLength(1);
+    await expect(f.jobs.exchange(f.request(job), f.peer)).rejects.toMatchObject(
+      { code: "GRANT_DENIED" },
+    );
+    await h.tx(h.runtime, f.org, (c) =>
+      c.query(
+        "update minecraft_nodes set state='revoked',version=version+1 where id=$1",
+        [f.node],
+      ),
+    );
+    await expect(f.jobs.poll(pollRequest(f), f.peer)).rejects.toMatchObject({
+      code: "DEPLOYMENT_DISPATCH_SCOPE_DENIED",
+    });
+  }));
+it("bounds read-only discovery nonce retention and respects current stop epochs and command expiry", () =>
+  fixture(async (f) => {
+    const job = await f.prepare();
+    for (let n = 0; n < 16; n++) await f.jobs.poll(pollRequest(f), f.peer);
+    await expect(f.jobs.poll(pollRequest(f), f.peer)).rejects.toMatchObject({
+      code: "NODE_POLL_CAPACITY",
+    });
+    f.advance(5001);
+    expect(
+      (await f.jobs.poll(pollRequest(f), f.peer)).payload.jobs,
+    ).toHaveLength(1);
+    await h.tx(h.runtime, f.org, async (c) => {
+      await c.query("select set_config('app.runtime_internal','enabled',true)");
+      await c.query(
+        "insert into runtime_stop_latches(kind,scope_id,organization_id,epoch,latched,operation_id,reason) values('environment',$1,$2,1,true,$3,'Poll stop')",
+        [f.environment, f.org, randomUUID()],
+      );
+    });
+    await expect(f.jobs.poll(pollRequest(f), f.peer)).rejects.toMatchObject({
+      code: "STOP_LATCHED",
+    });
+    await h.tx(h.runtime, f.org, async (c) => {
+      await c.query("select set_config('app.runtime_internal','enabled',true)");
+      await c.query(
+        "update runtime_stop_latches set latched=false,epoch=epoch+1 where kind='environment' and scope_id=$1",
+        [f.environment],
+      );
+    });
+    await expect(f.jobs.poll(pollRequest(f), f.peer)).rejects.toMatchObject({
+      code: "DEPLOYMENT_STOP_CHANGED",
+    });
+    f.advance(25000);
+    expect((await f.jobs.poll(pollRequest(f), f.peer)).payload.jobs).toEqual(
+      [],
+    );
+    await h.tx(h.runtime, f.org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select lease_expires_at,state from minecraft_deployment_jobs",
+          )
+        ).rows[0],
+      ).toMatchObject({
+        state: "issued",
+        lease_expires_at: new Date(job.lease_expires_at),
+      });
+    });
+  }));
+
+it("rejects valid-TLS poll responses with altered signer, scope, nonce binding or lifetime", async () => {
+  const root = await mkdtemp(join(tmpdir(), "craftlayer-poll-proof-")),
+    pki = join(root, "pki"),
+    info = await createNodeFixture(pki),
+    read = (name: string) => readFile(join(pki, name), "utf8"),
+    f = await setup({
+      fingerprint: info.certificate_sha256,
+      control: nodePrivateKey(await read("control.key")),
+      agent: nodePrivateKey(await read("agent.key")),
+    });
+  let mode = "valid";
+  const app = await buildNodeAgentApp({
+    control: f.nodes,
+    jobs: {
+      exchange: (input, peer, signal) => f.jobs.exchange(input, peer, signal),
+      recordReceipt: (input, peer) => f.jobs.recordReceipt(input, peer),
+      poll: async (input) => {
+        const v = input as ReturnType<typeof pollRequest>,
+          p = v.payload,
+          now = Date.now(),
+          payload = {
+            schema_version: 1 as const,
+            purpose: "node.command.poll.response.v1" as const,
+            control_id: nodeDigest(f.control.public_key),
+            organization_id: f.org,
+            project_id: f.project,
+            node_id: mode === "scope" ? randomUUID() : f.node,
+            credential_version: 1,
+            request_hash: mode === "nonce" ? "0".repeat(64) : nodeDigest(p),
+            jobs: [],
+            issued_at: new Date(now).toISOString(),
+            expires_at: new Date(
+              now + (mode === "lifetime" ? 6000 : 1000),
+            ).toISOString(),
+          };
+        return {
+          payload,
+          signature: signNodeValue(
+            payload,
+            mode === "signer"
+              ? generateNodeKey().private_key
+              : f.control.private_key,
+          ),
+        };
+      },
+    },
+    key: await read("server.key"),
+    cert: await read("server.crt"),
+    ca: await read("ca.crt"),
+  });
+  try {
+    const address = await app.listen({ host: "127.0.0.1", port: 0 }),
+      transport = new CommandTransport({
+        connection: {
+          url: new URL("/", address).href,
+          ca: await read("ca.crt"),
+          cert: await read("client.crt"),
+          key: await read("client.key"),
+          private_key: f.agent.private_key,
+          control_public_key: f.control.public_key,
+          server_certificate_sha256: info.server_certificate_sha256,
+        },
+        policy: {
+          schema_version: 1,
+          organization_id: f.org,
+          project_id: f.project,
+          node_id: f.node,
+          credential_version: 1,
+          control_id: nodeDigest(f.control.public_key),
+          control_public_key: f.control.public_key,
+          node_public_key: f.agent.public_key,
+          policy_revision: 1,
+          policy_hash: f.config.policy,
+          enabled: true,
+          allowed_actions: ["provision"],
+        },
+      });
+    expect((await transport.poll()).jobs).toEqual([]);
+    for (mode of ["signer", "scope", "nonce", "lifetime"])
+      await expect(transport.poll()).rejects.toThrow("NODE_POLL_RESPONSE");
+  } finally {
+    await app.close();
+    await f.jobs.close();
+    await f.nodes.close();
+    await f.ledger.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

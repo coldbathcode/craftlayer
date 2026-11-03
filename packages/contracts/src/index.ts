@@ -21,6 +21,7 @@ export * from "./identity.js";
 export * from "./minecraft.js";
 export * from "./minecraft-identity.js";
 export * from "./node-execution.js";
+export * from "./node-poll.js";
 export * from "./node-reservations.js";
 export * from "./nodes.js";
 export * from "./providers.js";

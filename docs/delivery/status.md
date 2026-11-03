@@ -161,3 +161,9 @@ Verification and publication are recorded in the latest [build-log entry](build-
 Added private sequential dispatcher from immutable scoped PostgreSQL authority outbox, bounded eight-item pages/cursor fairness, current sealed-authority issuance and denial-only expiry with retained allocations. Reopen/duplicate scans rely on unique job links and cannot renew/retry physical commands. Expiry verifies controller signatures and can conservatively deny overdue work after actor revocation; late evidence cannot clear uncertainty. No new schema or installed main/Compose activation. Real scratch DB/TLS/Redis composition now starts with the dispatcher; exact checks/publication are in build log.
 
 Next authorized local task: signed node polling/discovery of exact issued job references, then private composition/credential lifecycle and real approval/storage/game/recovery qualification. F2/F25 production and family gates remain open; no VPS/game/world/EULA action. Preserved runtime/review edits remain excluded.
+
+## CL-F25-03 checkpoint H — signed node discovery
+
+Added optional fixed signed/pinned-mTLS polling for at most one exact issued job reference, with current node/key/scope, policy/heartbeat/stop checks and bounded nonce retention. Node validates controller signature/request digest/scope/lifetime. Discovery cannot issue/renew/dispatch work or bypass fresh original human authority at fetch/permit. Native scratch journey now discovers its job outbound; exact checks are in build log. Installed inventory main/Compose remains unchanged.
+
+Next local checkpoint: bounded node orchestration with durable receipt replay and no blind retry of uncertain effects, then private installed composition and independent approval/real storage/game/recovery sources. Production/family gates remain; no VPS/game/world/EULA action.
