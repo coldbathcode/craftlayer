@@ -40,6 +40,7 @@ export const organizationPermissions = [
   "research:execute",
   "audit:read",
 ] as const;
+export type OrganizationPermission = (typeof organizationPermissions)[number];
 export const instancePermissions = [
   "instance:manage",
   "organization:create",
@@ -138,10 +139,10 @@ export const rolePermissions = {
     "mission:cancel",
     "stop:request",
   ],
-} as const;
+} as const satisfies Record<string, readonly OrganizationPermission[]>;
 export type RoleName = keyof typeof rolePermissions;
 export type Permission =
-  | (typeof organizationPermissions)[number]
+  | OrganizationPermission
   | (typeof instancePermissions)[number];
 export const childPermissions: readonly string[] = rolePermissions.child;
 export const builderDelegatedPermissions = [
@@ -151,4 +152,4 @@ export const builderDelegatedPermissions = [
   "mission:cancel",
   "preset:launch",
   "stop:request",
-] as const;
+] as const satisfies readonly OrganizationPermission[];

@@ -73,3 +73,5 @@ Chromium desktop and a 390×844 mobile child viewport exercise real HTTP and ind
 - [x] Docs/backlog/status/ADRs updated consistently.
 
 Decision: **pending owner review**, not independent security certification. Next task is **CL-02-01 provider/pricing contracts**, subject to Chapter 02 authorization. Read the [handoff](../delivery/handoffs/01-identity-and-rbac.md) and current status first. Every future build step must continue to update plans, commit, push `origin main` and verify synchronization.
+
+REV-07 follow-up (2026-11-03): canonical organization literals constrain role/delegation constants; real migrated permission IDs/built-in pairs exactly match TypeScript. Isolated `pnpm check` PASS/0 (355 unit cases) and `pnpm test:db` PASS/0 (165 cases plus migration proofs). No permission/default/child policy or historical migration changed; separate child own/preset restriction remains open. [Handoff](../delivery/handoffs/REV-07-permission-registry.md).

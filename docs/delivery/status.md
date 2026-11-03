@@ -179,3 +179,9 @@ Next local work: private installed composition/credential recovery and real inde
 Removed the misleading capture-time-updated notice. Observe now reads operation/current server projection under existing authority and reports unchanged source time, current fresh/stale/unavailable status and actual captured timestamp. A successful read does not fabricate freshness; failed/revoked readback cannot announce success. Existing generation guards remain. Production-image browser regression covers fixed stale capture then fresh capture; exact evidence/publication is in build log. Historical operation projections remain unchanged; this is current authorized readback, not a versioned observation-history feature.
 
 Next independent maintenance: REV-07 permission registry typing/migration parity. F2/F25 private composition/real approval/identity/storage/backup/restore and production gates remain open; no live host/game/world action.
+
+## REV-07 checkpoint — typed permissions and migration parity
+
+Canonical organization permissions now constrain built-in role/delegation literals at compile time. A real DB regression compares exact migrated permission IDs and built-in role pairs with TypeScript, including the prior-schema-upgraded management fixture. No permission/default role/child policy or historical migration changed. Exact checks/publication are in build log. This detects drift; the separate child own/preset-mission and other security findings remain open.
+
+Next independent maintenance: REV-03 reclaimable rolling management-operation admission limits without deleting audit/history. F2/F25 real client/approval/storage/game/recovery and private installed composition remain incomplete; production/VPS/world operations stay gated.

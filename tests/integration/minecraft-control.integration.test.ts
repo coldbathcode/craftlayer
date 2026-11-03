@@ -4,6 +4,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp } from "../../apps/api/src/app.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import type { InventoryTarget } from "../../packages/contracts/src/minecraft.js";
+import {
+  instancePermissions,
+  organizationPermissions,
+  rolePermissions,
+} from "../../packages/core/src/index.js";
 import { MinecraftControl } from "../../packages/minecraft-control/src/index.js";
 
 const identityUrl = process.env.TEST_MANAGEMENT_IDENTITY_DATABASE_URL;
@@ -161,6 +166,26 @@ afterAll(async () => {
   await runtime.end();
 });
 describe("Minecraft registry tenant and operation boundary", () => {
+  it("matches the typed permission and built-in role registry to actual fresh/upgraded migration seeds", async () => {
+    const [permissions, roles] = await Promise.all([
+      identity.query<{ id: string }>("select id from permissions order by id"),
+      identity.query<{ role_name: string; permission: string }>(
+        "select role_name,permission from built_in_role_permissions",
+      ),
+    ]);
+    expect(permissions.rows.map((p) => p.id)).toEqual(
+      [...organizationPermissions, ...instancePermissions].sort(),
+    );
+    expect(
+      roles.rows.map((r) => `${r.role_name}|${r.permission}`).sort(),
+    ).toEqual(
+      Object.entries(rolePermissions)
+        .flatMap(([role, values]) =>
+          values.map((permission) => `${role}|${permission}`),
+        )
+        .sort(),
+    );
+  });
   it("upgrades an existing tenant role and removes migration-only discovery policy", async () => {
     await tx(identity, "00000000-0000-4000-8000-00000000f101", async (c) => {
       const rows = (

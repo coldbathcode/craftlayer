@@ -55,3 +55,9 @@ Organization lists expose only authenticated active memberships. Membership/role
 Run `pnpm check`, `pnpm build`, `pnpm test:db`, `pnpm test:e2e`, `pnpm test:identity-ui` and `pnpm test:offline`. The identity browser command provisions and removes its own random-port installation, including test volumes and generated images. Never run its fixtures against a personal installation. See the chapter review for exact executed results and remaining limitations.
 
 For a local credential-value comparison against source and public bundles, run `node scripts/check-local-secrets.mjs` after setup/build. It reads values in memory and prints only a pass/fail and file count. This supplements public-contract and log-canary checks; it is not a general-purpose credential scanner.
+
+## Permission registry drift guard — REV-07
+
+Canonical organization permission literals now type-check built-in role and builder-delegation constants with `satisfies`; instance permissions remain a separate union. Literal role names and readonly tuples remain inferred. Existing role/child/delegation values are unchanged. `pnpm test:db` includes an exact comparison of all migrated SQL permission IDs and built-in role/permission pairs against TypeScript in the disposable prior-schema-upgraded management database. Fresh migration databases still run the full suites. A future permission/role change must update an additive migration and the canonical registry together; never rewrite historical migrations or widen grants simply to satisfy the test.
+
+This catches vocabulary/seed drift, not correctness of the intended policy. The separate child own/preset-mission restrictions and other review findings remain open.

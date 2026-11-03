@@ -122,3 +122,5 @@ Fill the chapter review with implementation summary, task/requirement mapping, c
 Complete the authorized scope before asking for the next chapter. Default chapter-by-chapter authorization follows the blueprint; an explicit user instruction authorizing multiple chapters overrides that default. Use [the handoff template](../templates/agent-handoff.md) so the next session can resume without reconstructing context.
 
 Final checkpoint: all seven tasks are verified; see [identity handoff](../delivery/handoffs/01-identity-and-rbac.md). Chapter 02 requires authorization before CL-02-01.
+
+Local maintenance REV-07 strengthens CL-01-01 verification: canonical organization permission literals constrain built-in role/delegation constants at compile time, and real migrated SQL permission/role seeds must exactly match TypeScript. Existing permission values and policy behavior remain; this does not close the separate child mission-control finding. Exact checks are in the current build log.
