@@ -918,10 +918,19 @@ export function ServerConsole() {
                                 selected.version,
                                 crypto.randomUUID(),
                               );
-                              const op = await api.operation(r.operation_id);
-                              return op.state === "succeeded"
-                                ? "Observation recorded. Capture time updated where supported."
-                                : "Observation could not be updated. The prior snapshot is preserved.";
+                              const [op, current] = await Promise.all([
+                                api.operation(r.operation_id),
+                                api.get(selected.id),
+                              ]);
+                              if (op.state !== "succeeded")
+                                return "Observation could not be updated. The prior snapshot is preserved.";
+                              const capture = current.observation;
+                              if (!capture)
+                                return "Source read completed. No observation is available.";
+                              const unchanged =
+                                selected.observation?.observed_at ===
+                                capture.observed_at;
+                              return `Source read completed. ${unchanged ? "Source capture time unchanged. " : ""}Latest observation is ${capture.freshness}. Last observed ${when(capture.observed_at)}.`;
                             })
                           }
                         >

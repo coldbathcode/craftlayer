@@ -66,3 +66,5 @@ Local evidence: [F1 review](../reviews/F1-control-plane.md), [handoff](../delive
 ## Review checkpoint and next handoff
 
 Review applicable security/recovery and acceptance evidence before authorizing the next phase. Documentation or fake-only proof is not production readiness. Report exact next task and outstanding production/manual gates; never silently cross a phase boundary. Preserve completed original chapters and source inputs.
+
+Local follow-up REV-04: the Observe notice now derives from current authorized readback, reports unchanged source time and actual freshness/timestamp, and never advances a static capture. Production-image browser regression covers unchanged stale and newly captured fresh observations. This does not close remote/private-entry/MFA or game/family release gates; see the current build log.

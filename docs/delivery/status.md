@@ -173,3 +173,9 @@ Next local checkpoint: bounded node orchestration with durable receipt replay an
 Added private sequential node runner, bounded durable receipt drain/acknowledgement before discovery and exact command execution. Lost receipt acknowledgement/reopen replays metadata only, including after expiry/requester revocation. Local stop and unresolved intent remain blocking; receipt upload cannot clear uncertainty. Strict local journal v2 preserves/upgrades v1 signed evidence, resources/fences/stops/version floors; older readers require a forward fix, never journal reset. Existing native scratch journey now drops settlement acknowledgement, reopens the executor and drains without recreating resources. Exact checks/publication are in build log.
 
 Next local work: private installed composition/credential recovery and real independent approval/storage/game identity/backup/restore sources; applicable maintenance/review findings remain. No production/family readiness, installed mutable main/Compose, VPS/EULA/world action or Chapter 04 advancement is implied.
+
+## REV-04 checkpoint — truthful observation freshness
+
+Removed the misleading capture-time-updated notice. Observe now reads operation/current server projection under existing authority and reports unchanged source time, current fresh/stale/unavailable status and actual captured timestamp. A successful read does not fabricate freshness; failed/revoked readback cannot announce success. Existing generation guards remain. Production-image browser regression covers fixed stale capture then fresh capture; exact evidence/publication is in build log. Historical operation projections remain unchanged; this is current authorized readback, not a versioned observation-history feature.
+
+Next independent maintenance: REV-07 permission registry typing/migration parity. F2/F25 private composition/real approval/identity/storage/backup/restore and production gates remain open; no live host/game/world action.

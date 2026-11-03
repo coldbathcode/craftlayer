@@ -138,6 +138,16 @@ test("isolated parent dashboard observes without game controls and clears revoke
   await expect(
     page.getByText("adopted read only", { exact: true }),
   ).toBeVisible();
+  // Re-reading a fixed stale capture must not imply the source timestamp advanced.
+  await page.getByRole("button", { name: "Observe approved source" }).click();
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "Source capture time unchanged. Latest observation is stale.",
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".server-detail-heading .server-state")).toHaveText(
+    "Stale observation",
+  );
   await expect(
     page.getByRole("button", {
       name: /^(Start|Stop|Restart|Restore|Create server)$/i,
@@ -155,8 +165,13 @@ test("isolated parent dashboard observes without game controls and clears revoke
     "Observed online",
   );
   await expect(
-    page.getByText("observation recorded", { exact: true }),
+    page
+      .getByRole("status")
+      .filter({ hasText: "Latest observation is fresh." }),
   ).toBeVisible();
+  await expect(
+    page.getByText("observation recorded", { exact: true }),
+  ).toHaveCount(2);
   await expect(
     page.getByText("LOCAL PROTOTYPE · SIMULATED SERVER", { exact: true }),
   ).toBeVisible();
