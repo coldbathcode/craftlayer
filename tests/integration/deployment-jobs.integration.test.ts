@@ -17,12 +17,14 @@ import {
 import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
 import { CommandTransport } from "../../apps/minecraft-node/src/command-transport.js";
 import { NodeCommandExecutor } from "../../apps/minecraft-node/src/executor.js";
+import { AuthError } from "../../packages/auth/src/index.js";
 import {
   signedNodeCommand,
   signedNodeCommandPermit,
 } from "../../packages/contracts/src/index.js";
 import {
   DeploymentAdmissions,
+  DeploymentDispatcher,
   DeploymentJobs,
   type DeploymentQualificationContext,
   MinecraftControl,
@@ -867,7 +869,16 @@ it("provisions a real scratch-only Docker fixture through DB leases, outbound mT
       { intent_id: f.intent.operation_id },
       randomUUID(),
     );
-    const job = await jobs.issueAdmission(f.org, admitted.operation_id);
+    const dispatchScope = {
+      organization_id: f.org,
+      project_id: f.project,
+      node_id: f.node,
+      credential_version: 1,
+    };
+    await new DeploymentDispatcher(jobs, dispatchScope).tick();
+    const linked = await admissions.get(f.adult, f.org, admitted.operation_id);
+    if (!linked.job_id) throw new Error("Background issuance missing");
+    const job = await admissions.job(f.adult, f.org, linked.job_id);
     for (const wrong of [
       { ...connection, cert: "", key: "" },
       {
@@ -1924,5 +1935,298 @@ it("keeps expired HTTP admissions historical, remote management blocked and brow
       await remote.close();
       await app.close();
       await admissions.close();
+    }
+  }));
+
+const dispatchScope = (f: Awaited<ReturnType<typeof setup>>) => ({
+  organization_id: f.org,
+  project_id: f.project,
+  node_id: f.node,
+  credential_version: 1,
+});
+it("dispatches immutable outbox references concurrently and recovers a lost worker acknowledgement without issuing a second command", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const a = await admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+        scope = dispatchScope(f);
+      const crash = new DeploymentDispatcher(
+        {
+          settleExpiredForNode: (s) => f.jobs.settleExpiredForNode(s),
+          dispatchPending: async (s, page, signal) => {
+            await f.jobs.dispatchPending(s, page, signal);
+            throw new Error("simulated worker acknowledgement loss");
+          },
+        },
+        scope,
+      );
+      await expect(crash.tick()).rejects.toThrow("acknowledgement loss");
+      await Promise.all(
+        Array.from({ length: 4 }, () =>
+          new DeploymentDispatcher(f.jobs, scope).tick(),
+        ),
+      );
+      const linked = await admissions.get(f.adult, f.org, a.operation_id);
+      expect(linked.job_id).toBeTruthy();
+      const first = await admissions.job(f.adult, f.org, linked.job_id ?? "");
+      const cancelled = new AbortController();
+      cancelled.abort();
+      await expect(
+        new DeploymentDispatcher(f.jobs, scope).tick(cancelled.signal),
+      ).rejects.toThrow();
+      const stop = new AbortController();
+      await new DeploymentDispatcher(f.jobs, scope).run(stop.signal, () =>
+        stop.abort(),
+      );
+      expect(await new DeploymentDispatcher(f.jobs, scope).tick()).toEqual({
+        issued: 0,
+        blocked: 0,
+        expired: 0,
+      });
+      expect(await admissions.job(f.adult, f.org, linked.job_id ?? "")).toEqual(
+        first,
+      );
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(1);
+        expect(
+          (
+            await c.query(
+              "select 1 from audit_events where action='server.deployment_issued'",
+            )
+          ).rowCount,
+        ).toBe(1);
+        expect(
+          (
+            await c.query(
+              "select 1 from minecraft_deployment_authorization_outbox",
+            )
+          ).rowCount,
+        ).toBe(1);
+      });
+    } finally {
+      await admissions.close();
+    }
+  }));
+it("keeps unavailable qualification and revoked authority closed in background work and rejects forged placement/page bounds", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      disabled = new DeploymentJobs({
+        databaseUrl: url,
+        authorizer: h.auth,
+        controlPrivateKey: f.control.private_key,
+        policy: f.options.policy,
+        clock: f.now,
+      });
+    try {
+      await admissions.admit(
+        f.adult,
+        f.org,
+        { intent_id: f.intent.operation_id },
+        randomUUID(),
+      );
+      const scope = dispatchScope(f);
+      expect(await disabled.dispatchPending(scope)).toMatchObject({
+        issued: 0,
+        blocked: 1,
+      });
+      for (const changed of [
+        { project_id: randomUUID() },
+        { node_id: randomUUID() },
+        { organization_id: f.foreignOrg },
+        { credential_version: 2 },
+      ])
+        await expect(
+          f.jobs.dispatchPending({ ...scope, ...changed }),
+        ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        f.jobs.dispatchPending({ ...scope, command: "start" }),
+      ).rejects.toThrow();
+      await expect(
+        f.jobs.dispatchPending(scope, { limit: 9 }),
+      ).rejects.toThrow();
+      await h.tx(h.identity, f.org, (c) =>
+        c.query("update sessions set revoked_at=now() where token_hash=$1", [
+          createHash("sha256").update(f.adult).digest("hex"),
+        ]),
+      );
+      expect(await f.jobs.dispatchPending(scope)).toMatchObject({
+        issued: 0,
+        blocked: 1,
+      });
+      f.advance(120001);
+      expect(await f.jobs.dispatchPending(scope)).toMatchObject({
+        issued: 0,
+        blocked: 0,
+      });
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(0);
+        expect(
+          (await c.query("select state from minecraft_reservations")).rows[0]
+            ?.state,
+        ).toBe("allocated");
+      });
+    } finally {
+      await disabled.close();
+      await admissions.close();
+    }
+  }));
+it("advances bounded admission scans past a blocked reference and wraps without losing later work", () =>
+  fixture(async (f) => {
+    const admissions = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const second = await f.ledger.reserve(
+          f.adult,
+          f.org,
+          f.input(25600),
+          randomUUID(),
+        ),
+        dispatch = await f.ledger.change(
+          f.adult,
+          f.org,
+          second.reservation_id,
+          "dispatch",
+          1,
+          randomUUID(),
+        ),
+        intent = await f.ledger.queueDeployment(
+          f.adult,
+          f.org,
+          {
+            reservation_id: second.reservation_id,
+            dispatch_operation_id: dispatch.operation_id,
+            reservation_version: 2,
+          },
+          randomUUID(),
+        ),
+        a = await admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+        b = await admissions.admit(
+          f.adult,
+          f.org,
+          { intent_id: intent.operation_id },
+          randomUUID(),
+        ),
+        blockedReservation =
+          a.operation_id < b.operation_id
+            ? f.r.reservation_id
+            : second.reservation_id,
+        scope = dispatchScope(f);
+      f.qualification.hook = async (c) => {
+        if (c.reservation_id === blockedReservation)
+          throw new AuthError(
+            403,
+            "APPROVAL_DENIED",
+            "Synthetic approval denied",
+          );
+      };
+      const first = await f.jobs.dispatchPending(scope, { limit: 1 });
+      expect(first).toMatchObject({ issued: 0, blocked: 1 });
+      const next = await f.jobs.dispatchPending(scope, {
+        limit: 1,
+        after: first.after,
+      });
+      expect(next).toMatchObject({ issued: 1, blocked: 0 });
+      expect(
+        await f.jobs.dispatchPending(scope, { limit: 1, after: next.after }),
+      ).toEqual({ issued: 0, blocked: 0, after: null });
+      f.qualification.hook = undefined;
+      expect(await f.jobs.dispatchPending(scope)).toMatchObject({
+        issued: 1,
+        blocked: 0,
+      });
+      expect(
+        (await admissions.get(f.adult, f.org, a.operation_id)).job_id,
+      ).toBeTruthy();
+      expect(
+        (await admissions.get(f.adult, f.org, b.operation_id)).job_id,
+      ).toBeTruthy();
+    } finally {
+      await admissions.close();
+    }
+  }));
+it("sweeps expired signed jobs once after actor revocation, retains allocation and never promotes late success out of uncertainty", () =>
+  fixture(async (f) => {
+    const job = await f.prepare(),
+      command = signedNodeCommand.parse(
+        await f.jobs.exchange(f.request(job), f.peer),
+      ),
+      scope = dispatchScope(f),
+      wrong = new DeploymentJobs({
+        ...f.options,
+        controlPrivateKey: generateNodeKey().private_key,
+      });
+    try {
+      expect(await f.jobs.settleExpiredForNode(scope)).toBe(0);
+      f.advance(30001);
+      await h.tx(h.identity, f.org, (c) =>
+        c.query("update sessions set revoked_at=now() where token_hash=$1", [
+          createHash("sha256").update(f.adult).digest("hex"),
+        ]),
+      );
+      await expect(wrong.settleExpiredForNode(scope)).rejects.toMatchObject({
+        code: "DEPLOYMENT_DISPATCH_CONTROL_DENIED",
+      });
+      expect(
+        (
+          await Promise.all([
+            f.jobs.settleExpiredForNode(scope),
+            f.jobs.settleExpiredForNode(scope),
+          ])
+        ).sort(),
+      ).toEqual([0, 1]);
+      expect(
+        await f.jobs.recordReceipt(f.receipt(command), f.peer),
+      ).toMatchObject({ state: "uncertain", receipt_state: "succeeded" });
+      expect(await new DeploymentDispatcher(f.jobs, scope).tick()).toEqual({
+        expired: 0,
+        issued: 0,
+        blocked: 0,
+      });
+      await h.tx(h.runtime, f.org, async (c) => {
+        expect(
+          (await c.query("select state from minecraft_reservations")).rows[0]
+            ?.state,
+        ).toBe("uncertain");
+        expect(
+          (await c.query("select 1 from minecraft_reservation_ports")).rowCount,
+        ).toBe(2);
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(1);
+        expect(
+          (
+            await c.query(
+              "select 1 from minecraft_deployment_job_outbox where kind='expired'",
+            )
+          ).rowCount,
+        ).toBe(1);
+      });
+    } finally {
+      await wrong.close();
     }
   }));

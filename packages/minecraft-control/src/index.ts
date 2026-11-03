@@ -1003,6 +1003,7 @@ export class MinecraftControl {
 }
 
 export { DeploymentAdmissions } from "./deployment-admissions.js";
+export { DeploymentDispatcher } from "./deployment-dispatcher.js";
 export {
   DeploymentJobs,
   type DeploymentQualificationContext,

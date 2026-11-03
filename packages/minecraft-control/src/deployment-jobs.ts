@@ -26,6 +26,10 @@ import {
 } from "@craftlayer/node-protocol";
 import pg from "pg";
 import { z } from "zod";
+import {
+  type DeploymentDispatchScope,
+  deploymentDispatchScope,
+} from "./deployment-dispatcher.js";
 import type {
   DeploymentAuthorizer,
   DeploymentPrincipal,
@@ -535,6 +539,117 @@ export class DeploymentJobs {
       },
     );
   }
+  async #placement(
+    c: pg.PoolClient,
+    scope: DeploymentDispatchScope,
+    current: boolean,
+  ) {
+    const r = (
+      await c.query<{
+        state: string;
+        credential_version: number;
+        expires_at: Date;
+      }>(
+        "select n.state,n.credential_version,k.expires_at from minecraft_nodes n join minecraft_node_credentials k on (k.organization_id,k.node_id)=(n.organization_id,n.id) where n.organization_id=$1 and n.project_id=$2 and n.id=$3 and k.version=$4",
+        [
+          scope.organization_id,
+          scope.project_id,
+          scope.node_id,
+          scope.credential_version,
+        ],
+      )
+    ).rows[0];
+    if (
+      !r ||
+      (current &&
+        (r.state !== "active" ||
+          r.credential_version !== scope.credential_version ||
+          r.expires_at.getTime() <= this.#now()))
+    )
+      deny("DEPLOYMENT_DISPATCH_SCOPE_DENIED", 403);
+  }
+  /** Private metadata issuer only. Each reference still passes sealed current authority/qualification. */
+  async dispatchPending(
+    scopeInput: unknown,
+    page: { after?: string | null; limit?: number } = {},
+    signal?: AbortSignal,
+  ) {
+    const scope = deploymentDispatchScope.parse(scopeInput),
+      after = z
+        .uuid()
+        .nullable()
+        .parse(page.after ?? null),
+      limit = z
+        .number()
+        .int()
+        .min(1)
+        .max(8)
+        .parse(page.limit ?? 8);
+    signal?.throwIfAborted();
+    const rows = await this.#tx(scope.organization_id, async (c) => {
+      await this.#placement(c, scope, true);
+      return (
+        await c.query<{ id: string }>(
+          "select a.id from minecraft_deployment_authorization_outbox o join minecraft_deployment_authorizations a on (a.organization_id,a.id)=(o.organization_id,o.authorization_id) join minecraft_reservations r on (r.organization_id,r.id)=(a.organization_id,a.reservation_id) left join minecraft_deployment_jobs j on (j.organization_id,j.intent_id)=(a.organization_id,a.intent_id) where a.organization_id=$1 and a.project_id=$2 and a.node_id=$3 and r.credential_version=$4 and o.schema_version=1 and a.expires_at>$5 and a.created_at<=$5 and j.id is null and ($6::uuid is null or a.id>$6) order by a.id limit $7",
+          [
+            scope.organization_id,
+            scope.project_id,
+            scope.node_id,
+            scope.credential_version,
+            new Date(this.#now()),
+            after,
+            limit,
+          ],
+        )
+      ).rows;
+    });
+    let issued = 0,
+      blocked = 0;
+    for (const row of rows) {
+      signal?.throwIfAborted();
+      try {
+        await this.issueAdmission(scope.organization_id, row.id);
+        issued++;
+      } catch (e) {
+        if (!(e instanceof AuthError)) throw e;
+        blocked++;
+      }
+    }
+    return {
+      issued,
+      blocked,
+      after: rows.length === limit ? (rows.at(-1)?.id ?? null) : null,
+    };
+  }
+  /** Denial-only lease settlement; neither actor revocation nor a stop should preserve an expired issued state. */
+  async settleExpiredForNode(scopeInput: unknown) {
+    const scope = deploymentDispatchScope.parse(scopeInput);
+    return this.#tx(scope.organization_id, async (c) => {
+      await this.#placement(c, scope, false);
+      const rows = (
+        await c.query<{ id: string }>(
+          "select id from minecraft_deployment_jobs where organization_id=$1 and project_id=$2 and node_id=$3 and credential_version=$4 and state='issued' and lease_expires_at<=$5 order by lease_expires_at,id limit 8",
+          [
+            scope.organization_id,
+            scope.project_id,
+            scope.node_id,
+            scope.credential_version,
+            new Date(this.#now()),
+          ],
+        )
+      ).rows;
+      for (const row of rows) {
+        const r = await this.#job(c, scope.organization_id, row.id);
+        if (
+          r.command.payload.control_id !== nodeDigest(this.#public) ||
+          !verifyNodeValue(r.command.payload, r.command.signature, this.#public)
+        )
+          deny("DEPLOYMENT_DISPATCH_CONTROL_DENIED", 403);
+        await this.#expire(c, r);
+      }
+      return rows.length;
+    });
+  }
   async #issue(
     located: Binding,
     grants: ExecutionGrant[],
@@ -886,19 +1001,22 @@ export class DeploymentJobs {
   async settleExpired(token: string, org: string, id: string) {
     const located = await this.#locate(token, org, id, "job");
     return this.#human(token, org, located, async (c) => {
-      let r = await this.#job(c, org, id);
+      const r = await this.#job(c, org, id);
       if (r.state !== "issued") return this.#view(r);
       if (r.lease_expires_at.getTime() > this.#now())
         deny("DEPLOYMENT_LEASE_ACTIVE");
-      await c.query(
-        "update minecraft_deployment_jobs set state='uncertain',version=version+1 where organization_id=$1 and id=$2",
-        [org, id],
-      );
-      await this.#uncertain(c, r);
-      r = await this.#job(c, org, id);
-      await this.#event(c, r, "expired");
-      return this.#view(r);
+      return this.#expire(c, r);
     });
+  }
+  async #expire(c: pg.PoolClient, r: Job) {
+    await c.query(
+      "update minecraft_deployment_jobs set state='uncertain',version=version+1 where organization_id=$1 and id=$2",
+      [r.organization_id, r.id],
+    );
+    await this.#uncertain(c, r);
+    const expired = await this.#job(c, r.organization_id, r.id);
+    await this.#event(c, expired, "expired");
+    return this.#view(expired);
   }
   async recordReceipt(input: unknown, peer: NodePeer) {
     const signed = signedNodeCommandReceipt.parse(input),
