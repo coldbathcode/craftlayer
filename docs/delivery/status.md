@@ -219,3 +219,9 @@ Local node composition remains the next F25 integration area; it must fail close
 The main/PR workflow now includes a separate management-browser job running the existing isolated production-image dashboard journey, with pinned actions/read-only token/15-minute bound and distinct seven-day failure artifacts. Playwright explicitly selects foundation/identity/management specs; absent dashboard fixture configuration fails rather than silently skipping. Exact checks and any hosted outcome are recorded in build log and [handoff](handoffs/REV-09-dashboard-ci.md). Branch protection is not changed or asserted.
 
 Continue private node composition only with fail-closed approval/storage/game/identity/recovery gates. Real family/production readiness, audited retention, remote trusted entry and Chapter 04 remain open/gated. Pre-existing review prose remains preserved and excluded from task publication.
+
+## Publication and installed-node clarification, 2026-11-03
+
+Runtime checkpoint `1dc4668` has a successful hosted CI run. The REV-09 push first hit a stale Git credential rejection, then succeeded through the already-connected GitHub CLI without changing stored credentials; actual main equality was verified. Its hosted run was pending at the check, not passed. Build log records exact results.
+
+Installed node/gateway entrypoints remain inventory-only; private authorizer/broker/dispatcher/poll/receipt libraries are fixture-verified through CL-F25-03/I. Corrected stale F25/runbook summaries to reflect both facts. Next development should establish durable independent approval/qualification records and fail-closed private composition before any actual approval/storage/game/identity/recovery-qualified effects. F2/F25/F3 local work remains authorized; Chapter 04 and production remain gated.

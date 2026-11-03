@@ -1,6 +1,6 @@
 # Secure node development and deployment preparation
 
-Status: CL-F25-01 checkpoints A/B, locally implemented read-only node trust/transport, Hosts dashboard and real local inventory. No provisioning/job/lifecycle/backup authority exists yet. [ADR 0019](../architecture/decisions/0019-private-node-trust.md) records scope and [F2.5](../chapters/F2.5-docker-provisioning.md) retains release gates. No Contabo access or node installation has occurred.
+Status: installed CLI/Compose remains inventory-only with read-only node trust/transport, Hosts dashboard and real local inventory. Private execution libraries and disposable fixtures now cover signed jobs, constrained broker effects, dispatcher, outbound discovery and receipt recovery through CL-F25-03 checkpoint I; see [deployment jobs](deployment-jobs.md), [execution](node-execution.md) and [broker](node-broker.md). These are not enabled by the installed entrypoints and do not qualify game/production operations. [ADR 0019](../architecture/decisions/0019-private-node-trust.md) records scope and [F2.5](../chapters/F2.5-docker-provisioning.md) retains release gates. No Contabo access or node installation has occurred.
 
 ## Trust setup
 
@@ -25,7 +25,7 @@ The fixture generator is for localhost tests: a two-day private CA/server/client
 
 An operator-managed production PKI must provide the appropriate private-controller SAN, client-auth certificates and secure issuance/rotation process. Do not reuse local fixture trust as production qualification. Agent config is owner-only, regular/non-symlink and contains organization/node/credential generation, private HTTPS control URL, pinned control signing key/server certificate fingerprint, CA/client certificate/TLS key/signing key file paths, private journal directory and local Unix Docker socket. File paths are local operator configuration, never caller-selected API/node-command paths. The API's optional `CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY` contains only the controller public signing key. Private gateway `apps/api/dist/node-main.js` reads `server.key`, `server.crt`, `ca.crt` and `control.key` from its protected `CRAFTLAYER_NODE_TLS_DIRECTORY`; default bind is loopback, port 9443. No public node port is authorized.
 
-Agent key generation outputs public metadata only. Private files never enter browser bundles/logs/requests. Gateway signs no shell/RCON/Docker verbs; protocol accepts enrollment/heartbeat and inventory-only acknowledgements. This checkpoint has no remote installer, public endpoint, auto-approved mutable commands or game connectivity.
+Agent key generation outputs public metadata only. Private files never enter browser bundles/logs/requests. The installed gateway handles enrollment/heartbeat and inventory-only acknowledgements. Optional private command routes exist for the fixture-composed deployment libraries, but `node-main.ts` does not inject them and the installed agent does not import the command runner. There is no remote installer, public endpoint, auto-approved mutable command or game connectivity.
 
 ## Inventory and reliability limits
 
