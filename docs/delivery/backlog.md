@@ -150,3 +150,5 @@ REV-06: newest-first enrollment history uses exact database timestamp/UUID seek 
 REV-09: management browser qualification is now an unconditional job in the main/PR workflow; explicit suite matching and missing-fixture failure replace silent management skips. Local/hosted results are recorded separately in build log. Branch-protection rules are unchanged; physical Minecraft/family gates remain open.
 
 F25 handoff reconciliation: private command/controller/broker/dispatch/poll/receipt libraries are verified in disposable fixtures; installed entrypoints remain inventory-only. Next integration requires durable independent approval/qualification and fail-closed private composition, followed by actual storage/game/identity/recovery evidence. Publication credential retry and pending hosted evidence are recorded explicitly in build log.
+
+REV-09 follow-up: hosted clean-checkout failure revealed missing compiled fixture imports. The wrapper now builds server exports itself and preserves early setup failures without unconfigured Docker cleanup. Fresh-worktree browser/negative setup evidence is in build log; the failed hosted run remains recorded honestly.

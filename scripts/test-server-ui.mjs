@@ -51,7 +51,11 @@ const compose = [
   "-f",
   "infra/compose/node-control.yml",
 ];
+let composeStarted = false;
 try {
+  // Fixture imports use the workspace packages' built exports. A new CI job
+  // must not depend on outputs left by a previous check or local development.
+  await run("pnpm", ["build:server"]);
   await run(process.execPath, [resolve(root, "scripts/setup-local.mjs")], {
     cwd: directory,
     env,
@@ -85,6 +89,7 @@ try {
     CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY: nodePublic.control_public_key,
     CRAFTLAYER_NODE_HTTP_PORT: String(nodePort),
   });
+  composeStarted = true;
   await run("docker", [...compose, "up", "-d", "--build", "--wait"], { env });
   // Inspect in memory: never print container environment or credentials.
   const inspect = (args) =>
@@ -168,13 +173,14 @@ try {
   );
 } finally {
   try {
-    await run(
-      "docker",
-      [...compose, "down", "--volumes", "--remove-orphans", "--rmi", "local"],
-      {
-        env,
-      },
-    );
+    if (composeStarted)
+      await run(
+        "docker",
+        [...compose, "down", "--volumes", "--remove-orphans", "--rmi", "local"],
+        {
+          env,
+        },
+      );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

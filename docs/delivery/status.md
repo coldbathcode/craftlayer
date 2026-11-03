@@ -225,3 +225,7 @@ Continue private node composition only with fail-closed approval/storage/game/id
 Runtime checkpoint `1dc4668` has a successful hosted CI run. The REV-09 push first hit a stale Git credential rejection, then succeeded through the already-connected GitHub CLI without changing stored credentials; actual main equality was verified. Its hosted run was pending at the check, not passed. Build log records exact results.
 
 Installed node/gateway entrypoints remain inventory-only; private authorizer/broker/dispatcher/poll/receipt libraries are fixture-verified through CL-F25-03/I. Corrected stale F25/runbook summaries to reflect both facts. Next development should establish durable independent approval/qualification records and fail-closed private composition before any actual approval/storage/game/identity/recovery-qualified effects. F2/F25/F3 local work remains authorized; Chapter 04 and production remain gated.
+
+## REV-09 clean-checkout setup correction, 2026-11-03
+
+The first hosted management-browser job failed before browser startup: fixture imports expected compiled workspace contracts absent in the independent job. Local tests had reused outputs. The wrapper now explicitly builds server exports and only tears down Compose after configured startup was attempted; early failures keep their original error while temporary fixtures are removed. Fresh-worktree browser and injected setup-fault evidence is recorded in build log. This corrects setup without weakening the test or skipping coverage. New hosted outcome must be verified separately.

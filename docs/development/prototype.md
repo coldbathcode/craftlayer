@@ -73,3 +73,5 @@ On Hosts, select the connected local host, then **Plan a Minecraft server**. Sel
 Pending-request pagination uses an immutable server-scoped timestamp/UUID anchor. Newer requests appear on refresh; they do not shift an older-page traversal. After upgrading from UUID-only order, reopen the server to start at page one. All pending/expired records remain retained.
 
 The main/PR workflow's `management-browser` job invokes `pnpm test:server-ui` with a separate disposable installation. Directly selecting the management spec without the wrapper is an error; normal `pnpm test:e2e` runs only foundation specs and does not claim management coverage. Fixture-backed browser results remain synthetic, not game-client/production qualification.
+
+`pnpm test:server-ui` builds workspace server exports itself before preparing certificate/identity fixtures, so it works from a fresh dependency-installed checkout without a prior `pnpm check`. A setup/build failure before Compose startup cleans temporary files without attempting teardown of an unconfigured stack.

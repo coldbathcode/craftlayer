@@ -23,3 +23,7 @@ This makes the browser job part of each configured workflow run, not a claim tha
 ## Next action
 
 Inspect the new job's hosted run at the published commit without inferring success from local tests. Then return to the private node composition gap in the F25 chapter: preserve inventory-only installed behavior until independent approval/storage/game/identity/recovery qualification exists. Chapter 04 and all Contabo operations remain separately gated.
+
+## Clean-checkout follow-up
+
+Hosted job 125925734375 in run 41638311720 failed before browser startup because the new isolated job lacked compiled contracts exports. Earlier local proof had reused build outputs. The wrapper now explicitly builds server/workspace exports before fixture preparation and gates Compose teardown until configured startup was attempted, preserving early failure diagnostics. Validate with `pnpm test:server-ui` in a detached checkout with no `packages/contracts/dist/index.js`, then `pnpm check`. An injected failing build also proves no Docker call and temporary-file cleanup. Exact final results/publication are in build log; hosted success still requires a new observed run.
