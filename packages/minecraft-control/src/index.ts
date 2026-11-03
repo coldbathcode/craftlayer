@@ -690,12 +690,28 @@ export class MinecraftControl {
   ) {
     const count = (
       await c.query<{ total: number; recent: number }>(
-        "select count(*)::int total,count(*) filter(where actor_id=$3 and created_at>$4)::int recent from management_operations where organization_id=$1 and environment_id=$2",
-        [org, environment, actor, new Date(this.#now() - 60000)],
+        "select count(*)::int total,count(*) filter(where actor_id=$3 and created_at>$4)::int recent from management_operations where organization_id=$1 and environment_id=$2 and created_at>$5",
+        [
+          org,
+          environment,
+          actor,
+          new Date(this.#now() - 60000),
+          new Date(this.#now() - 86400000),
+        ],
       )
     ).rows[0];
-    if (!count || count.total >= 10000 || count.recent >= 12)
-      denied("MANAGEMENT_LIMIT", 429);
+    if (!count || count.total >= 10000)
+      throw new AuthError(
+        429,
+        "MANAGEMENT_LIMIT",
+        "This world's management operation budget is full. Retry after older requests leave the rolling 24-hour window.",
+      );
+    if (count.recent >= 12)
+      throw new AuthError(
+        429,
+        "MANAGEMENT_LIMIT",
+        "Too many management requests for this account and world. Retry after one minute.",
+      );
   }
   async observe(
     token: string,

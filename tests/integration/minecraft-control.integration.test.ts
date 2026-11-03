@@ -923,3 +923,161 @@ describe("pending Minecraft identity resolution boundary", () => {
     }
   });
 });
+
+async function operationLimitFixture(
+  fn: (f: {
+    service: MinecraftControl;
+    token: string;
+    server: string;
+    operation: string;
+    seed: (count: number, ageMs: number) => Promise<void>;
+    advance: (ms: number) => void;
+    observe: (
+      key?: string,
+      expected?: number,
+    ) => ReturnType<MinecraftControl["observe"]>;
+    rows: () => Promise<number>;
+    reads: () => number;
+  }) => Promise<void>,
+) {
+  const databaseUrl = runtimeUrl;
+  if (!databaseUrl) throw new Error("Disposable rate-limit fixture required");
+  const token = await member("org_admin"),
+    scope = randomUUID();
+  let now = Date.now(),
+    reads = 0;
+  await tx(identity, org, (c) =>
+    c.query(
+      "insert into environments(id,organization_id,project_id,name,type) values($1,$2,$3,'Rolling limit fixture','minecraft')",
+      [scope, org, project],
+    ),
+  );
+  const captured = {
+      ...target,
+      environment_id: scope,
+      id: `rolling-${scope}`,
+      observation: {
+        ...target.observation,
+        observed_at: new Date(now).toISOString(),
+      },
+    },
+    limited = new MinecraftControl({
+      databaseUrl,
+      auth,
+      clock: () => now,
+      source: {
+        list: async () => [captured],
+        observe: async () => {
+          reads++;
+          return captured;
+        },
+      },
+    });
+  try {
+    const input = {
+        environment_id: scope,
+        target_id: captured.id,
+        name: "Rolling fixture",
+      },
+      plan = await limited.plan(token, org, input),
+      receipt = await limited.adopt(
+        token,
+        org,
+        { ...input, plan_hash: plan.plan_hash },
+        randomUUID(),
+      );
+    await fn({
+      service: limited,
+      token,
+      server: receipt.server_id,
+      operation: receipt.operation_id,
+      advance: (ms) => {
+        now += ms;
+      },
+      reads: () => reads,
+      seed: async (count, age) => {
+        await tx(runtime, org, (c) =>
+          c.query(
+            "insert into management_operations(id,organization_id,project_id,environment_id,server_id,actor_id,session_id,kind,request_key,request_hash,state,fence,deadline,created_at,finished_at) select gen_random_uuid(),o.organization_id,o.project_id,o.environment_id,o.server_id,o.actor_id,o.session_id,'observe',gen_random_uuid(),repeat('a',64),'succeeded',0,$3,$3,$3 from management_operations o cross join generate_series(1,$2) where o.id=$1",
+            [receipt.operation_id, count, new Date(now - age)],
+          ),
+        );
+      },
+      observe: async (key = randomUUID(), expected?: number) =>
+        limited.observe(
+          token,
+          org,
+          receipt.server_id,
+          expected ??
+            (await limited.get(token, org, receipt.server_id)).version,
+          key,
+        ),
+      rows: async () =>
+        tx(
+          runtime,
+          org,
+          async (c) =>
+            (
+              await c.query<{ n: number }>(
+                "select count(*)::int n from management_operations where organization_id=$1 and environment_id=$2",
+                [org, scope],
+              )
+            ).rows[0]?.n ?? 0,
+        ),
+    });
+  } finally {
+    await limited.close();
+  }
+}
+it(
+  "reclaims historical operation capacity while preserving minute limits, replay and every historical row",
+  () =>
+    operationLimitFixture(async (f) => {
+      await f.seed(10000, 25 * 3600000);
+      const expected = (await f.service.get(f.token, org, f.server)).version,
+        key = randomUUID(),
+        receipt = await f.observe(key, expected);
+      expect(
+        (await f.service.operation(f.token, org, receipt.operation_id)).state,
+      ).toBe("succeeded");
+      await f.seed(10, 0);
+      expect(await f.observe(key, expected)).toEqual(receipt);
+      await expect(f.observe()).rejects.toMatchObject({
+        status: 429,
+        code: "MANAGEMENT_LIMIT",
+        message: expect.stringContaining("one minute"),
+      });
+      expect(f.reads()).toBe(1);
+      expect(await f.rows()).toBe(10012);
+      f.advance(60001);
+      await f.observe();
+      expect(f.reads()).toBe(2);
+      expect(await f.rows()).toBe(10013);
+      expect((await f.service.operation(f.token, org, f.operation)).state).toBe(
+        "succeeded",
+      );
+    }),
+  15000,
+);
+it(
+  "bounds the rolling daily management budget and becomes usable after expiry without deleting history",
+  () =>
+    operationLimitFixture(async (f) => {
+      await f.seed(9999, 120000);
+      await expect(f.observe()).rejects.toMatchObject({
+        status: 429,
+        code: "MANAGEMENT_LIMIT",
+        message: expect.stringContaining("24-hour"),
+      });
+      expect(f.reads()).toBe(0);
+      expect(await f.rows()).toBe(10000);
+      f.advance(86400001);
+      await f.observe();
+      expect(f.reads()).toBe(1);
+      expect(await f.rows()).toBe(10001);
+      expect((await f.service.operation(f.token, org, f.operation)).state).toBe(
+        "succeeded",
+      );
+    }),
+  15000,
+);

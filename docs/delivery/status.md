@@ -185,3 +185,9 @@ Next independent maintenance: REV-07 permission registry typing/migration parity
 Canonical organization permissions now constrain built-in role/delegation literals at compile time. A real DB regression compares exact migrated permission IDs and built-in role pairs with TypeScript, including the prior-schema-upgraded management fixture. No permission/default role/child policy or historical migration changed. Exact checks/publication are in build log. This detects drift; the separate child own/preset-mission and other security findings remain open.
 
 Next independent maintenance: REV-03 reclaimable rolling management-operation admission limits without deleting audit/history. F2/F25 real client/approval/storage/game/recovery and private installed composition remain incomplete; production/VPS/world operations stay gated.
+
+## REV-03 checkpoint A — rolling operation admission
+
+Replaced lifetime 10,000 management-operation lockout with a per-environment rolling 24-hour budget, preserving the 12/account/environment/minute limit, current scope/barrier/replay/fence semantics and compatible MANAGEMENT_LIMIT/429. Minute/day messages explain retry. All operation/audit/outbox history stays retained; aging does not settle interrupted work or release infrastructure. Real DB regression seeds old/full-window metadata and proves admission/refusal/replay/expiry/history preservation. Exact checks/publication are in build log and ADR 0028.
+
+REV-03 remains open for enrollment limits/deduplication and audited retention/archival. Next local checkpoint: reclaim expired pending-enrollment capacity without granting identity/access or deleting history. F2/F25 real identity/approval/storage/game/backup/restore/private composition and production gates remain; no live host/world action.

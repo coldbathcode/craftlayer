@@ -50,3 +50,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0026 — Deployment background dispatch](0026-deployment-background-dispatch.md).
 
 - [0027 — Durable node receipt delivery](0027-node-receipt-delivery.md).
+
+- [0028 — Rolling management admission](0028-rolling-management-admission.md).
