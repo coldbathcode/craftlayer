@@ -110,3 +110,5 @@ CL-F25-03/A implements the durable intake portion of PR-028/032 only: current sc
 CL-F25-03/B adds local durable command/lease/current-permit/receipt evidence for PR-028/032. First provision is attempt/fence 1, one command per intake and no automatic retry; its success is stopped resources, not playable readiness. Unknown/expired or late receipts retain uncertainty and world/port accounting. Real transport/host/approval/identity/recovery release requirements remain unmet.
 
 CL-F25-03/E adds private delegated-authority intake/issuer separation for PR-028/032: no API control signing key, no gateway identity DB secret, no grants in projections/outbox, exact immutable original scope/stop/expiry and no authority renewal by replay. This is permission delegation metadata, not independent approval/EULA acceptance or a completed provisioning milestone.
+
+CL-F25-03/K1 supplies a private two-adult current-authority prerequisite for PR-003/025/031/033. Local identity/concurrency evidence does not complete durable independent approval, provision a server or satisfy any host/game/recovery release gate.

@@ -9,7 +9,10 @@ import { Queue } from "bullmq";
 import pg from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { buildApp } from "../../apps/api/src/app.js";
-import { AuthService } from "../../packages/auth/src/index.js";
+import {
+  AuthService,
+  type ExecutionGrant,
+} from "../../packages/auth/src/index.js";
 import { createLogger } from "../../packages/config/src/index.js";
 import {
   defaultBudgetLimits,
@@ -4857,4 +4860,335 @@ describe("registered worker authority and fenced effects", () => {
       await runtime.cleanup(f.org);
     }
   });
+});
+
+// Deployment decisions need both adults to remain authorized together. These
+// tests exercise the identity primitive only, not an approval or physical job.
+describe("independent deployment authority", () => {
+  async function pair() {
+    const project = await auth.createProject(ownerToken, orgId, "Review scope"),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: project.id,
+        name: "Review world",
+        type: "minecraft",
+      }),
+      original = await fixtureMember("org_admin"),
+      reviewer = await fixtureMember("org_admin");
+    async function grants(token: string, review = false) {
+      const result: [ExecutionGrant, ExecutionGrant, ...ExecutionGrant[]] = [
+        await auth.issueExecutionGrant(token, orgId, "node:deploy", {
+          kind: "project",
+          id: project.id,
+        }),
+        await auth.issueExecutionGrant(token, orgId, "server:provision", {
+          kind: "environment",
+          id: world.id,
+        }),
+      ];
+      if (review)
+        result.push(
+          await auth.issueExecutionGrant(token, orgId, "approval:decide", {
+            kind: "environment",
+            id: world.id,
+          }),
+        );
+      return result;
+    }
+    return {
+      project,
+      world,
+      original,
+      reviewer,
+      grants,
+      originalGrants: await grants(original.token),
+      reviewerGrants: await grants(reviewer.token, true),
+    };
+  }
+
+  it("validates concurrent reversed pairs without nested pool leases and preserves caller order", async () => {
+    const f = await pair();
+    const results = await Promise.all(
+      Array.from({ length: 12 }, (_, i) => {
+        const reversed = i % 2 === 0;
+        return auth.guardIndependentExecutions(
+          reversed ? f.reviewerGrants : f.originalGrants,
+          reversed ? f.originalGrants : f.reviewerGrants,
+          async (original, reviewer) => {
+            expect(original.user.id).toBe(
+              reversed ? f.reviewer.userId : f.original.userId,
+            );
+            expect(reviewer.user.id).toBe(
+              reversed ? f.original.userId : f.reviewer.userId,
+            );
+            for (const p of [original, reviewer]) {
+              expect(p.authorityExpiresAt).toBeGreaterThan(now.getTime());
+              expect(p.authorityExpiresAt).toBeLessThanOrEqual(
+                now.getTime() + 1800000,
+              );
+            }
+            return true;
+          },
+        );
+      }),
+    );
+    expect(results).toEqual(Array(12).fill(true));
+    // Existing one-principal guards must not accept mixed identities.
+    await expect(
+      auth.guardExecutions(
+        [...f.originalGrants, f.reviewerGrants[0]],
+        async () => true,
+      ),
+    ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+  });
+
+  it("denies self-approval across different sessions and mixed sessions within one group", async () => {
+    const f = await pair(),
+      login = await auth.login(
+        { login: f.original.login, password },
+        "independent-second-session",
+      ),
+      sameUser = await f.grants(login.cookieToken, true);
+    let entered = false;
+    const callback = async () => {
+      entered = true;
+    };
+    await expect(
+      auth.guardIndependentExecutions(f.originalGrants, sameUser, callback),
+    ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    await expect(
+      auth.guardIndependentExecutions(
+        [f.originalGrants[0], sameUser[1]],
+        f.reviewerGrants,
+        callback,
+      ),
+    ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    expect(entered).toBe(false);
+  });
+
+  it("denies malformed, forged and cross-organization grant pairs before callbacks", async () => {
+    const f = await pair(),
+      otherOrg = await auth.createOrganization(ownerToken, "Review foreign"),
+      foreign = await fixtureMember("org_admin", otherOrg.id),
+      foreignGrant = await auth.issueExecutionGrant(
+        foreign.token,
+        otherOrg.id,
+        "organization:read",
+        { kind: "organization", id: otherOrg.id },
+      );
+    let entered = false;
+    for (const original of [
+      [],
+      Array(5).fill(f.originalGrants[0]),
+      [{ ...f.originalGrants[0], signature: "forged" }],
+      [
+        {
+          ...f.originalGrants[0],
+          resource: { kind: "project" as const, id: crypto.randomUUID() },
+        },
+      ],
+      [{ ...f.originalGrants[0], permission: "approval:decide" as const }],
+      [foreignGrant],
+    ])
+      await expect(
+        auth.guardIndependentExecutions(
+          original,
+          f.reviewerGrants,
+          async () => {
+            entered = true;
+          },
+        ),
+      ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    expect(entered).toBe(false);
+  });
+
+  it("keeps child read grants valid singly but denies children in either independent position", async () => {
+    const f = await pair(),
+      child = await fixtureMember("org_admin", orgId, true);
+    await grantFixture(
+      child.memberId,
+      "environment:read",
+      f.project.id,
+      f.world.id,
+    );
+    const childGrant = await auth.issueExecutionGrant(
+      child.token,
+      orgId,
+      "environment:read",
+      { kind: "environment", id: f.world.id },
+    );
+    expect(await auth.revalidateExecutionGrant(childGrant)).toBe(true);
+    let entered = false;
+    for (const groups of [
+      [[childGrant], f.reviewerGrants],
+      [f.originalGrants, [childGrant]],
+    ] as const)
+      await expect(
+        auth.guardIndependentExecutions(groups[0], groups[1], async () => {
+          entered = true;
+        }),
+      ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    expect(entered).toBe(false);
+  });
+
+  for (const side of ["original", "reviewer"] as const) {
+    it(`denies revoked ${side} sessions without calling the operation`, async () => {
+      const f = await pair();
+      await auth.logout(f[side].token);
+      let entered = false;
+      await expect(
+        auth.guardIndependentExecutions(
+          f.originalGrants,
+          f.reviewerGrants,
+          async () => {
+            entered = true;
+          },
+        ),
+      ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+      expect(entered).toBe(false);
+    });
+
+    it(`denies changed ${side} membership authority and cannot revive old grants`, async () => {
+      const f = await pair();
+      await auth.setMembershipDisabled(
+        ownerToken,
+        orgId,
+        f[side].memberId,
+        true,
+      );
+      let entered = false;
+      const check = () =>
+        auth.guardIndependentExecutions(
+          f.originalGrants,
+          f.reviewerGrants,
+          async () => {
+            entered = true;
+          },
+        );
+      await expect(check()).rejects.toMatchObject({ status: 404 });
+      await auth.setMembershipDisabled(
+        ownerToken,
+        orgId,
+        f[side].memberId,
+        false,
+      );
+      await expect(check()).rejects.toMatchObject({ code: "GRANT_DENIED" });
+      expect(entered).toBe(false);
+    });
+  }
+
+  it("rechecks every scoped permission including reviewer approval authority", async () => {
+    const f = await pair(),
+      limited = await fixtureMember("viewer"),
+      role = await auth.createRole(ownerToken, orgId, {
+        name: `review-${crypto.randomUUID()}`,
+        permissions: ["node:deploy", "server:provision", "approval:decide"],
+      });
+    await auth.setMemberRoles(ownerToken, orgId, limited.memberId, [role.id]);
+    for (const permission of [
+      "node:deploy",
+      "server:provision",
+      "approval:decide",
+    ] as const)
+      await auth.addResourceGrant(ownerToken, orgId, {
+        membershipId: limited.memberId,
+        permission,
+        projectId: f.project.id,
+        ...(permission === "node:deploy" ? {} : { environmentId: f.world.id }),
+      });
+    const grants = await f.grants(limited.token, true);
+    expect(
+      await auth.guardIndependentExecutions(
+        f.originalGrants,
+        grants,
+        async () => true,
+      ),
+    ).toBe(true);
+    const scoped = (await auth.listResourceGrants(ownerToken, orgId)).find(
+      (g) =>
+        g.membership_id === limited.memberId &&
+        g.permission === "approval:decide",
+    );
+    if (!scoped) throw new Error("Missing approval fixture grant");
+    await auth.removeResourceGrant(ownerToken, orgId, scoped.id);
+    let entered = false;
+    await expect(
+      auth.guardIndependentExecutions(f.originalGrants, grants, async () => {
+        entered = true;
+      }),
+    ).rejects.toMatchObject({ code: "GRANT_DENIED" });
+    expect(entered).toBe(false);
+  });
+
+  for (const fault of ["expiry", "clock rollback"] as const) {
+    it(`denies ${fault} while waiting for the second adult's identity lock`, async () => {
+      const f = await pair(),
+        groups = (
+          [f.originalGrants, f.reviewerGrants] as [
+            typeof f.originalGrants,
+            typeof f.reviewerGrants,
+          ]
+        ).sort((a, b) => a[0].userId.localeCompare(b[0].userId)),
+        first = groups[0][0],
+        second = groups[1][0],
+        started = now.getTime(),
+        applicationName = `review-lock-${crypto.randomUUID()}`,
+        scopedUrl = new URL(databaseUrl as string);
+      scopedUrl.searchParams.set("application_name", applicationName);
+      const lockedAuth = new AuthService({
+        databaseUrl: scopedUrl.toString(),
+        bootstrapToken,
+        recoveryToken,
+        csrfSecret,
+        clock: () => now,
+      });
+      const locks = new pg.Pool({ connectionString: databaseUrl, max: 2 });
+      const blocker = await locks.connect();
+      let pending: Promise<unknown> | undefined,
+        entered = false;
+      try {
+        await lockedAuth.initialize();
+        await locks.query(
+          "update sessions set idle_expires_at=$2 where id=$1",
+          [first.sessionId, new Date(started + 1000)],
+        );
+        await blocker.query("begin");
+        await blocker.query("select id from users where id=$1 for update", [
+          second.userId,
+        ]);
+        pending = lockedAuth
+          .guardIndependentExecutions(groups[0], groups[1], async () => {
+            entered = true;
+          })
+          .then(
+            () => ({ allowed: true }),
+            (error: unknown) => error,
+          );
+        let waiting = false;
+        const deadline = performance.now() + 2000;
+        while (performance.now() < deadline) {
+          const r = await locks.query(
+            "select 1 from pg_stat_activity where application_name=$1 and wait_event_type='Lock'",
+            [applicationName],
+          );
+          if (r.rowCount) {
+            waiting = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(waiting).toBe(true);
+        now = new Date(started + (fault === "expiry" ? 1000 : -1));
+        await blocker.query("rollback");
+        expect(await pending).toMatchObject({ code: "GRANT_DENIED" });
+        expect(entered).toBe(false);
+      } finally {
+        await blocker.query("rollback");
+        blocker.release();
+        await pending;
+        now = new Date(started);
+        await lockedAuth.close();
+        await locks.end();
+      }
+    });
+  }
 });

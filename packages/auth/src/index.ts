@@ -1010,101 +1010,182 @@ export class AuthService {
   ): Promise<T> {
     return this.guardExecutions([value], operation);
   }
-  /** Validate related delegated scopes in one identity transaction, without nested pool leases. */
+  /** Validate one principal's related scopes without nested identity pool leases. */
   async guardExecutions<T>(
     values: readonly ExecutionGrant[],
     operation: (principal: Principal) => Promise<T>,
   ): Promise<T> {
-    this.ensureReady();
-    const parsed = z
-      .array(executionGrantSchema)
-      .min(1)
-      .max(4)
-      .safeParse(values);
-    if (!parsed.success)
-      throw new AuthError(403, "GRANT_DENIED", "Execution grants are invalid.");
-    const grants = parsed.data,
-      first = grants[0];
-    if (!first)
-      throw new AuthError(403, "GRANT_DENIED", "Execution grants are invalid.");
-    const now = this.now().getTime();
-    for (const grant of grants)
-      if (
-        grant.userId !== first.userId ||
-        grant.sessionId !== first.sessionId ||
-        grant.organizationId !== first.organizationId ||
-        grant.issuedAt > now ||
-        grant.expiresAt <= now ||
-        grant.expiresAt - grant.issuedAt > 3600000 ||
-        !equal(grant.signature, this.grantSignature(grant))
-      )
-        throw new AuthError(
-          403,
-          "GRANT_DENIED",
-          "Execution grant is invalid or expired.",
-        );
-    return this.transaction(async (client) => {
-      let principal: Principal | undefined;
-      for (const grant of grants) {
-        const result = await client.query<
-          UserRow & { authority_expires_at: Date }
-        >(
-          "select u.*,least(s.expires_at,s.idle_expires_at) as authority_expires_at from users u join sessions s on s.user_id=u.id where u.id=$1 and s.id=$2 and s.revoked_at is null and s.expires_at>$3 and s.idle_expires_at>$3 and s.auth_version=u.auth_version and u.auth_version=$4 and u.disabled_at is null for share of u,s",
-          [grant.userId, grant.sessionId, this.now(), grant.userVersion],
-        );
-        const user = result.rows[0];
-        if (!user)
-          throw new AuthError(
-            403,
-            "GRANT_DENIED",
-            "Execution authority was revoked.",
-          );
-        const p: Principal = {
-          user: this.publicUser(user),
-          sessionId: grant.sessionId,
-          authorityExpiresAt: Math.min(
-            user.authority_expires_at.getTime(),
-            grant.expiresAt,
-          ),
-          userVersion: user.auth_version,
-        };
-        const { member, a } = await this.authority(
-          client,
-          p,
-          grant.organizationId,
-        );
-        if (
-          member.id !== grant.membershipId ||
-          member.auth_version !== grant.membershipVersion ||
-          !canAccess(
-            a,
-            grant.permission,
-            await this.canonicalScope(
-              client,
-              grant.organizationId,
-              grant.resource,
-            ),
-          )
-        )
-          throw new AuthError(
-            403,
-            "GRANT_DENIED",
-            "Execution authority changed.",
-          );
-
-        principal = p;
-      }
+    return this.guardExecutionGroups([values], async (principals) => {
+      const principal = principals[0];
       if (!principal)
         throw new AuthError(
           403,
           "GRANT_DENIED",
           "Execution grants are invalid.",
         );
-      principal.authorityExpiresAt = Math.min(
-        ...grants.map((g) => g.expiresAt),
-        principal.authorityExpiresAt ?? Number.POSITIVE_INFINITY,
-      );
       return operation(principal);
+    });
+  }
+
+  /**
+   * Validate two distinct current adults in one identity transaction.
+   * Callers must supply every required permission and bind the grants to their
+   * canonical request/reviewer; this primitive does not record an approval.
+   * Keep callbacks bounded and do not acquire another identity lease inside them.
+   */
+  async guardIndependentExecutions<T>(
+    original: readonly ExecutionGrant[],
+    reviewer: readonly ExecutionGrant[],
+    operation: (original: Principal, reviewer: Principal) => Promise<T>,
+  ): Promise<T> {
+    return this.guardExecutionGroups(
+      [original, reviewer],
+      async (principals) => {
+        const first = principals[0],
+          second = principals[1];
+        if (!first || !second)
+          throw new AuthError(
+            403,
+            "GRANT_DENIED",
+            "Execution grants are invalid.",
+          );
+        return operation(first, second);
+      },
+    );
+  }
+
+  private async guardExecutionGroups<T>(
+    values: readonly (readonly ExecutionGrant[])[],
+    operation: (principals: readonly Principal[]) => Promise<T>,
+  ): Promise<T> {
+    this.ensureReady();
+    const parsed = z
+      .array(z.array(executionGrantSchema).min(1).max(4))
+      .min(1)
+      .max(2)
+      .safeParse(values);
+    if (!parsed.success)
+      throw new AuthError(403, "GRANT_DENIED", "Execution grants are invalid.");
+    const groups = parsed.data.map((grants, index) => {
+        const anchor = grants[0];
+        if (!anchor)
+          throw new AuthError(
+            403,
+            "GRANT_DENIED",
+            "Execution grants are invalid.",
+          );
+        return { grants, anchor, index };
+      }),
+      first = groups[0];
+    if (
+      !first ||
+      new Set(groups.map((g) => g.anchor.userId)).size !== groups.length
+    )
+      throw new AuthError(
+        403,
+        "GRANT_DENIED",
+        "Independent authority requires distinct principals.",
+      );
+    const now = this.now().getTime();
+    for (const { grants, anchor } of groups)
+      for (const grant of grants)
+        if (
+          grant.organizationId !== first.anchor.organizationId ||
+          grant.userId !== anchor.userId ||
+          grant.sessionId !== anchor.sessionId ||
+          grant.issuedAt > now ||
+          grant.expiresAt <= now ||
+          grant.expiresAt - grant.issuedAt > 3600000 ||
+          !equal(grant.signature, this.grantSignature(grant))
+        )
+          throw new AuthError(
+            403,
+            "GRANT_DENIED",
+            "Execution grant is invalid or expired.",
+          );
+    // Stable principal lock order, preserving caller order in the returned pair.
+    groups.sort((a, b) => (a.anchor.userId < b.anchor.userId ? -1 : 1));
+    return this.transaction(async (client) => {
+      const principals: Principal[] = [];
+      for (const { grants, index } of groups) {
+        let principal: Principal | undefined;
+        for (const grant of grants) {
+          const result = await client.query<
+            UserRow & { authority_expires_at: Date }
+          >(
+            "select u.*,least(s.expires_at,s.idle_expires_at) as authority_expires_at from users u join sessions s on s.user_id=u.id where u.id=$1 and s.id=$2 and s.revoked_at is null and s.expires_at>$3 and s.idle_expires_at>$3 and s.auth_version=u.auth_version and u.auth_version=$4 and u.disabled_at is null for share of u,s",
+            [grant.userId, grant.sessionId, this.now(), grant.userVersion],
+          );
+          const user = result.rows[0];
+          if (!user)
+            throw new AuthError(
+              403,
+              "GRANT_DENIED",
+              "Execution authority was revoked.",
+            );
+          const p: Principal = {
+            user: this.publicUser(user),
+            sessionId: grant.sessionId,
+            authorityExpiresAt: Math.min(
+              user.authority_expires_at.getTime(),
+              grant.expiresAt,
+            ),
+            userVersion: user.auth_version,
+          };
+          const { member, a } = await this.authority(
+            client,
+            p,
+            grant.organizationId,
+          );
+          if (
+            member.id !== grant.membershipId ||
+            member.auth_version !== grant.membershipVersion ||
+            !canAccess(
+              a,
+              grant.permission,
+              await this.canonicalScope(
+                client,
+                grant.organizationId,
+                grant.resource,
+              ),
+            )
+          )
+            throw new AuthError(
+              403,
+              "GRANT_DENIED",
+              "Execution authority changed.",
+            );
+
+          principal = p;
+        }
+        if (
+          !principal ||
+          (groups.length === 2 && principal.user.account_type !== "adult")
+        )
+          throw new AuthError(
+            403,
+            "GRANT_DENIED",
+            "Independent authority requires current adults.",
+          );
+        principal.authorityExpiresAt = Math.min(
+          ...grants.map((g) => g.expiresAt),
+          principal.authorityExpiresAt ?? 0,
+        );
+        principals[index] = principal;
+      }
+      // The first principal can expire while we wait for the second one's
+      // locks. Recheck the entire set immediately before entering the callback.
+      const checkedAt = this.now().getTime();
+      if (
+        principals.some((p) => (p.authorityExpiresAt ?? 0) <= checkedAt) ||
+        groups.some(({ grants }) => grants.some((g) => g.issuedAt > checkedAt))
+      )
+        throw new AuthError(
+          403,
+          "GRANT_DENIED",
+          "Execution authority expired or clock moved backwards.",
+        );
+      return operation(principals);
     });
   }
 
