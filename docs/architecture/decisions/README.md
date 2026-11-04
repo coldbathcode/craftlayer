@@ -54,3 +54,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0028 — Rolling management admission](0028-rolling-management-admission.md).
 
 - [0029 — Enrollment history pagination](0029-enrollment-history-pagination.md).
+
+- [0030 — Durable deployment review requests](0030-durable-deployment-review-requests.md).

@@ -7,7 +7,10 @@ import {
 import {
   deploymentAdmissionRequest,
   deploymentAdmissionView,
+  deploymentApprovalRequest,
+  deploymentApprovalRequestView,
   deploymentJobView,
+  deploymentReviewSnapshot,
 } from "@craftlayer/contracts";
 import { canAccess } from "@craftlayer/core";
 import { nodeDigest } from "@craftlayer/node-protocol";
@@ -32,6 +35,30 @@ interface Intent {
   node_state: string;
   credential_expires_at: Date;
   environment_type: string;
+  server_id: string;
+  world_id: string;
+  name: string;
+  template_id: string;
+  plan_hash: string;
+  template_hash: string;
+  policy_hash: string;
+  reservation_version: number;
+  cpu_milli: number;
+  memory_mb: number;
+  disk_mb: number;
+  java_port: number;
+  bedrock_port: number;
+}
+interface ApprovalRequest {
+  id: string;
+  intent_id: string;
+  request_key: string;
+  request_hash: string;
+  stop_hash: string;
+  review_hash: string;
+  review: unknown;
+  created_at: Date;
+  expires_at: Date;
 }
 interface Admission {
   id: string;
@@ -108,7 +135,7 @@ export class DeploymentAdmissions {
   async #intent(c: pg.PoolClient, org: string, id: string) {
     const r = (
       await c.query<Intent>(
-        "select i.*,r.deployment_id,r.state reservation_state,r.node_version,r.credential_version,n.version current_node_version,n.credential_version current_credential_version,n.state node_state,k.expires_at credential_expires_at,e.type environment_type from minecraft_deployment_intents i join minecraft_reservations r on (r.organization_id,r.id)=(i.organization_id,i.reservation_id) join minecraft_nodes n on (n.organization_id,n.id)=(i.organization_id,i.node_id) join minecraft_node_credentials k on (k.organization_id,k.node_id,k.version)=(n.organization_id,n.id,n.credential_version) join environments e on (e.organization_id,e.project_id,e.id)=(r.organization_id,r.project_id,r.environment_id) where i.organization_id=$1 and i.id=$2 for update of n,r",
+        "select i.*,r.deployment_id,r.server_id,r.world_id,r.name,r.template_id,r.plan_hash,r.template_hash,r.policy_hash,r.version reservation_version,r.cpu_milli,r.memory_mb,r.disk_mb,r.java_port,r.bedrock_port,r.state reservation_state,r.node_version,r.credential_version,n.version current_node_version,n.credential_version current_credential_version,n.state node_state,k.expires_at credential_expires_at,e.type environment_type from minecraft_deployment_intents i join minecraft_reservations r on (r.organization_id,r.id)=(i.organization_id,i.reservation_id) join minecraft_nodes n on (n.organization_id,n.id)=(i.organization_id,i.node_id) join minecraft_node_credentials k on (k.organization_id,k.node_id,k.version)=(n.organization_id,n.id,n.credential_version) join environments e on (e.organization_id,e.project_id,e.id)=(r.organization_id,r.project_id,r.environment_id) where i.organization_id=$1 and i.id=$2 for update of n,r",
         [org, z.uuid().parse(id)],
       )
     ).rows[0];
@@ -205,6 +232,185 @@ export class DeploymentAdmissions {
       expires_at: a.expires_at.toISOString(),
       effects: "metadata_only",
       job_id: a.job_id,
+    });
+  }
+  async #approvalRead(c: pg.PoolClient, org: string, id: string) {
+    return (
+      await c.query<ApprovalRequest>(
+        "select * from minecraft_deployment_approval_requests where organization_id=$1 and id=$2",
+        [org, id],
+      )
+    ).rows[0];
+  }
+  #approvalView(r: ApprovalRequest) {
+    return deploymentApprovalRequestView.parse({
+      operation_id: r.id,
+      intent_id: r.intent_id,
+      review_hash: r.review_hash,
+      review: r.review,
+      state: "awaiting_review",
+      created_at: r.created_at.toISOString(),
+      expires_at: r.expires_at.toISOString(),
+      expired: r.expires_at.getTime() <= this.#now(),
+      execution_enabled: false,
+      qualification: "unverified",
+    });
+  }
+  /** Persist review material only; no decision, grant, qualifier or dispatch. */
+  async requestApproval(
+    token: string,
+    org: string,
+    input: unknown,
+    key: string,
+  ) {
+    const v = deploymentApprovalRequest.parse(input);
+    z.uuid().parse(key);
+    const located = await this.#locate(token, org, v.intent_id);
+    const grants = [
+      await this.options.auth.issueExecutionGrant(token, org, "node:deploy", {
+        kind: "project",
+        id: located.project_id,
+      }),
+      await this.options.auth.issueExecutionGrant(
+        token,
+        org,
+        "server:provision",
+        { kind: "environment", id: located.environment_id },
+      ),
+    ];
+    return this.options.auth.guardExecutions(grants, (p) =>
+      this.#tx(org, async (c) => {
+        const r = await this.#intent(c, org, v.intent_id);
+        this.#binding(r, p);
+        const stop = await this.#stop(c, r),
+          hash = nodeDigest(v),
+          old = (
+            await c.query<ApprovalRequest>(
+              "select * from minecraft_deployment_approval_requests where organization_id=$1 and (intent_id=$2 or (actor_id=$3 and request_key=$4))",
+              [org, r.id, p.user.id, key],
+            )
+          ).rows[0];
+        if (old) {
+          if (
+            old.intent_id !== r.id ||
+            old.request_key !== key ||
+            old.request_hash !== hash
+          )
+            deny("IDEMPOTENCY_CONFLICT");
+          if (old.stop_hash !== stop) deny("DEPLOYMENT_STOP_CHANGED");
+          return this.#approvalView(old);
+        }
+        if (
+          (
+            await c.query(
+              "select 1 from minecraft_deployment_jobs where organization_id=$1 and intent_id=$2",
+              [org, r.id],
+            )
+          ).rowCount
+        )
+          deny("DEPLOYMENT_ALREADY_ISSUED");
+        const now = this.#now(),
+          expires = Math.min(
+            now + 300000,
+            p.authorityExpiresAt ?? 0,
+            r.credential_expires_at.getTime(),
+          );
+        if (expires <= now) deny("DEPLOYMENT_APPROVAL_REQUEST_EXPIRED");
+        const review = deploymentReviewSnapshot.parse({
+            schema_version: 1,
+            project_id: r.project_id,
+            environment_id: r.environment_id,
+            node_id: r.node_id,
+            reservation_id: r.reservation_id,
+            deployment_id: r.deployment_id,
+            server_id: r.server_id,
+            world_id: r.world_id,
+            name: r.name,
+            template_id: r.template_id,
+            plan_hash: r.plan_hash,
+            policy_hash: r.policy_hash,
+            template_hash: r.template_hash,
+            node_version: r.node_version,
+            credential_version: r.credential_version,
+            reservation_version: r.reservation_version,
+            cpu_milli: r.cpu_milli,
+            memory_mb: r.memory_mb,
+            disk_mb: r.disk_mb,
+            java_port: r.java_port,
+            bedrock_port: r.bedrock_port,
+          }),
+          id = randomUUID(),
+          deadline = new Date(expires).toISOString(),
+          reviewHash = nodeDigest({
+            purpose: "deployment.review.v1",
+            request_id: id,
+            organization_id: org,
+            intent_id: r.id,
+            actor_id: p.user.id,
+            session_id: p.sessionId,
+            stop_hash: stop,
+            grants_hash: nodeDigest(grants),
+            expires_at: deadline,
+            review,
+          });
+        await c.query(
+          "insert into minecraft_deployment_approval_requests(id,organization_id,project_id,environment_id,node_id,reservation_id,intent_id,actor_id,session_id,request_key,request_hash,stop_hash,review_hash,review,created_at,expires_at,node_grant,server_grant) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)",
+          [
+            id,
+            org,
+            r.project_id,
+            r.environment_id,
+            r.node_id,
+            r.reservation_id,
+            r.id,
+            p.user.id,
+            p.sessionId,
+            key,
+            hash,
+            stop,
+            reviewHash,
+            review,
+            new Date(now),
+            new Date(expires),
+            grants[0],
+            grants[1],
+          ],
+        );
+        await c.query(
+          "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,$2,'server.deployment_review_requested',$3,'allowed',$4)",
+          [
+            org,
+            p.user.id,
+            r.deployment_id,
+            { operation_id: id, intent_id: r.id, effects: "metadata_only" },
+          ],
+        );
+        await c.query(
+          "insert into minecraft_deployment_approval_request_outbox(id,organization_id,request_id,created_at) values($1,$2,$3,$4)",
+          [randomUUID(), org, id, new Date(now)],
+        );
+        if ((await this.#stop(c, r)) !== stop) deny("DEPLOYMENT_STOP_CHANGED");
+        if (expires <= this.#now()) deny("DEPLOYMENT_APPROVAL_REQUEST_EXPIRED");
+        const saved = await this.#approvalRead(c, org, id);
+        if (!saved) deny("DEPLOYMENT_APPROVAL_REQUEST_FAILED");
+        return this.#approvalView(saved);
+      }),
+    );
+  }
+  async approvalRequest(token: string, org: string, id: string) {
+    z.uuid().parse(id);
+    const r = await this.options.auth.guardOrganization(
+      token,
+      org,
+      "organization:read",
+      () => this.#tx(org, (c) => this.#approvalRead(c, org, id)),
+    );
+    if (!r) deny("NOT_FOUND", 404);
+    const located = await this.#locate(token, org, r.intent_id);
+    return this.#scope(token, org, located, async (c) => {
+      const current = await this.#approvalRead(c, org, id);
+      if (!current) deny("NOT_FOUND", 404);
+      return this.#approvalView(current);
     });
   }
   async admit(token: string, org: string, input: unknown, key: string) {

@@ -2544,3 +2544,374 @@ it("rejects valid-TLS poll responses with altered signer, scope, nonce binding o
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("persists one immutable review request with exact resources, audit and reference-only outbox", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      key = randomUUID(),
+      body = { intent_id: f.intent.operation_id };
+    try {
+      const all = await Promise.all(
+          Array.from({ length: 8 }, () =>
+            service.requestApproval(f.adult, f.org, body, key),
+          ),
+        ),
+        result = all[0];
+      if (!result) throw new Error("Missing request");
+      expect(new Set(all.map((x) => x.operation_id)).size).toBe(1);
+      const disabled = new DeploymentJobs({
+        databaseUrl: url,
+        auth: h.auth,
+        controlPrivateKey: f.control.private_key,
+        clock: f.now,
+        policy: f.options.policy,
+      });
+      try {
+        await expect(
+          disabled.prepare(f.adult, f.org, body, randomUUID()),
+        ).rejects.toMatchObject({ code: "DEPLOYMENT_UNQUALIFIED" });
+      } finally {
+        await disabled.close();
+      }
+      expect(result).toMatchObject({
+        state: "awaiting_review",
+        expired: false,
+        execution_enabled: false,
+        qualification: "unverified",
+        review: {
+          reservation_id: f.r.reservation_id,
+          deployment_id: f.r.deployment_id,
+          node_id: f.node,
+          reservation_version: 2,
+          cpu_milli: 2000,
+          memory_mb: 6144,
+          disk_mb: 20480,
+        },
+      });
+      const wire = JSON.stringify(result);
+      for (const secret of [
+        "actor_id",
+        "session_id",
+        "signature",
+        "grant",
+        "stop_hash",
+      ])
+        expect(wire).not.toContain(secret);
+      await h.tx(h.runtime, f.org, async (c) => {
+        const saved = (
+          await c.query("select * from minecraft_deployment_approval_requests")
+        ).rows;
+        expect(saved).toHaveLength(1);
+        expect(result.review_hash).toBe(
+          nodeDigest({
+            purpose: "deployment.review.v1",
+            request_id: result.operation_id,
+            organization_id: f.org,
+            intent_id: body.intent_id,
+            actor_id: saved[0].actor_id,
+            session_id: saved[0].session_id,
+            stop_hash: saved[0].stop_hash,
+            grants_hash: nodeDigest([
+              saved[0].node_grant,
+              saved[0].server_grant,
+            ]),
+            expires_at: result.expires_at,
+            review: result.review,
+          }),
+        );
+        const outbox = (
+          await c.query(
+            "select * from minecraft_deployment_approval_request_outbox",
+          )
+        ).rows;
+        expect(outbox).toHaveLength(1);
+        expect(Object.keys(outbox[0]).sort()).toEqual([
+          "created_at",
+          "id",
+          "organization_id",
+          "request_id",
+          "schema_version",
+        ]);
+        expect(
+          (
+            await c.query(
+              "select 1 from audit_events where action='server.deployment_review_requested'",
+            )
+          ).rowCount,
+        ).toBe(1);
+        expect(
+          (await c.query("select 1 from minecraft_deployment_jobs")).rowCount,
+        ).toBe(0);
+        expect(
+          (await c.query("select 1 from minecraft_deployment_authorizations"))
+            .rowCount,
+        ).toBe(0);
+      });
+      const reopened = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      });
+      try {
+        expect(
+          await reopened.approvalRequest(
+            await f.member("org_admin"),
+            f.org,
+            result.operation_id,
+          ),
+        ).toEqual(result);
+      } finally {
+        await reopened.close();
+      }
+      await expect(
+        service.requestApproval(f.adult, f.org, body, randomUUID()),
+      ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+    } finally {
+      await service.close();
+    }
+  }));
+
+it("requires current original adult session and canonical dual scope for requesting review", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      body = { intent_id: f.intent.operation_id },
+      key = randomUUID();
+    try {
+      for (const token of ["", f.child, f.viewer])
+        await expect(
+          service.requestApproval(token, f.org, body, key),
+        ).rejects.toMatchObject({ status: token ? 403 : 401 });
+      await expect(
+        service.requestApproval(f.adult, f.foreignOrg, body, key),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        service.requestApproval(await f.member("org_admin"), f.org, body, key),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_SESSION_DENIED" });
+      await expect(
+        service.requestApproval(
+          f.adult,
+          f.org,
+          { ...body, approval: true },
+          key,
+        ),
+      ).rejects.toThrow();
+      const r = await service.requestApproval(f.adult, f.org, body, key);
+      for (const token of [f.child, f.viewer])
+        await expect(
+          service.approvalRequest(token, f.org, r.operation_id),
+        ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        service.approvalRequest(f.adult, f.foreignOrg, r.operation_id),
+      ).rejects.toMatchObject({ status: 404 });
+      await h.tx(h.identity, f.org, (c) =>
+        c.query("update sessions set revoked_at=now() where token_hash=$1", [
+          createHash("sha256").update(f.adult).digest("hex"),
+        ]),
+      );
+      await expect(
+        service.requestApproval(f.adult, f.org, body, key),
+      ).rejects.toMatchObject({ status: 401 });
+    } finally {
+      await service.close();
+    }
+  }));
+
+it("retains expired review history without renewing it and clamps expiry to original authority", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      body = { intent_id: f.intent.operation_id },
+      key = randomUUID();
+    try {
+      const deadline = new Date(f.now() + 15000);
+      await h.tx(h.identity, f.org, (c) =>
+        c.query("update sessions set expires_at=$1 where token_hash=$2", [
+          deadline,
+          createHash("sha256").update(f.adult).digest("hex"),
+        ]),
+      );
+      const r = await service.requestApproval(f.adult, f.org, body, key);
+      expect(Date.parse(r.expires_at)).toBeLessThanOrEqual(deadline.getTime());
+      f.advance(15001);
+      expect(await service.requestApproval(f.adult, f.org, body, key)).toEqual({
+        ...r,
+        expired: true,
+      });
+      expect(
+        await service.approvalRequest(f.adult, f.org, r.operation_id),
+      ).toEqual({ ...r, expired: true });
+      await expect(
+        service.requestApproval(f.adult, f.org, body, randomUUID()),
+      ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+      f.advance(-1);
+      await expect(
+        service.approvalRequest(f.adult, f.org, r.operation_id),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_CLOCK_ROLLBACK" });
+    } finally {
+      await service.close();
+    }
+  }));
+
+it("binds review requests to stop epochs and refuses current node revocation", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+        databaseUrl: url,
+        auth: h.auth,
+        clock: f.now,
+      }),
+      body = { intent_id: f.intent.operation_id },
+      key = randomUUID();
+    try {
+      const r = await service.requestApproval(f.adult, f.org, body, key);
+      await h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          "insert into runtime_stop_latches(kind,scope_id,organization_id,epoch,latched,operation_id,reason) values('environment',$1,$2,1,true,$3,'Review stop')",
+          [f.environment, f.org, randomUUID()],
+        ),
+      );
+      await expect(
+        service.requestApproval(f.adult, f.org, body, key),
+      ).rejects.toMatchObject({ code: "STOP_LATCHED" });
+      await h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          "update runtime_stop_latches set latched=false,epoch=epoch+1 where kind='environment' and scope_id=$1",
+          [f.environment],
+        ),
+      );
+      await expect(
+        service.requestApproval(f.adult, f.org, body, key),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_STOP_CHANGED" });
+      expect(
+        (await service.approvalRequest(f.adult, f.org, r.operation_id))
+          .execution_enabled,
+      ).toBe(false);
+      const node = await f.nodes.get(f.adult, f.org, f.node);
+      await f.nodes.change(
+        f.adult,
+        f.org,
+        f.node,
+        "revoke",
+        { expected_version: node.version },
+        randomUUID(),
+      );
+      await expect(
+        service.requestApproval(f.adult, f.org, body, key),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_BINDING_STALE" });
+    } finally {
+      await service.close();
+    }
+  }));
+
+it("cannot turn review metadata into qualification or retrospectively request review for an issued command", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    const { qualifier: _fake, ...options } = f.options,
+      disabled = new DeploymentJobs(options);
+    try {
+      await expect(
+        disabled.prepare(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_UNQUALIFIED" });
+      await f.prepare(); // Explicit fake qualification only, no node execution.
+      await expect(
+        service.requestApproval(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_ALREADY_ISSUED" });
+      expect(
+        (
+          await h.tx(h.runtime, f.org, (c) =>
+            c.query("select 1 from minecraft_deployment_approval_requests"),
+          )
+        ).rowCount,
+      ).toBe(0);
+    } finally {
+      await service.close();
+      await disabled.close();
+    }
+  }));
+
+it("enforces immutable pending-only SQL review material and tenant-scoped outbox bindings", () =>
+  fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const r = await service.requestApproval(
+        f.adult,
+        f.org,
+        { intent_id: f.intent.operation_id },
+        randomUUID(),
+      );
+      expect(
+        (
+          await h.runtime.query(
+            "select 1 from minecraft_deployment_approval_requests",
+          )
+        ).rowCount,
+      ).toBe(0);
+      for (const table of [
+        "minecraft_deployment_approval_requests",
+        "minecraft_deployment_approval_request_outbox",
+      ])
+        for (const sql of [
+          `delete from ${table}`,
+          `update ${table} set created_at=now()`,
+        ])
+          await expect(
+            h.tx(h.runtime, f.org, (c) => c.query(sql)),
+          ).rejects.toMatchObject({ code: "42501" });
+      await expect(
+        h.tx(h.runtime, f.foreignOrg, (c) =>
+          c.query(
+            "insert into minecraft_deployment_approval_request_outbox(id,organization_id,request_id,created_at) values($1,$2,$3,now())",
+            [randomUUID(), f.foreignOrg, r.operation_id],
+          ),
+        ),
+      ).rejects.toMatchObject({ code: "23503" });
+      for (const [expression, grant] of [
+        ["review || '{\"memory_mb\":1}'::jsonb", "node_grant"],
+        ["review || '{\"approval\":true}'::jsonb", "node_grant"],
+        ["'{}'::jsonb", "node_grant"],
+        ["review", 'node_grant || \'{"permission":"approval:decide"}\'::jsonb'],
+        [
+          "review",
+          'node_grant || \'{"sessionId":"00000000-0000-4000-8000-000000000001"}\'::jsonb',
+        ],
+      ])
+        await expect(
+          h.tx(h.runtime, f.org, (c) =>
+            c.query(
+              `insert into minecraft_deployment_approval_requests(id,organization_id,project_id,environment_id,node_id,reservation_id,intent_id,actor_id,session_id,request_key,request_hash,stop_hash,review_hash,review,created_at,expires_at,node_grant,server_grant) select gen_random_uuid(),organization_id,project_id,environment_id,node_id,reservation_id,intent_id,actor_id,session_id,gen_random_uuid(),request_hash,stop_hash,review_hash,${expression},created_at,expires_at,${grant},server_grant from minecraft_deployment_approval_requests where id=$1`,
+              [r.operation_id],
+            ),
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+    } finally {
+      await service.close();
+    }
+  }));

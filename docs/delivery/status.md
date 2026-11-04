@@ -1,6 +1,6 @@
 # Current delivery status
 
-Last updated: 2026-11-03.
+Last updated: 2026-11-04.
 
 ## Authorized scope
 
@@ -229,3 +229,9 @@ Installed node/gateway entrypoints remain inventory-only; private authorizer/bro
 ## REV-09 clean-checkout setup correction, 2026-11-03
 
 The first hosted management-browser job failed before browser startup: fixture imports expected compiled workspace contracts absent in the independent job. Local tests had reused outputs. The wrapper now explicitly builds server exports and only tears down Compose after configured startup was attempted; early failures keep their original error while temporary fixtures are removed. Fresh-worktree browser and injected setup-fault evidence is recorded in build log. This corrects setup without weakening the test or skipping coverage. New hosted outcome must be verified separately.
+
+## CL-F25-03/J — durable deployment review requests, 2026-11-04
+
+The latest baseline `d108347` passed both hosted foundation and management-browser jobs (run 41639216188). Local provisioning work now adds immutable review requests bound to exact allocated intent/reservation/resources/plan/node/credential/original session/stop state. Strict input accepts only intent ID; atomic SQL 0026 request/audit/reference-only outbox records remain awaiting-review, unverified and execution-disabled. Replay does not renew bounded expiry; current scope/stop/credential and retrospective-command checks apply. Exact final verification/publication is in build log and [handoff](handoffs/F25-review-requests.md).
+
+Next: independent adult approve/reject/revoke decisions with current original/reviewer authority and exact review binding. Initial reservation approval, actual storage/game/identity/backup/restore qualification and installed execution remain separate gates; no production or Chapter 04 action.
