@@ -74,3 +74,5 @@ The original [blueprint v0.2](docs/source/CraftLayer_Build_Blueprint.md) is pres
 Source: [coldbathcode/craftlayer](https://github.com/coldbathcode/craftlayer). Local work tracks `origin/main`; no GitHub Project board has been created. [GitHub setup](docs/delivery/github-setup.md) describes optional settings and issue organization.
 
 Apache-2.0 remains the blueprint's candidate license; it has not been adopted and no license grant is made here. Dependency/license review and the final choice remain release decisions. Domain/trademark clearance, game compatibility, real provider behavior and Cloud pricing remain in [the risk register](docs/delivery/risks-and-decisions.md).
+
+The current delivery priority is a separate playable VPS test server. `pnpm minecraft:playtest:prepare` prepares a pinned Java-only Compose bundle without accepting EULA or starting anything. See the [playtest guide](docs/development/minecraft-playtest.md) for the target/identity/storage/recovery steps before deployment.

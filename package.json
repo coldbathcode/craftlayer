@@ -40,6 +40,7 @@
     "test:preflight:recovery": "vitest run tests/unit/minecraft-preservation.test.ts",
     "test:server-ui": "node scripts/test-server-ui.mjs",
     "test:node:broker": "pnpm build:server && node scripts/test-node-broker.mjs",
+    "minecraft:playtest:prepare": "node --import tsx scripts/minecraft/playtest.ts prepare",
     "minecraft:identity:prepare": "node --import tsx scripts/minecraft/identity-fixture.ts prepare",
     "minecraft:identity:verify": "node --import tsx scripts/minecraft/identity-fixture.ts verify",
     "prototype:up": "node scripts/prototype.mjs up",

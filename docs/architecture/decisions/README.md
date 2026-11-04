@@ -56,3 +56,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0029 — Enrollment history pagination](0029-enrollment-history-pagination.md).
 
 - [0030 — Durable deployment review requests](0030-durable-deployment-review-requests.md).
+
+- [0031 — Operator playtest first](0031-operator-playtest-first.md).

@@ -112,3 +112,5 @@ CL-F25-03/B adds local durable command/lease/current-permit/receipt evidence for
 CL-F25-03/E adds private delegated-authority intake/issuer separation for PR-028/032: no API control signing key, no gateway identity DB secret, no grants in projections/outbox, exact immutable original scope/stop/expiry and no authority renewal by replay. This is permission delegation metadata, not independent approval/EULA acceptance or a completed provisioning milestone.
 
 CL-F25-03/K1 supplies a private two-adult current-authority prerequisite for PR-003/025/031/033. Local identity/concurrency evidence does not complete durable independent approval, provision a server or satisfy any host/game/recovery release gate.
+
+CL-F25-03/P1 / ADR 0031 prioritizes a separately operated owner-playable VPS preview before completing platform provisioning automation. It preserves PR-023/026/028/029/031/032 safety requirements and does not claim their full release acceptance. The prepared Java-only bundle cannot verify identities, enforce host disk quota, back up/restore, provision through CraftLayer or qualify Bedrock by itself; those actual target/game gates remain pending.
