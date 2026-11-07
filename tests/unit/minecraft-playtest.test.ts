@@ -38,6 +38,9 @@ it("isolates a new Java server with loopback game access and no administrative p
     memswap_limit: "3g",
     stop_grace_period: "120s",
   });
+  expect(service.tmpfs).toEqual([
+    "/tmp:rw,nosuid,nodev,size=268435456,mode=1777",
+  ]);
   expect(service.volumes.map((v) => v.source)).toEqual(["./data", "./runtime"]);
   expect(service.volumes.every((v) => v.bind.create_host_path === false)).toBe(
     true,
@@ -210,6 +213,9 @@ it("prepares crossplay with pinned plugins, closed admission and private TCP/UDP
   const compose = JSON.parse(
     await readFile(join(result.directory, "compose.json"), "utf8"),
   );
+  expect(compose.services.minecraft.tmpfs).toEqual([
+    "/tmp:rw,nosuid,nodev,exec,size=268435456,mode=1777",
+  ]);
   expect(compose.services.minecraft.ports).toEqual([
     {
       target: 25565,

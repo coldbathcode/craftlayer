@@ -44,3 +44,9 @@ Online authentication, secure profiles and the allowlist are enabled. OP list is
 4. Hand over the tested address/tunnel instructions and confirm the owner can play. Then wire real read-only observation into the dashboard and continue typed lifecycle/backup integration. No production/family-ready claim follows from a successful artifact download or Compose parse.
 
 Do not run broad Docker cleanup, `down --volumes`, force removal, existing-world import, offline mode, public RCON or global firewall replacement. Rollback must stop/remove only the new operation-owned runtime resources and retain the new world and its backups.
+
+## Native networking and current operational evidence
+
+Crossplay requires native WebRTC libraries. Docker mounts tmpfs with `noexec` unless explicitly overridden, even when only `rw,nosuid,nodev` is written. The crossplay bundle therefore uses `exec` on the bounded 256 MiB temporary mount; world storage can retain `noexec`. Java-only behavior remains unchanged. Paper's ready log alone is insufficient: verify Geyser's builtin signaling starts without native-loader errors, then perform authenticated Bedrock admission/denial from an actual supported client. A listener or HTTP 404 is not a successful game join.
+
+Local ARM64 and Linux AMD64 smoke boots and an isolated restored-world boot/status query passed during P3. The copied original data was byte-verified before isolated access/network/metrics overrides; the original VPS source manifests remain unchanged. The separate VPS bundle is only staged until bounded storage and effective network evidence are verified. The real existing stopped server now has read-only registration in the local dashboard; full backup/client qualification remains unverified in its projection.

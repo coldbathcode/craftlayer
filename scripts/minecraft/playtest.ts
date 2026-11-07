@@ -115,7 +115,9 @@ export function renderPlaytest(input: unknown, candidate: unknown, id: string) {
             bind: { create_host_path: false },
           },
         ],
-        tmpfs: ["/tmp:rw,nosuid,nodev,size=268435456,mode=1777"],
+        tmpfs: [
+          `/tmp:rw,nosuid,nodev${value.edition === "crossplay" ? ",exec" : ""},size=268435456,mode=1777`,
+        ],
         logging: {
           driver: "local",
           options: { "max-size": "10m", "max-file": "3" },
