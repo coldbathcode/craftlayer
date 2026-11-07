@@ -50,6 +50,7 @@ it("projects only bounded unverified review material and never an approved execu
       review_hash: "d".repeat(64),
       review,
       state: "awaiting_review",
+      decision_id: null,
       created_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + 300000).toISOString(),
       expired: false,

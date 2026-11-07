@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { request as httpsRequest } from "node:https";
 import { tmpdir } from "node:os";
@@ -2915,3 +2915,677 @@ it("enforces immutable pending-only SQL review material and tenant-scoped outbox
       await service.close();
     }
   }));
+
+const tokenHash = (token: string) =>
+  createHash("sha256").update(token).digest("hex");
+function reviewFixture(
+  fn: (x: {
+    f: Awaited<ReturnType<typeof setup>>;
+    service: DeploymentAdmissions;
+    request: Awaited<ReturnType<DeploymentAdmissions["requestApproval"]>>;
+    reviewer: string;
+    decide: (
+      decision: "approved" | "rejected",
+      token?: string,
+      key?: string,
+      changes?: Record<string, unknown>,
+    ) => ReturnType<DeploymentAdmissions["decideApproval"]>;
+    count: (table: string) => Promise<number>;
+    latch: (latched: boolean, epoch: number) => Promise<unknown>;
+  }) => Promise<void>,
+) {
+  return fixture(async (f) => {
+    const service = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      const request = await service.requestApproval(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+        reviewer = await f.member("org_admin");
+      await fn({
+        f,
+        service,
+        request,
+        reviewer,
+        decide: (
+          decision,
+          token = reviewer,
+          key = randomUUID(),
+          changes = {},
+        ) =>
+          service.decideApproval(
+            token,
+            f.org,
+            {
+              request_id: request.operation_id,
+              review_hash: request.review_hash,
+              decision,
+              ...changes,
+            },
+            key,
+          ),
+        count: (table) =>
+          h.tx(
+            h.runtime,
+            f.org,
+            async (c) =>
+              (await c.query(`select 1 from ${table}`)).rowCount ?? 0,
+          ),
+        latch: (latched, epoch) =>
+          h.tx(h.runtime, f.org, (c) =>
+            c.query(
+              "insert into runtime_stop_latches(kind,scope_id,organization_id,epoch,latched,operation_id,reason) values('environment',$1,$2,$3,$4,$5,'Review stop') on conflict(kind,scope_id) do update set latched=$4,epoch=$3",
+              [f.environment, f.org, epoch, latched, randomUUID()],
+            ),
+          ),
+      });
+    } finally {
+      await service.close();
+    }
+  });
+}
+const decisions = "minecraft_deployment_approval_decisions",
+  revocations = "minecraft_deployment_approval_revocations",
+  decisionOutbox = "minecraft_deployment_approval_decision_outbox";
+
+it("records one independent approval as evidence without enabling or qualifying anything", () =>
+  reviewFixture(async ({ f, service, request, decide, count, reviewer }) => {
+    expect(request).toMatchObject({
+      state: "awaiting_review",
+      decision_id: null,
+    });
+    const key = randomUUID(),
+      all = await Promise.all(
+        Array.from({ length: 8 }, () => decide("approved", reviewer, key)),
+      ),
+      result = all[0];
+    if (!result) throw new Error("Missing decision");
+    expect(new Set(all.map((x) => x.operation_id)).size).toBe(1);
+    expect(result).toMatchObject({
+      request_id: request.operation_id,
+      review_hash: request.review_hash,
+      decision: "approved",
+      state: "approved",
+      revoked_at: null,
+      execution_enabled: false,
+      qualification: "unverified",
+    });
+    expect(Date.parse(result.expires_at)).toBeLessThanOrEqual(
+      Date.parse(request.expires_at),
+    );
+    const wire = JSON.stringify(result);
+    for (const secret of ["reviewer", "actor", "session", "grant", "signature"])
+      expect(wire).not.toContain(secret);
+    expect(await count(decisions)).toBe(1);
+    expect(await count(decisionOutbox)).toBe(1);
+    expect(await count("minecraft_deployment_jobs")).toBe(0);
+    expect(await count("minecraft_deployment_authorizations")).toBe(0);
+    await h.tx(h.runtime, f.org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select outcome,target_id from audit_events where action='server.deployment_review_approved'",
+          )
+        ).rows,
+      ).toEqual([{ outcome: "allowed", target_id: f.r.deployment_id }]);
+    });
+    const decided = await service.approvalRequest(
+      f.adult,
+      f.org,
+      request.operation_id,
+    );
+    expect(decided).toMatchObject({
+      state: "decided",
+      decision_id: result.operation_id,
+      execution_enabled: false,
+      qualification: "unverified",
+    });
+    const reopened = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: h.auth,
+      clock: f.now,
+    });
+    try {
+      expect(
+        await reopened.approvalDecision(reviewer, f.org, result.operation_id),
+      ).toEqual(result);
+      const evidence = await reopened.currentApproval(
+        f.org,
+        result.operation_id,
+      );
+      expect(evidence).toMatchObject({
+        decision_id: result.operation_id,
+        request_id: request.operation_id,
+        intent_id: f.intent.operation_id,
+        review_hash: request.review_hash,
+        execution_enabled: false,
+        qualification: "unverified",
+      });
+      expect(evidence.approval_hash).toMatch(/^[a-f0-9]{64}$/);
+      expect(evidence.approval_hash).not.toBe(request.review_hash);
+    } finally {
+      await reopened.close();
+    }
+    const disabled = new DeploymentJobs({
+      databaseUrl: url,
+      auth: h.auth,
+      controlPrivateKey: f.control.private_key,
+      clock: f.now,
+      policy: f.options.policy,
+    });
+    try {
+      await expect(
+        disabled.prepare(
+          f.adult,
+          f.org,
+          { intent_id: f.intent.operation_id },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_UNQUALIFIED" });
+    } finally {
+      await disabled.close();
+    }
+  }));
+
+it("refuses self-review, children, viewers, foreign scope and an inexact review", () =>
+  reviewFixture(async ({ f, service, request, decide, count, reviewer }) => {
+    const user = await h.tx(
+        h.identity,
+        f.org,
+        async (c) =>
+          (
+            await c.query<{ user_id: string }>(
+              "select user_id from sessions where token_hash=$1",
+              [tokenHash(f.adult)],
+            )
+          ).rows[0]?.user_id,
+      ),
+      secondSession = randomBytes(32).toString("base64url");
+    await h.tx(h.identity, f.org, (c) =>
+      c.query(
+        "insert into sessions(id,user_id,token_hash,auth_version,idle_expires_at,expires_at) values($1,$2,$3,1,now()+interval '1 hour',now()+interval '2 hours')",
+        [randomUUID(), user, tokenHash(secondSession)],
+      ),
+    );
+    for (const decision of ["approved", "rejected"] as const) {
+      for (const token of [f.adult, secondSession])
+        await expect(decide(decision, token)).rejects.toMatchObject({
+          code: "DEPLOYMENT_REVIEWER_NOT_INDEPENDENT",
+          status: 403,
+        });
+      for (const token of [f.child, f.viewer])
+        await expect(decide(decision, token)).rejects.toMatchObject({
+          status: 403,
+        });
+      await expect(decide(decision, "")).rejects.toMatchObject({ status: 401 });
+      await expect(
+        service.decideApproval(
+          reviewer,
+          f.foreignOrg,
+          {
+            request_id: request.operation_id,
+            review_hash: request.review_hash,
+            decision,
+          },
+          randomUUID(),
+        ),
+      ).rejects.toMatchObject({ status: 404 });
+      await expect(
+        decide(decision, reviewer, randomUUID(), {
+          review_hash: "f".repeat(64),
+        }),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_REVIEW_MISMATCH" });
+      for (const extra of [
+        { execution_enabled: true },
+        { qualification: "verified" },
+        { reviewer_id: randomUUID() },
+      ])
+        await expect(
+          decide(decision, reviewer, randomUUID(), extra),
+        ).rejects.toThrow();
+    }
+    expect(await count(decisions)).toBe(0);
+    expect(await count(decisionOutbox)).toBe(0);
+  }));
+
+it("needs the original requester to stay current for approval but never for rejection", () =>
+  reviewFixture(async ({ f, service, request, decide, count, reviewer }) => {
+    await h.tx(h.identity, f.org, (c) =>
+      c.query("update sessions set revoked_at=now() where token_hash=$1", [
+        tokenHash(f.adult),
+      ]),
+    );
+    await expect(decide("approved")).rejects.toBeInstanceOf(AuthError);
+    expect(await count(decisions)).toBe(0);
+    const rejected = await decide("rejected");
+    expect(rejected).toMatchObject({
+      decision: "rejected",
+      state: "rejected",
+      execution_enabled: false,
+    });
+    await expect(
+      service.currentApproval(f.org, rejected.operation_id),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_APPROVAL_NOT_CURRENT" });
+    await expect(
+      service.revokeApproval(
+        reviewer,
+        f.org,
+        { decision_id: rejected.operation_id },
+        randomUUID(),
+      ),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_DECISION_NOT_REVOCABLE" });
+    expect(request.state).toBe("awaiting_review");
+  }));
+
+it("blocks approval across stop epochs and expiry while rejection still records during a stop", () =>
+  reviewFixture(async ({ f, decide, count, latch, reviewer }) => {
+    await latch(true, 1);
+    await expect(decide("approved")).rejects.toMatchObject({
+      code: "STOP_LATCHED",
+    });
+    await latch(false, 2);
+    await expect(decide("approved")).rejects.toMatchObject({
+      code: "DEPLOYMENT_STOP_CHANGED",
+    });
+    expect(await count(decisions)).toBe(0);
+    await latch(true, 3);
+    expect((await decide("rejected", reviewer)).state).toBe("rejected");
+    expect(await count(decisions)).toBe(1);
+    f.advance(301000);
+    await expect(
+      decide("rejected", await f.member("org_admin")),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_ALREADY_DECIDED" });
+  }));
+
+it("refuses expired reviews and plans that moved away from the reviewed snapshot", async () => {
+  await reviewFixture(async ({ f, decide, count }) => {
+    f.advance(301000);
+    for (const decision of ["approved", "rejected"] as const)
+      await expect(decide(decision)).rejects.toMatchObject({
+        code: "DEPLOYMENT_APPROVAL_REQUEST_EXPIRED",
+      });
+    expect(await count(decisions)).toBe(0);
+  });
+  await reviewFixture(async ({ f, decide, count }) => {
+    const node = await f.nodes.get(f.adult, f.org, f.node);
+    await f.nodes.change(
+      f.adult,
+      f.org,
+      f.node,
+      "revoke",
+      { expected_version: node.version },
+      randomUUID(),
+    );
+    await expect(decide("approved")).rejects.toMatchObject({
+      code: "DEPLOYMENT_BINDING_STALE",
+    });
+    expect(await count(decisions)).toBe(0);
+  });
+});
+
+it("keeps exactly one decision per review under races and conflicting replays", () =>
+  reviewFixture(async ({ f, decide, count, reviewer }) => {
+    const other = await f.member("org_admin"),
+      raced = await Promise.allSettled([
+        decide("approved", reviewer),
+        decide("rejected", other),
+      ]),
+      won = raced.filter((x) => x.status === "fulfilled"),
+      lost = raced.filter((x) => x.status === "rejected");
+    expect(won).toHaveLength(1);
+    expect(lost).toHaveLength(1);
+    expect(lost[0]?.reason).toMatchObject({
+      code: "DEPLOYMENT_ALREADY_DECIDED",
+    });
+    expect(await count(decisions)).toBe(1);
+    expect(await count(decisionOutbox)).toBe(1);
+    const third = await f.member("org_admin");
+    await expect(decide("approved", third)).rejects.toMatchObject({
+      code: "DEPLOYMENT_ALREADY_DECIDED",
+    });
+  }));
+
+it("replays rejection by key and refuses the same key with a different decision", () =>
+  reviewFixture(async ({ decide, count, reviewer }) => {
+    const key = randomUUID(),
+      first = await decide("rejected", reviewer, key);
+    expect(await decide("rejected", reviewer, key)).toEqual(first);
+    await expect(decide("approved", reviewer, key)).rejects.toMatchObject({
+      code: "IDEMPOTENCY_CONFLICT",
+    });
+    expect(await count(decisions)).toBe(1);
+  }));
+
+it("revokes approval durably, including during a stop, and blocks later use", () =>
+  reviewFixture(async ({ f, service, decide, count, latch, reviewer }) => {
+    const approved = await decide("approved"),
+      body = { decision_id: approved.operation_id },
+      third = await f.member("org_admin"),
+      key = randomUUID();
+    await service.currentApproval(f.org, approved.operation_id);
+    for (const token of [f.child, f.viewer])
+      await expect(
+        service.revokeApproval(token, f.org, body, randomUUID()),
+      ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      service.revokeApproval(third, f.foreignOrg, body, randomUUID()),
+    ).rejects.toMatchObject({ status: 404 });
+    await latch(true, 1);
+    const all = await Promise.all(
+        Array.from({ length: 6 }, () =>
+          service.revokeApproval(third, f.org, body, key),
+        ),
+      ),
+      revoked = all[0];
+    expect(revoked).toMatchObject({
+      operation_id: approved.operation_id,
+      decision: "approved",
+      state: "revoked",
+      execution_enabled: false,
+    });
+    expect(revoked?.revoked_at).not.toBeNull();
+    expect(await count(revocations)).toBe(1);
+    expect(await count(decisionOutbox)).toBe(2);
+    await latch(false, 2);
+    await expect(
+      service.currentApproval(f.org, approved.operation_id),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_APPROVAL_NOT_CURRENT" });
+    await expect(
+      service.revokeApproval(reviewer, f.org, body, randomUUID()),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_ALREADY_REVOKED" });
+    await expect(decide("approved", third)).rejects.toMatchObject({
+      code: "DEPLOYMENT_ALREADY_DECIDED",
+    });
+    f.advance(301000);
+    expect(
+      (await service.approvalDecision(reviewer, f.org, approved.operation_id))
+        .state,
+    ).toBe("revoked");
+  }));
+
+it("revalidates both adults, stop state and expiry before a saved approval is used", async () => {
+  const cases: [
+    string,
+    (x: Parameters<Parameters<typeof reviewFixture>[0]>[0]) => Promise<unknown>,
+    Record<string, unknown> | null,
+  ][] = [
+    [
+      "reviewer session",
+      ({ f, reviewer }) =>
+        h.tx(h.identity, f.org, (c) =>
+          c.query("update sessions set revoked_at=now() where token_hash=$1", [
+            tokenHash(reviewer),
+          ]),
+        ),
+      null,
+    ],
+    [
+      "original session",
+      ({ f }) =>
+        h.tx(h.identity, f.org, (c) =>
+          c.query("update sessions set revoked_at=now() where token_hash=$1", [
+            tokenHash(f.adult),
+          ]),
+        ),
+      null,
+    ],
+    ["stop", ({ latch }) => latch(true, 1), { code: "STOP_LATCHED" }],
+    [
+      "stop epoch",
+      async ({ latch }) => {
+        await latch(true, 1);
+        await latch(false, 2);
+      },
+      { code: "DEPLOYMENT_STOP_CHANGED" },
+    ],
+    [
+      "expiry",
+      async ({ f }) => f.advance(301000),
+      { code: "DEPLOYMENT_APPROVAL_NOT_CURRENT" },
+    ],
+  ];
+  for (const [name, change, expected] of cases)
+    await reviewFixture(async (x) => {
+      const approved = await x.decide("approved");
+      await x.service.currentApproval(x.f.org, approved.operation_id);
+      await change(x);
+      const use = x.service.currentApproval(x.f.org, approved.operation_id);
+      if (expected) await expect(use, name).rejects.toMatchObject(expected);
+      else await expect(use, name).rejects.toBeInstanceOf(AuthError);
+    });
+});
+
+it("cannot decide on, revoke or reuse a review once physical work was issued", async () => {
+  await reviewFixture(async ({ f, decide, count }) => {
+    await f.prepare();
+    for (const decision of ["approved", "rejected"] as const)
+      await expect(decide(decision)).rejects.toMatchObject({
+        code: "DEPLOYMENT_ALREADY_ISSUED",
+      });
+    expect(await count(decisions)).toBe(0);
+  });
+  await reviewFixture(async ({ f, service, decide, count, reviewer }) => {
+    const approved = await decide("approved");
+    await f.prepare();
+    await expect(
+      service.revokeApproval(
+        reviewer,
+        f.org,
+        { decision_id: approved.operation_id },
+        randomUUID(),
+      ),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_ALREADY_ISSUED" });
+    await expect(
+      service.currentApproval(f.org, approved.operation_id),
+    ).rejects.toMatchObject({ code: "DEPLOYMENT_ALREADY_ISSUED" });
+    expect(await count(revocations)).toBe(0);
+  });
+});
+
+it("enforces reviewer independence, exact binding and immutability in SQL itself", () =>
+  reviewFixture(async ({ f, decide, request }) => {
+    const approved = await decide("approved"),
+      id = approved.operation_id;
+    expect((await h.runtime.query(`select 1 from ${decisions}`)).rowCount).toBe(
+      0,
+    );
+    for (const table of [decisions, decisionOutbox, revocations])
+      for (const sql of [
+        `delete from ${table}`,
+        `update ${table} set created_at=now()`,
+      ])
+        await expect(
+          h.tx(h.runtime, f.org, (c) => c.query(sql)),
+        ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      h.tx(h.runtime, f.foreignOrg, (c) =>
+        c.query(
+          `insert into ${decisionOutbox}(id,organization_id,decision_id,event,created_at) values($1,$2,$3,'decided',now())`,
+          [randomUUID(), f.foreignOrg, id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23503" });
+    const columns = [
+        "reviewer_id",
+        "reviewer_session_id",
+        "review_hash",
+        "stop_hash",
+        "decision",
+        "reviewer_approval_grant",
+        "reviewer_node_grant",
+        "reviewer_server_grant",
+        "execution_enabled",
+        "expires_at",
+      ],
+      copy = (changes: Record<string, string>) =>
+        h.tx(h.runtime, f.org, (c) =>
+          c.query(
+            `insert into ${decisions}(id,organization_id,request_id,request_key,request_hash,decision_hash,created_at,${columns.join(",")}) select gen_random_uuid(),d.organization_id,d.request_id,gen_random_uuid(),d.request_hash,d.decision_hash,d.created_at,${columns
+              .map((n) => changes[n] ?? `d.${n}`)
+              .join(
+                ",",
+              )} from ${decisions} d join minecraft_deployment_approval_requests q on (q.organization_id,q.id)=(d.organization_id,d.request_id) where d.id=$1`,
+            [id],
+          ),
+        ),
+      asRequester = (grant: string) =>
+        `${grant} || jsonb_build_object('userId',q.actor_id,'sessionId',q.session_id)`,
+      other = "00000000-0000-4000-8000-000000000001";
+    await expect(copy({})).rejects.toMatchObject({ code: "23505" });
+    for (const changes of [
+      {
+        reviewer_id: "q.actor_id",
+        reviewer_session_id: "q.session_id",
+        reviewer_approval_grant: asRequester("d.reviewer_approval_grant"),
+        reviewer_node_grant: asRequester("d.reviewer_node_grant"),
+        reviewer_server_grant: asRequester("d.reviewer_server_grant"),
+      },
+      { review_hash: `'${"f".repeat(64)}'` },
+      { stop_hash: `'${"f".repeat(64)}'` },
+      { expires_at: "q.expires_at + interval '1 second'" },
+      { execution_enabled: "true" },
+      { decision: "'rejected'" },
+      {
+        reviewer_approval_grant: `d.reviewer_approval_grant || '{"permission":"server:provision"}'::jsonb`,
+      },
+      {
+        reviewer_node_grant: `d.reviewer_node_grant || '{"sessionId":"${other}"}'::jsonb`,
+      },
+      {
+        reviewer_server_grant: `d.reviewer_server_grant || '{"resource":{"kind":"environment","id":"${other}"}}'::jsonb`,
+      },
+    ])
+      await expect(
+        copy(changes),
+        JSON.stringify(changes),
+      ).rejects.toMatchObject({ code: "23514" });
+    expect(request.execution_enabled).toBe(false);
+  }));
+
+it("refuses a SQL revocation of a rejected decision or with a foreign grant", () =>
+  reviewFixture(async ({ f, decide }) => {
+    const rejected = await decide("rejected");
+    await expect(
+      h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          `insert into ${revocations}(id,organization_id,decision_id,actor_id,session_id,request_key,request_hash,approval_grant,created_at) select gen_random_uuid(),organization_id,id,reviewer_id,reviewer_session_id,gen_random_uuid(),request_hash,reviewer_approval_grant,now() from ${decisions} where id=$1`,
+          [rejected.operation_id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+  }));
+
+it("keeps the reviewed plan immutable in SQL so approval always refers to what was reviewed", () =>
+  reviewFixture(async ({ f, decide }) => {
+    await expect(
+      h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          "update minecraft_reservations set name=name||' changed' where id=$1",
+          [f.r.reservation_id],
+        ),
+      ),
+    ).rejects.toThrow("Invalid reservation transition");
+    expect((await decide("approved")).state).toBe("approved");
+  }));
+
+it("lets the original requester withdraw an approval and audits it as an allowed action", () =>
+  reviewFixture(async ({ f, service, decide }) => {
+    const approved = await decide("approved");
+    expect(
+      await service.revokeApproval(
+        f.adult,
+        f.org,
+        { decision_id: approved.operation_id },
+        randomUUID(),
+      ),
+    ).toMatchObject({ state: "revoked" });
+    await h.tx(h.runtime, f.org, async (c) => {
+      expect(
+        (
+          await c.query(
+            "select outcome,target_id from audit_events where action='server.deployment_review_revoked'",
+          )
+        ).rows,
+      ).toEqual([{ outcome: "allowed", target_id: f.r.deployment_id }]);
+    });
+  }));
+
+it("sees a revocation that lands between the first read and the authority guard", () =>
+  reviewFixture(async ({ f, decide, reviewer, service }) => {
+    const approved = await decide("approved"),
+      racing = Object.create(h.auth) as typeof h.auth;
+    racing.guardIndependentExecutions = async (original, second, operation) => {
+      await service.revokeApproval(
+        reviewer,
+        f.org,
+        { decision_id: approved.operation_id },
+        randomUUID(),
+      );
+      return h.auth.guardIndependentExecutions(original, second, operation);
+    };
+    const raced = new DeploymentAdmissions({
+      databaseUrl: url,
+      auth: racing,
+      clock: f.now,
+    });
+    try {
+      await expect(
+        raced.currentApproval(f.org, approved.operation_id),
+      ).rejects.toMatchObject({ code: "DEPLOYMENT_APPROVAL_NOT_CURRENT" });
+    } finally {
+      await raced.close();
+    }
+  }));
+
+it("refuses SQL decisions and revocations once physical work exists, independently of the service", async () => {
+  await reviewFixture(async ({ f, request, reviewer, count }) => {
+    const grant = await h.auth.issueExecutionGrant(
+      reviewer,
+      f.org,
+      "approval:decide",
+      { kind: "environment", id: f.environment },
+    );
+    const insert = () =>
+      h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          `insert into ${decisions}(id,organization_id,request_id,reviewer_id,reviewer_session_id,request_key,request_hash,review_hash,stop_hash,decision_hash,decision,reviewer_approval_grant,created_at,expires_at) select gen_random_uuid(),q.organization_id,q.id,$2,$3,gen_random_uuid(),q.request_hash,q.review_hash,q.stop_hash,q.review_hash,'rejected',$4,q.created_at,q.expires_at from minecraft_deployment_approval_requests q where q.id=$1`,
+          [request.operation_id, grant.userId, grant.sessionId, grant],
+        ),
+      );
+    await f.prepare();
+    await expect(insert()).rejects.toMatchObject({ code: "23514" });
+    expect(await count(decisions)).toBe(0);
+  });
+  await reviewFixture(async ({ f, decide, reviewer, count }) => {
+    const approved = await decide("approved"),
+      grant = await h.auth.issueExecutionGrant(
+        reviewer,
+        f.org,
+        "approval:decide",
+        { kind: "environment", id: f.environment },
+      );
+    await f.prepare();
+    await expect(
+      h.tx(h.runtime, f.org, (c) =>
+        c.query(
+          `insert into ${revocations}(id,organization_id,decision_id,actor_id,session_id,request_key,request_hash,approval_grant,created_at) values(gen_random_uuid(),$1,$2,$3,$4,gen_random_uuid(),$5,$6,now())`,
+          [
+            f.org,
+            approved.operation_id,
+            grant.userId,
+            grant.sessionId,
+            "a".repeat(64),
+            grant,
+          ],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    expect(await count(revocations)).toBe(0);
+  });
+});

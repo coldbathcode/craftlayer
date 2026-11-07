@@ -14,6 +14,7 @@ export const errorSchema = z.strictObject({
 });
 
 export * from "./deployment-admissions.js";
+export * from "./deployment-approval-decisions.js";
 export * from "./deployment-approval-requests.js";
 export * from "./deployment-intents.js";
 export * from "./deployment-jobs.js";

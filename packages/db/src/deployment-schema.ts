@@ -174,3 +174,94 @@ export const minecraftDeploymentApprovalRequestOutbox = pgTable(
     }),
   ],
 );
+
+// SQL 0027 owns reviewer independence, exact review binding, immutability and forced RLS.
+export const minecraftDeploymentApprovalDecisions = pgTable(
+  "minecraft_deployment_approval_decisions",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    requestId: uuid("request_id").notNull(),
+    reviewerId: uuid("reviewer_id").notNull(),
+    reviewerSessionId: uuid("reviewer_session_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    reviewHash: char("review_hash", { length: 64 }).notNull(),
+    stopHash: char("stop_hash", { length: 64 }).notNull(),
+    decisionHash: char("decision_hash", { length: 64 }).notNull(),
+    decision: text("decision").notNull(),
+    reviewerApprovalGrant: jsonb("reviewer_approval_grant").notNull(),
+    reviewerNodeGrant: jsonb("reviewer_node_grant"),
+    reviewerServerGrant: jsonb("reviewer_server_grant"),
+    executionEnabled: boolean("execution_enabled").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.id),
+    unique().on(t.organizationId, t.requestId),
+    unique().on(t.organizationId, t.reviewerId, t.requestKey),
+    foreignKey({
+      columns: [t.organizationId, t.requestId],
+      foreignColumns: [
+        minecraftDeploymentApprovalRequests.organizationId,
+        minecraftDeploymentApprovalRequests.id,
+      ],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.reviewerId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+    }),
+  ],
+);
+export const minecraftDeploymentApprovalRevocations = pgTable(
+  "minecraft_deployment_approval_revocations",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    decisionId: uuid("decision_id").notNull(),
+    actorId: uuid("actor_id").notNull(),
+    sessionId: uuid("session_id").notNull(),
+    requestKey: uuid("request_key").notNull(),
+    requestHash: char("request_hash", { length: 64 }).notNull(),
+    approvalGrant: jsonb("approval_grant").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.id),
+    unique().on(t.organizationId, t.decisionId),
+    unique().on(t.organizationId, t.actorId, t.requestKey),
+    foreignKey({
+      columns: [t.organizationId, t.decisionId],
+      foreignColumns: [
+        minecraftDeploymentApprovalDecisions.organizationId,
+        minecraftDeploymentApprovalDecisions.id,
+      ],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.actorId],
+      foreignColumns: [memberships.organizationId, memberships.userId],
+    }),
+  ],
+);
+export const minecraftDeploymentApprovalDecisionOutbox = pgTable(
+  "minecraft_deployment_approval_decision_outbox",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id").notNull(),
+    decisionId: uuid("decision_id").notNull(),
+    event: text("event").notNull(),
+    schemaVersion: integer("schema_version").notNull().default(1),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.decisionId, t.event),
+    foreignKey({
+      columns: [t.organizationId, t.decisionId],
+      foreignColumns: [
+        minecraftDeploymentApprovalDecisions.organizationId,
+        minecraftDeploymentApprovalDecisions.id,
+      ],
+    }),
+  ],
+);

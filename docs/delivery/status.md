@@ -10,6 +10,12 @@ The local dashboard now holds a second real read-only registration with truthful
 
 **Nobody can play yet.** Game ports are loopback-only and unreachable externally (TCP checked from outside). Remaining owner inputs: actual Xbox gamertags, exact iPad client version, and explicit approval to expose game ports, because the recorded operator approval says `public_game_ports: false`. Publishing also requires replacing the loopback `advertise-addresses` value and restarting this instance. Actual Bedrock admission/denial, UDP session behaviour, new-world backup and isolated restore remain unverified. See [P4 handoff section](handoffs/F25-bedrock-vps.md).
 
+## CL-F25-03/K2 — independent review decisions, 2026-11-07
+
+Added SQL 0027/Drizzle/contracts and private `DeploymentAdmissions` decisions. A different current adult approves or rejects the exact `review_hash`; approval also needs the original requester's sealed authority, an unchanged canonical plan and matching stop state. Rejection and revocation need one adult with `approval:decide` and stay available during a stop. One immutable decision per review with audit and reference-only outbox; `currentApproval` revalidates both adults before use and returns evidence only. Nothing is enabled: qualification stays `unverified`, `DeploymentJobs` still denies without a real qualifier, and no HTTP/SDK/UI route exists. See [ADR 0032](../architecture/decisions/0032-independent-deployment-decisions.md) and [handoff](handoffs/F25-independent-decisions.md).
+
+Next local task: a fail-closed qualifier adapter consuming `currentApproval` with real host/storage/game/identity/recovery sources, then decision routes. Chapter 04 and production remain gated.
+
 ## Operator checkpoint — CL-F25-03/P2, 2026-11-07
 
 The owner confirmed iPad/Bedrock clients, authorized read-only VPS inspection, then requested continued work to stand up a Minecraft server through the platform and an email on completion. The owner explicitly accepted the Minecraft EULA and agreed to prioritize a separate playable operator instance followed by dashboard observation while platform automation remains incomplete. This authorizes the necessary separate-instance work; it does not authorize overwriting/deleting/restarting the existing family world or substituting fake platform approval/qualification. Chapter 04 remains outside this task.
