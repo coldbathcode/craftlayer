@@ -2,7 +2,15 @@
 
 Last updated: 2026-11-07.
 
-## Current operator checkpoint — CL-F25-03/P2, 2026-11-07
+## Current operator checkpoint — CL-F25-03/P4, 2026-11-07
+
+The separate playtest server is **running on the VPS with nobody admitted**. The owner completed the sudo storage step; all ten read-only preflight checks then passed, and a Codex session seeded the empty world and started only the owned Compose project. An independent Claude Code read-only review confirmed: Paper 26.3 answers Java status on VPS loopback with 0/5 players, online authentication and enforced empty allowlist, no OP, no RCON/query/management listener, non-root, read-only root, all capabilities dropped, 2 CPU/3 GiB limits, no restart policy and bounded ext4 storage. Geyser built-in signaling started without the earlier native-loader failure. The original `minecraft-java` container is still exited with unchanged identity, and the only baseline differences are this new container and another project's unrelated recreation of its own services.
+
+The local dashboard now holds a second real read-only registration with truthful online/closed-allowlist state, no game address, and backup/identity unverified. It is a captured snapshot refreshed by a private operator script, so it reads stale after 60 seconds; it is not a live feed or platform provisioning.
+
+**Nobody can play yet.** Game ports are loopback-only and unreachable externally (TCP checked from outside). Remaining owner inputs: actual Xbox gamertags, exact iPad client version, and explicit approval to expose game ports, because the recorded operator approval says `public_game_ports: false`. Publishing also requires replacing the loopback `advertise-addresses` value and restarting this instance. Actual Bedrock admission/denial, UDP session behaviour, new-world backup and isolated restore remain unverified. See [P4 handoff section](handoffs/F25-bedrock-vps.md).
+
+## Operator checkpoint — CL-F25-03/P2, 2026-11-07
 
 The owner confirmed iPad/Bedrock clients, authorized read-only VPS inspection, then requested continued work to stand up a Minecraft server through the platform and an email on completion. The owner explicitly accepted the Minecraft EULA and agreed to prioritize a separate playable operator instance followed by dashboard observation while platform automation remains incomplete. This authorizes the necessary separate-instance work; it does not authorize overwriting/deleting/restarting the existing family world or substituting fake platform approval/qualification. Chapter 04 remains outside this task.
 
