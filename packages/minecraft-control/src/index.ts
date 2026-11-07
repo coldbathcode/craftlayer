@@ -1038,6 +1038,12 @@ export class MinecraftControl {
   }
 }
 
+export {
+  backupHealth,
+  backupOccurrence,
+  planBackupRetention,
+  reconcileBackupSchedule,
+} from "./backup-schedule.js";
 export { DeploymentAdmissions } from "./deployment-admissions.js";
 export { DeploymentDispatcher } from "./deployment-dispatcher.js";
 export {

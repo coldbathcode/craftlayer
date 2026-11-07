@@ -14,7 +14,11 @@ The local dashboard now holds a second real read-only registration with truthful
 
 Added SQL 0027/Drizzle/contracts and private `DeploymentAdmissions` decisions. A different current adult approves or rejects the exact `review_hash`; approval also needs the original requester's sealed authority, an unchanged canonical plan and matching stop state. Rejection and revocation need one adult with `approval:decide` and stay available during a stop. One immutable decision per review with audit and reference-only outbox; `currentApproval` revalidates both adults before use and returns evidence only. Nothing is enabled: qualification stays `unverified`, `DeploymentJobs` still denies without a real qualifier, and no HTTP/SDK/UI route exists. See [ADR 0032](../architecture/decisions/0032-independent-deployment-decisions.md) and [handoff](handoffs/F25-independent-decisions.md).
 
-Next local task: a fail-closed qualifier adapter consuming `currentApproval` with real host/storage/game/identity/recovery sources, then decision routes. Chapter 04 and production remain gated.
+The qualifier adapter is parked: it needs a job-aware variant and a two-principal remote proof, and would only deny until real evidence sources exist. Delivery priorities rank backups above provisioning, so next local work is CL-F2-03 (see handoff). Chapter 04 and production remain gated.
+
+## CL-F2-03 checkpoint A — backup schedule and retention logic, 2026-11-07
+
+Added strict backup contracts and pure occurrence, reconciliation, retention and health functions, started ahead of CL-F2-02 with the justification in [ADR 0033](../architecture/decisions/0033-backup-schedule-semantics.md). One logical backup per policy and local date, DST-safe, one bounded catch-up after outages, and retention that never removes the last verified evidence and keeps everything when nothing is verified. **This takes no backups:** no SQL, API, UI, worker, archive or restore exists, and neither VPS world has a scheduled backup. Next: durable policy/occurrence records, then archive and manifest verification. See [handoff](handoffs/F2-backup-schedule.md).
 
 ## Operator checkpoint — CL-F25-03/P2, 2026-11-07
 

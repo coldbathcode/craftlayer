@@ -60,3 +60,5 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0031 — Operator playtest first](0031-operator-playtest-first.md).
 
 - [0032 — Independent deployment decisions](0032-independent-deployment-decisions.md).
+
+- [0033 — Backup schedule semantics](0033-backup-schedule-semantics.md).

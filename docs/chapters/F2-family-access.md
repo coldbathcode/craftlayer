@@ -34,7 +34,7 @@ Checkpoint A: [ADR 0018](../architecture/decisions/0018-game-identity-provenance
 
 ### [ ] CL-F2-03 — Consistent scheduled backups and isolated restore
 
-**Depends on:** CL-F2-02. **Status:** not started. **Size:** L.
+**Depends on:** CL-F2-02 for release; pure policy work started early per [ADR 0033](../architecture/decisions/0033-backup-schedule-semantics.md). **Status:** in progress; checkpoint A schedule/retention logic implemented, no backup effects. **Size:** L.
 
 **Implementation:** Implement adult-approved revocable backup policy/grant, daily occurrences with timezone, 14-day minimum retention, weekly encrypted off-host copy and separated recovery keys. Save-consistent archive/manifest/integrity, bounded save-on recovery and health. Restore only isolated instances first; guarded production restore remains disabled until approved.
 

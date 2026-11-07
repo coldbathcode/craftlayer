@@ -30,7 +30,7 @@ Each task's implementation and evidence are specified in its phase chapter. Stat
 | [CL-F1-03](../chapters/F1-control-plane.md) | Parent observation dashboard, private access and review | CL-F1-02 | Verified locally; remote entry blocked |
 | [CL-F2-01](../chapters/F2-family-access.md) | Pinned Java/Bedrock identity verification and enrollment | F1 gate | In progress; candidate/provenance + pending request UI/prototype, real gate pending |
 | [CL-F2-02](../chapters/F2-family-access.md) | Desired/actual allowlist operations, revoke/expiry and UI | CL-F2-01 | Not started |
-| [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 | Not started |
+| [CL-F2-03](../chapters/F2-family-access.md) | Consistent scheduled backups, off-host policy and isolated restore | CL-F2-02 for release | In progress; pure schedule/retention checkpoint A, no backup effects |
 | [CL-F2-04](../chapters/F2-family-access.md) | Family acceptance, security/recovery review and handoff | CL-F2-03 | Not started |
 | [CL-F25-01](../chapters/F2.5-docker-provisioning.md) | One-use node enrollment, outbound mTLS and signed commands | F2 gate for release; read-only work independent | In progress; trust/Hosts/local inventory A/B and local execution journal C |
 | [CL-F25-02](../chapters/F2.5-docker-provisioning.md) | Constrained broker, template plan, quotas/port reservations | CL-F25-01 for effects | In progress; preview A, reservation ledger B, fixed Engine policy C, ownership runner D, real disposable Docker E |

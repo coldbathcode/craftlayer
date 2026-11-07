@@ -26,7 +26,7 @@ No HTTP, SDK, MCP, UI, worker or installed path is added. Decisions do not repla
 
 Decision lifetime never exceeds its request, at most five minutes. That is deliberately short and may need an explicit renewal design once a real interface exists. Revalidation narrows, but does not remove, the gap between a check and later use; identity locks do not freeze time or make effects atomic.
 
-Next: a qualifier adapter that consumes `currentApproval` alongside real host, storage, game, identity and recovery evidence, then canonical HTTP/SDK decision routes.
+A qualifier adapter cannot consume `currentApproval` directly yet. The qualifier also runs at `fetch` and `permit`, after a job exists, when `currentApproval` denies; a job-aware variant must bind the stored `approval_hash`. `DeploymentJobs` runs in the gateway without an identity service (ADR 0025), so paired authority also needs a two-principal remote proof. Both are required before any real qualifier, alongside real host, storage, game, identity and recovery sources.
 
 ## Evidence and rollback
 

@@ -13,6 +13,7 @@ export const errorSchema = z.strictObject({
   }),
 });
 
+export * from "./backups.js";
 export * from "./deployment-admissions.js";
 export * from "./deployment-approval-decisions.js";
 export * from "./deployment-approval-requests.js";
