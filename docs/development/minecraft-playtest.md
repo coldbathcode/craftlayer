@@ -2,6 +2,14 @@
 
 The immediate goal is a separate Minecraft server you can actually join on your VPS, followed by CraftLayer observation and management. This checkpoint prepares its files; **it has not deployed or booted a server**. The automatic CraftLayer provision route remains disabled. See [ADR 0031](../architecture/decisions/0031-operator-playtest-first.md).
 
+## Crossplay preparation
+
+The owner confirmed iPad/Bedrock clients. A private input containing `{"edition":"crossplay","port":25585,"bedrock_port":19133}` now prepares Paper plus pinned Geyser/Floodgate. Java remains the default when `edition` is omitted. The generated bundle still never deploys or accepts EULA. Crossplay uses builtin NetherNet signaling on loopback TCP and UDP with matching internal/external ports, Floodgate authentication, disabled account linking/metrics, and an empty allowlist. The candidate's broader Bedrock protocol list is not proof that a particular iPad version or transport works. Confirm the exact client version and real authenticated admission/denial before opening family access.
+
+Ordinary SSH TCP forwarding does not carry the Bedrock UDP game session. Public/private game addressing, signaling advertisement and effective firewall must be qualified for the actual host before external play. Do not enable offline authentication or temporarily disable allowlisting to discover identities. Use the [official Floodgate whitelist procedure](https://geysermc.org/wiki/floodgate/features/) after the owner identifies the actual accounts, then verify authenticated allowed/denied joins.
+
+Operational progress and private evidence locations are recorded in the [P2 handoff](../delivery/handoffs/F25-bedrock-vps.md); the platform's automatic provision route remains disabled.
+
 ## Prepare the exact Java candidate
 
 ```bash

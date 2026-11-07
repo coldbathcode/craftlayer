@@ -1,8 +1,16 @@
 # Current delivery status
 
-Last updated: 2026-11-04.
+Last updated: 2026-11-07.
 
-## Authorized scope
+## Current operator checkpoint — CL-F25-03/P2, 2026-11-07
+
+The owner confirmed iPad/Bedrock clients, authorized read-only VPS inspection, then requested continued work to stand up a Minecraft server through the platform and an email on completion. The owner explicitly accepted the Minecraft EULA and agreed to prioritize a separate playable operator instance followed by dashboard observation while platform automation remains incomplete. This authorizes the necessary separate-instance work; it does not authorize overwriting/deleting/restarting the existing family world or substituting fake platform approval/qualification. Chapter 04 remains outside this task.
+
+Inspection found the existing Minecraft container stopped cleanly, online authentication enabled, allowlisting disabled/empty, Geyser/Floodgate present and no Minecraft backup in the inspected locations. Existing data has now been preserved in an encrypted off-host recovery archive with authenticated decryption, isolated byte restoration and unchanged before/after source manifests (217 files, 297,024,634 bytes). Game boot restoration, player admission/denial, effective firewall/edge reachability and scheduled backups remain unverified. Raw recovery material and host details are outside Git.
+
+Crossplay operator preparation now uses all three pinned artifacts, loopback Java plus Bedrock TCP/UDP, builtin NetherNet signaling, disabled linking/metrics, enforced online allowlist and EULA false by default. The owner acceptance applies to this deployment, not future generated bundles. The actual installed node remains inventory-only; automated provisioning is not enabled. Next: owner completes the prepared sudo-only 8 GiB isolated filesystem setup, then verify mount/firewall, boot/test the new closed-allowlist instance, prove isolated recovery and connect real observation. Actual Xbox gamertags/client version and join trials remain pending. See [P2 handoff](handoffs/F25-bedrock-vps.md).
+
+## Historical authorized scope
 
 The user’s “ok start building craftlayer!” after REC-01 authorizes F0 local implementation (now locally verified; review prepared). Contabo access, backup capture and production changes remain unauthorized. The user’s subsequent “go to the next steps” authorizes F1 local implementation. The user’s “continue” after the F1 review authorizes F2 local implementation and advancement from the F1 local preview. The user’s subsequent request to build VPS deployment/management authorizes local F2.5 and F3 capability development alongside F2. Release dependencies/security/recovery gates remain; no VPS access, enrollment, deployment or world writes are authorized. REC-01 documentation reconciliation is complete. The user's next-steps request after Chapter 02 still authorizes Chapter 03. Chapters 00–02 are accepted for advancement, not independent security certification. Chapter 04 requires authorization. Every coherent build step updates plans, commits/pushes origin main and verifies synchronization. Pre-existing unrelated modifications must be preserved and reported; do not manufacture a clean tree by committing or discarding them.
 

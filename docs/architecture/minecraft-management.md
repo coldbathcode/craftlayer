@@ -141,3 +141,5 @@ CL-F25-03/I adds private journal-aware node orchestration and durable receipt de
 ## Owner playtest priority
 
 [ADR 0031](decisions/0031-operator-playtest-first.md) introduces an operator-prepared, separate Java test world as the next user-visible milestone. It uses the existing pinned candidate and no platform execution/approval adapter. The preparation script creates local files only; target discovery, concrete host change approval, dedicated storage quota, EULA, online allowlist and real game/backup/restore tests precede a playable claim. Dashboard observation/adoption follows the real instance; typed lifecycle continues through the canonical domain/approval path. Existing worlds, tenant/node contracts and release gates are unchanged.
+
+CL-F25-03/P2 extends only operator preparation with pinned crossplay, builtin NetherNet TCP/UDP and disabled linking/metrics. It is not a domain-service provisioning route. Owner-authorized stopped-host preservation now has encrypted off-host file-recovery evidence; installed effects and game/identity/host qualification remain separate. See ADR 0031 and the P2 handoff.

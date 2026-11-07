@@ -180,3 +180,144 @@ it("rejects wrong artifact bytes before any runnable JAR is published", async ()
     (await lstat(join(result.directory, "runtime/paper.jar.part"))).isFile(),
   ).toBe(true);
 });
+
+it("prepares crossplay with pinned plugins, closed admission and private TCP/UDP signaling", async () => {
+  const profile = await loadIdentityCandidate();
+  const bytes = Buffer.from("synthetic pinned component");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const candidate = {
+    ...profile,
+    artifacts: profile.artifacts.map((a) => ({
+      ...a,
+      sha256,
+      url:
+        a.component === "paper"
+          ? `https://fill-data.papermc.io/v1/objects/${sha256}/paper-${a.version}-${a.build}.jar`
+          : a.url,
+    })),
+  };
+  const calls: string[] = [];
+  const result = await preparePlaytest(
+    { edition: "crossplay" },
+    candidate,
+    async function* (url) {
+      calls.push(url);
+      yield bytes;
+    },
+  );
+  dirs.push(result.directory);
+  expect(calls).toEqual(candidate.artifacts.map((a) => a.url));
+  const compose = JSON.parse(
+    await readFile(join(result.directory, "compose.json"), "utf8"),
+  );
+  expect(compose.services.minecraft.ports).toEqual([
+    {
+      target: 25565,
+      published: "25575",
+      host_ip: "127.0.0.1",
+      protocol: "tcp",
+    },
+    {
+      target: 19133,
+      published: "19133",
+      host_ip: "127.0.0.1",
+      protocol: "tcp",
+    },
+    {
+      target: 19133,
+      published: "19133",
+      host_ip: "127.0.0.1",
+      protocol: "udp",
+    },
+  ]);
+  expect(await readFile(join(result.directory, "data/eula.txt"), "utf8")).toBe(
+    "eula=false\n",
+  );
+  expect(
+    await readFile(join(result.directory, "data/whitelist.json"), "utf8"),
+  ).toBe("[]\n");
+  for (const name of ["Geyser-Spigot.jar", "floodgate-spigot.jar"])
+    expect(
+      await readFile(join(result.directory, "data/plugins", name)),
+    ).toEqual(bytes);
+  const geyser = await readFile(
+    join(result.directory, "data/plugins/Geyser-Spigot/config.yml"),
+    "utf8",
+  );
+  expect(geyser).toContain("auth-type: floodgate");
+  expect(geyser).toContain("mode: builtin");
+  expect(geyser).toContain("stun-discovery: false");
+  expect(geyser).toContain("enable-metrics: false");
+  const floodgate = await readFile(
+    join(result.directory, "data/plugins/floodgate/config.yml"),
+    "utf8",
+  );
+  expect(floodgate).toContain("player-link:\n  enabled: false");
+  expect(floodgate).toContain("enable-global-linking: false");
+  expect(
+    (await readFile(join(result.directory, "artifact.sha256"), "utf8"))
+      .trim()
+      .split("\n"),
+  ).toHaveLength(3);
+  expect(
+    JSON.parse(await readFile(join(result.directory, "manifest.json"), "utf8")),
+  ).toMatchObject({
+    edition: "crossplay",
+    craftlayer_managed: false,
+    player_identity_verified: false,
+    production_ready: false,
+    eula_accepted: false,
+  });
+  expect(() =>
+    renderPlaytest(
+      { edition: "crossplay", port: 19133 },
+      profile,
+      randomUUID(),
+    ),
+  ).toThrow("PLAYTEST_PORT_CONFLICT");
+  expect(() =>
+    renderPlaytest(
+      { edition: "crossplay", bedrock_port: 22 },
+      profile,
+      randomUUID(),
+    ),
+  ).toThrow();
+});
+
+it("refuses a corrupted crossplay plugin without publishing a successful artifact manifest", async () => {
+  const profile = await loadIdentityCandidate();
+  const bytes = Buffer.from("synthetic Paper");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  const candidate = {
+    ...profile,
+    artifacts: profile.artifacts.map((a) =>
+      a.component === "paper"
+        ? {
+            ...a,
+            sha256,
+            url: `https://fill-data.papermc.io/v1/objects/${sha256}/paper-${a.version}-${a.build}.jar`,
+          }
+        : a,
+    ),
+  };
+  const error = await preparePlaytest(
+    { edition: "crossplay" },
+    candidate,
+    async function* () {
+      yield bytes;
+    },
+  ).catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(PlaytestPreparationError);
+  if (!(error instanceof PlaytestPreparationError))
+    throw new Error("Expected failed preparation");
+  dirs.push(error.directory);
+  await expect(
+    lstat(join(error.directory, "data/plugins/Geyser-Spigot.jar")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+  await expect(
+    lstat(join(error.directory, "artifact.sha256")),
+  ).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(join(error.directory, "data/eula.txt"), "utf8")).toBe(
+    "eula=false\n",
+  );
+});

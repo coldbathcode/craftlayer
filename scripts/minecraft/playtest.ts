@@ -16,9 +16,10 @@ import {
   loadIdentityCandidate,
 } from "./identity-fixture.js";
 
-// Operator preparation for a separate Java test world. This has no Docker,
+// Operator preparation for a separate test world. This has no Docker,
 // SSH, EULA acceptance, existing-world import or platform approval capability.
 export const playtestInput = z.strictObject({
+  edition: z.enum(["java", "crossplay"]).default("java"),
   player: z
     .strictObject({
       name: z.string().regex(/^[A-Za-z0-9_]{3,16}$/),
@@ -28,6 +29,7 @@ export const playtestInput = z.strictObject({
   uid: z.number().int().min(1).max(2147483647).default(1000),
   gid: z.number().int().min(1).max(2147483647).default(1000),
   port: z.number().int().min(1024).max(65535).default(25575),
+  bedrock_port: z.number().int().min(1024).max(65535).default(19133),
 });
 const deploymentId = z.uuid();
 const maxBytes = 128 * 1024 * 1024;
@@ -49,6 +51,11 @@ export function renderPlaytest(input: unknown, candidate: unknown, id: string) {
   const paper = profile.artifacts.find((a) => a.component === "paper");
   if (!paper || paper.version !== profile.minecraft_java)
     throw new Error("PLAYTEST_PROFILE_MISMATCH");
+  if (value.edition === "crossplay" && value.port === value.bedrock_port)
+    throw new Error("PLAYTEST_PORT_CONFLICT");
+  const artifacts = profile.artifacts.filter(
+    (a) => a.component === "paper" || value.edition === "crossplay",
+  );
   const name = `craftlayer-playtest-${id}`;
   const compose = {
     name,
@@ -84,6 +91,14 @@ export function renderPlaytest(input: unknown, candidate: unknown, id: string) {
             host_ip: "127.0.0.1",
             protocol: "tcp",
           },
+          ...(value.edition === "crossplay"
+            ? ["tcp", "udp"].map((protocol) => ({
+                target: value.bedrock_port,
+                published: String(value.bedrock_port),
+                host_ip: "127.0.0.1",
+                protocol,
+              }))
+            : []),
         ],
         volumes: [
           {
@@ -138,10 +153,22 @@ export function renderPlaytest(input: unknown, candidate: unknown, id: string) {
   const manifest = {
     schema_version: 1,
     deployment_id: id,
-    purpose: "operator-java-playtest",
+    purpose:
+      value.edition === "crossplay"
+        ? "operator-crossplay-playtest"
+        : "operator-java-playtest",
+    edition: value.edition,
     minecraft_java: profile.minecraft_java,
     java_image: profile.java_image,
     paper_sha256: paper.sha256,
+    artifacts: artifacts.map(({ component, version, build, sha256 }) => ({
+      component,
+      version,
+      build,
+      sha256,
+    })),
+    bedrock_versions:
+      value.edition === "crossplay" ? profile.bedrock_versions : [],
     candidate_id: profile.id,
     eula_accepted: false,
     player_configured: Boolean(value.player),
@@ -153,7 +180,7 @@ export function renderPlaytest(input: unknown, candidate: unknown, id: string) {
     craftlayer_managed: false,
     public_game_port: false,
   };
-  return { value, paper, compose, properties, manifest };
+  return { value, paper, artifacts, compose, properties, manifest };
 }
 
 async function* officialDownload(url: string) {
@@ -184,6 +211,15 @@ export async function preparePlaytest(
     directory = await mkdtemp(join(tmpdir(), "craftlayer-playtest-"));
   await mkdir(join(directory, "data"), { mode: 0o700 });
   await mkdir(join(directory, "runtime"), { mode: 0o700 });
+  if (rendered.value.edition === "crossplay") {
+    for (const folder of [
+      "data/plugins",
+      "data/plugins/Geyser-Spigot",
+      "data/plugins/floodgate",
+      "data/plugins/bStats",
+    ])
+      await mkdir(join(directory, folder), { mode: 0o700 });
+  }
   const files: Record<string, string> = {
     "compose.json": `${JSON.stringify(rendered.compose, null, 2)}\n`,
     "manifest.json": `${JSON.stringify(rendered.manifest, null, 2)}\n`,
@@ -196,12 +232,15 @@ export async function preparePlaytest(
     )}\n`,
     "data/ops.json": "[]\n",
     "README.txt":
-      `CraftLayer Java playtest preparation — NOT DEPLOYED\n\n` +
+      `CraftLayer ${rendered.value.edition} playtest preparation — NOT DEPLOYED\n\n` +
       `Minecraft Java ${rendered.manifest.minecraft_java}; new world only.\n` +
       `EULA: https://www.minecraft.net/en-us/eula — not accepted.\n` +
       `Listen on VPS loopback TCP ${rendered.value.port}; Java client uses an SSH tunnel.\n` +
       `Container UID/GID: ${rendered.value.uid}:${rendered.value.gid}; heap 2 GiB, container 3 GiB, 2 CPUs.\n` +
-      `No Geyser/Floodgate, RCON, OP accounts, automatic restart or dashboard lifecycle control.\n\n` +
+      (rendered.value.edition === "crossplay"
+        ? `Bedrock uses loopback TCP/UDP ${rendered.value.bedrock_port}; ordinary SSH TCP forwarding cannot carry game UDP.\nPinned Geyser/Floodgate with builtin signaling; linking and metrics disabled. No Bedrock player has been granted access.\n`
+        : `No Geyser/Floodgate is installed.\n`) +
+      `No RCON, OP accounts, automatic restart or dashboard lifecycle control.\n\n` +
       `Before boot: inspect the approved VPS; verify spare memory/disk/ports, current workload recovery,\n` +
       `dedicated quota-controlled storage, correct data ownership, exact online player UUID and explicit EULA acceptance.\n` +
       `Before play: verify authenticated allowlist admission/denial, graceful stop, backup and isolated restore.\n` +
@@ -209,40 +248,54 @@ export async function preparePlaytest(
       `No deployment, EULA change, backup, restore or deletion is performed by preparation.\n` +
       `Follow docs/development/minecraft-playtest.md in the CraftLayer repository.\n`,
   };
+  if (rendered.value.edition === "crossplay") {
+    files["data/plugins/Geyser-Spigot/config.yml"] =
+      `bedrock:\n  address: 0.0.0.0\n  port: ${rendered.value.bedrock_port}\n  webrtc-port: 0\n  transport: nethernet\n  clone-remote-port: false\n  signaling:\n    mode: builtin\n    stun-discovery: false\n    advertise-addresses: ["127.0.0.1:${rendered.value.bedrock_port}"]\njava:\n  auth-type: floodgate\nlog-player-ip-addresses: false\nsaved-user-logins: []\nenable-metrics: false\ndebug-mode: false\nconfig-version: 12\n`;
+    files["data/plugins/floodgate/config.yml"] =
+      `key-file-name: key.pem\nusername-prefix: "."\nreplace-spaces: true\nplayer-link:\n  enabled: false\n  require-link: false\n  enable-own-linking: false\n  enable-global-linking: false\nmetrics:\n  enabled: false\nconfig-version: 3\n`;
+    files["data/plugins/bStats/config.yml"] = "enabled: false\n";
+  }
   for (const [name, content] of Object.entries(files))
     await writeFile(join(directory, name), content, {
       flag: "wx",
       mode: 0o600,
     });
-  const file = await open(
-    join(directory, "runtime/paper.jar.part"),
-    "wx",
-    0o600,
-  );
-  let bytes = 0;
-  const hash = createHash("sha256");
-  try {
-    for await (const chunk of download(rendered.paper.url)) {
-      bytes += chunk.length;
-      if (bytes > maxBytes) throw new Error("PLAYTEST_ARTIFACT_TOO_LARGE");
-      hash.update(chunk);
-      await file.writeFile(chunk);
+  for (const artifact of rendered.artifacts) {
+    const relative =
+      artifact.component === "paper"
+        ? "runtime/paper.jar"
+        : `data/plugins/${artifact.filename}`;
+    const file = await open(join(directory, `${relative}.part`), "wx", 0o600);
+    let bytes = 0;
+    const hash = createHash("sha256");
+    try {
+      for await (const chunk of download(artifact.url)) {
+        bytes += chunk.length;
+        if (bytes > maxBytes) throw new Error("PLAYTEST_ARTIFACT_TOO_LARGE");
+        hash.update(chunk);
+        await file.writeFile(chunk);
+      }
+      if (!bytes || hash.digest("hex") !== artifact.sha256)
+        throw new Error("PLAYTEST_ARTIFACT_HASH_MISMATCH");
+    } catch (error) {
+      // EULA stays false. Retain incomplete evidence; no cleanup can touch worlds.
+      throw new PlaytestPreparationError(directory, error);
+    } finally {
+      await file.close();
     }
-    if (!bytes || hash.digest("hex") !== rendered.paper.sha256)
-      throw new Error("PLAYTEST_ARTIFACT_HASH_MISMATCH");
-  } catch (error) {
-    // EULA stays false. Retain incomplete evidence; no cleanup can touch worlds.
-    throw new PlaytestPreparationError(directory, error);
-  } finally {
-    await file.close();
+    await rename(
+      join(directory, `${relative}.part`),
+      join(directory, relative),
+    );
   }
-  await rename(
-    join(directory, "runtime/paper.jar.part"),
-    join(directory, "runtime/paper.jar"),
-  );
   await writeFile(
     join(directory, "artifact.sha256"),
-    `${rendered.paper.sha256}  runtime/paper.jar\n`,
+    rendered.artifacts
+      .map(
+        (a) =>
+          `${a.sha256}  ${a.component === "paper" ? "runtime/paper.jar" : `data/plugins/${a.filename}`}\n`,
+      )
+      .join(""),
     { flag: "wx", mode: 0o600 },
   );
   return {
@@ -259,7 +312,7 @@ async function main() {
   const [command, inputFile, ...extra] = process.argv.slice(2);
   if (command === "--help" && !inputFile && !extra.length) {
     console.log(
-      "Usage: pnpm minecraft:playtest:prepare [input.json]\nCreates a fresh local Java-only bundle; never starts or deploys it. Optional input: player {name,uuid}, uid, gid, port. EULA remains false.",
+      "Usage: pnpm minecraft:playtest:prepare [input.json]\nCreates a fresh local java or crossplay bundle; never starts or deploys it. Optional input: edition, player {name,uuid}, uid, gid, port, bedrock_port. EULA remains false. Crossplay requires separate real-client qualification.",
     );
     return;
   }
