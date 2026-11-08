@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan C2 — read-only MCP server, 2026-11-08
+
+Added `apps/mcp`: a stdio Model Context Protocol server on the official TypeScript SDK 1.32.2 with ten read-only tools that call the public API using an agent token, so the C1 scope, permission and audit rules apply unchanged. In-memory client/server tests plus a real stdio session against the rebuilt local prototype read the registered VPS playtest server, were refused outside the token's environment and failed immediately after revocation. The image build now copies the app manifest. No mutation tool, remote transport or Claude Desktop connection by the owner yet. See [runbook](../development/agent-access.md) and [status board](../plan/STATUS.md).
+
 ## Master plan C1 — agent tokens, 2026-11-08
 
 Added migration 0028, `agent:connect`, the `agentTokenPermissions` allowlist and `narrowAgentAuthority` in core, agent-token authentication and management in `AuthService`, contracts, SDK client, `/api/v1/agent-tokens` routes and bearer acceptance on identity, server, node and deployment routes. Agents read only; they never exceed their creating adult, cannot mint agents, manage sessions, create organizations, use owner operations or obtain execution grants. Provider routes ignore agent bearers. Checks and limits are in the [build log](build-log.md); state on the [status board](../plan/STATUS.md). No UI, MCP server or agent action exists yet.

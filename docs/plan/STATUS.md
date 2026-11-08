@@ -9,7 +9,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - **Original world:** the old `minecraft-java` server is stopped and untouched, with one encrypted archive on the owner's Mac.
 - **Backups:** the new family world has **no backup yet** (Milestone D).
 - **Dashboard:** runs only on the owner's Mac; read-only snapshot of the real server; no controls (Milestone A).
-- **AI agents:** scoped read-only access keys exist (C1, built and locally verified); no MCP server yet, so no agent has connected (C2 next).
+- **AI agents:** read-only access works end to end: a scoped key plus the `apps/mcp` server let an MCP client read the real registered VPS server through the local prototype (C1 and C2 built, 2026-11-08). No actions yet (C3), and only from the owner's machine until A1.
 
 ## Milestones
 
@@ -17,7 +17,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | --- | --- | --- |
 | [A — Live connection](A-live-connection.md) | Needs decision | A1 needs the remote-access choice |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
-| [C — AI agent access](C-ai-agent-access.md) | In progress | C2 MCP read tools |
+| [C — AI agent access](C-ai-agent-access.md) | In progress | Owner connects Claude Desktop (decision 6); C3 needs A3 |
 | [D — Backups](D-backups.md) | In progress | D1 durable records (rules done) |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F1 after C3 and B2; F2 needs Chapter 04 authorization |
@@ -35,7 +35,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | B3 | Family and AI helpers screens | B2, C1 | Not started | — |
 | B4 | Usability check with a non-technical adult | B2 | Not started | — |
 | C1 | Agent tokens (scoped, expiring, revocable) | — | Built | 2026-11-08: migration 0028, API/SDK, [ADR 0035](../architecture/decisions/0035-agent-token-authority.md), [runbook](../development/agent-access.md); unit + database suites pass; no UI (B3) and no agent connected yet |
-| C2 | MCP server with read tools (stdio) | C1 | Not started | — |
+| C2 | MCP server with read tools (stdio) | C1 | Built | 2026-11-08: `apps/mcp`, SDK 1.32.2, ten read tools; in-memory tests plus a real stdio run against the prototype reading the VPS playtest server, with environment scope and revocation proven; [how to connect](../development/agent-access.md#connect-claude-mcp-read-only). Not yet connected from Claude Desktop itself |
 | C3 | Approval-gated agent actions | C2, A3 | Not started | — |
 | C4 | Remote MCP on the VPS | C3, A1 | Not started | — |
 | D1 | Nightly consistent backup and Back up now | A2 | In progress | Schedule and retention rules done (ADR 0033) |
@@ -65,3 +65,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — Master plan created. Family server opened to iPads; Alex and Charlie joined.
 - 2026-11-08 — C1 built: agent tokens with a database-enforced read-only allowlist; agents never exceed their creating adult.
 - 2026-11-08 — B1 drafted: five screens, plain words and error messages for owner review.
+- 2026-11-08 — C2 built: read-only MCP server; migration 0028 applied cleanly to the existing prototype database during the rebuild.

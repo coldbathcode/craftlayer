@@ -49,7 +49,9 @@
     "prototype:node:renew": "node scripts/prototype.mjs node-renew",
     "node:pki:fixture": "node --import tsx scripts/minecraft/node-fixtures.ts",
     "node:keygen": "node apps/minecraft-node/dist/main.js keygen",
-    "node:run": "node apps/minecraft-node/dist/main.js run"
+    "node:run": "node apps/minecraft-node/dist/main.js run",
+    "mcp": "node --import tsx apps/mcp/src/main.ts",
+    "mcp:run": "node apps/mcp/dist/main.js"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

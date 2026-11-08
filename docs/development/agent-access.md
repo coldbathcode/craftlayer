@@ -1,6 +1,6 @@
 # Connect an AI agent (read-only)
 
-Status: master plan step [C1](../plan/C-ai-agent-access.md) is built and locally verified. Agents can read; they cannot change anything yet. The MCP server (C2) that lets Claude use these tokens is the next step. Design: [ADR 0035](../architecture/decisions/0035-agent-token-authority.md).
+Status: master plan steps [C1 and C2](../plan/C-ai-agent-access.md) are built and locally verified. Agents can read through the MCP server below; they cannot change anything yet (C3). Design: [ADR 0035](../architecture/decisions/0035-agent-token-authority.md).
 
 ## What an agent token is
 
@@ -35,6 +35,40 @@ curl -sS "$CRAFTLAYER/api/v1/servers?environment_id=<world uuid>" \
 ```
 
 Reads outside the token's project or world return 403; another organisation returns 404; an expired or revoked token returns 401. Any write returns 403 `PERMISSION_DENIED`. Provider-credential routes ignore agent bearers entirely.
+
+## Connect Claude (MCP, read-only)
+
+`apps/mcp` is a Model Context Protocol server that speaks stdio and reads CraftLayer with one agent token. Build once with `pnpm build:server`, then point a client at `apps/mcp/dist/main.js` with three environment variables:
+
+| Variable | Value |
+| --- | --- |
+| `CRAFTLAYER_URL` | Where CraftLayer runs; `http://127.0.0.1:3000` by default (the prototype uses port 3001). Anything off this machine must be `https`. |
+| `CRAFTLAYER_ORGANIZATION` | Your family's organization ID (`GET /api/v1/organizations`). |
+| `CRAFTLAYER_AGENT_TOKEN` | The `cla_…` secret from the step above. |
+
+**Claude Desktop** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "craftlayer": {
+      "command": "node",
+      "args": ["/absolute/path/to/craftlayer/apps/mcp/dist/main.js"],
+      "env": {
+        "CRAFTLAYER_URL": "http://127.0.0.1:3001",
+        "CRAFTLAYER_ORGANIZATION": "<organization uuid>",
+        "CRAFTLAYER_AGENT_TOKEN": "cla_…"
+      }
+    }
+  }
+}
+```
+
+**Claude Code**: `claude mcp add craftlayer -e CRAFTLAYER_URL=http://127.0.0.1:3001 -e CRAFTLAYER_ORGANIZATION=<uuid> -e CRAFTLAYER_AGENT_TOKEN=cla_… -- node /absolute/path/to/craftlayer/apps/mcp/dist/main.js`
+
+Tools, all read-only: `get_connection_info`, `list_projects`, `list_environments`, `list_servers`, `get_server_status`, `list_players`, `get_operation_status`, `list_nodes`, `get_node_capacity`, `list_server_templates`. Each call is an ordinary API request with the agent's token, so scope, permissions and audit apply exactly as for a person. Ask Claude "Who is on Family Survival?" and it will call `list_servers` or `get_server_status`; the answer reports the *last observation* and says so. There is no `list_backups` yet because CraftLayer has no backup records yet (Milestone D).
+
+The server writes nothing to stdout except protocol frames; a startup problem is printed to stderr in one line without the token.
 
 ## Audit
 

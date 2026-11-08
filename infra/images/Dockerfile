@@ -11,6 +11,7 @@ COPY apps/web/package.json apps/web/package.json
 COPY apps/worker/package.json apps/worker/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY apps/minecraft-node/package.json apps/minecraft-node/package.json
+COPY apps/mcp/package.json apps/mcp/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/auth/package.json packages/auth/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
