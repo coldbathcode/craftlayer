@@ -1,5 +1,7 @@
 # CraftLayer
 
+**Plan and progress:** [master plan](docs/MASTER_PLAN.md) · [status board](docs/plan/STATUS.md).
+
 One self-hostable Core for safe family Minecraft management and coordinated AI agents. The immediate plan is preserving/adopting the existing server, verified player access/backups, then secure Docker provisioning; agent, coding and research capabilities remain on the roadmap.
 
 **Chapters 00–02 are implemented and verified locally.** This preview includes private local accounts, owner setup/recovery, organization roles and scoped access, adult invitations, child accounts, sessions/audit, an account console, typed API contracts and the private Docker stack. The server provider gateway adds encrypted connections, conservative routing, persistent stop and durable budgets. Simulation fleet/runtime tasks CL-03-01–07 are locally verified, including restart, Redis loss and worker crash/partition drills; owner review is pending. F0 preservation tooling and the F1 local read-only server dashboard/API are implemented; live adoption, verified player access/backups, provisioning and bots remain gated.

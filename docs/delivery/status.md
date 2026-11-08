@@ -1,6 +1,8 @@
 # Current delivery status
 
-Last updated: 2026-11-07.
+Last updated: 2026-11-08.
+
+**The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
 ## Current operator checkpoint — CL-F25-03/P5, 2026-11-08
 

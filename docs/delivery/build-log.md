@@ -527,3 +527,7 @@ K2 records were corrected in the same publication: the qualifier adapter is park
 
 Operator change on the owned deployment only, after explicit owner approval of the two Bedrock ports. File backups first, then graceful stop (exit 143 after world save, no OOM), rebinding, advertise address and allowlist, and recreation of this container. Ready in about 17 seconds with built-in signaling started. Host listeners: 0.0.0.0:19133 TCP and UDP, 127.0.0.1:25585. External probe: signaling 404 (expected), Java ports closed. Read-only root, 3 GiB, 2 CPUs and unprivileged settings are unchanged. Private dashboard observation succeeded with the new exact-binding guard. No repository code changed. No game join has happened yet, so nothing about admission is claimed.
 
+## PLAN-01 — master plan and status board, 2026-11-08
+
+Owner asked for one master plan with linked files and a status view, after finding the dashboard has no real controls, is too technical, and has no AI agent access. Added `docs/MASTER_PLAN.md`, `docs/plan/` (milestones A–F, running rules, status board) and ADR 0034, which reorders work: live connection, simple UI and agent access first. Existing task IDs, evidence and safety gates are preserved and mapped. Documentation only; `pnpm docs:check` result recorded in the commit. No code or VPS change.
+

@@ -5,6 +5,7 @@ These instructions apply to the entire repository and are shared by Codex and Cl
 ## Current state and source of truth
 
 - Chapters 00–02 are implemented. Chapter 03 was authorized; inspect its actual completion state in `docs/delivery/status.md` before proceeding. Chapter 04 requires separate authorization unless explicitly superseded by the user.
+- Read `docs/MASTER_PLAN.md` and `docs/plan/STATUS.md` first for order and current state; update the status board at every step.
 - Read `docs/delivery/status.md`, `docs/README.md`, the relevant chapter, and architecture references before starting work.
 - The original input is `docs/source/CraftLayer_Build_Blueprint.md`. Preserve it unchanged.
 - The unified requirements inputs are `docs/CRAFTLAYER_UNIFIED_SPEC.md` and `docs/BUILD_PROMPT.md`.

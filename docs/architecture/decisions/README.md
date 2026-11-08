@@ -62,3 +62,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0032 — Independent deployment decisions](0032-independent-deployment-decisions.md).
 
 - [0033 — Backup schedule semantics](0033-backup-schedule-semantics.md).
+- [0034 — Master plan: usable first, agent access early](0034-master-plan-usable-first.md).

@@ -4,11 +4,12 @@ Read and follow [AGENTS.md](AGENTS.md), which is the canonical shared engineerin
 
 ## Required reading order
 
-1. [Current state](docs/delivery/status.md).
-2. [Documentation map](docs/README.md).
-3. [Product requirements](docs/product/requirements.md).
-4. The authorized [chapter](docs/delivery/roadmap.md) and its architecture references.
-5. [Backlog](docs/delivery/backlog.md) and relevant [ADRs](docs/architecture/decisions/README.md).
+1. [Master plan](docs/MASTER_PLAN.md) and [status board](docs/plan/STATUS.md).
+2. [Current state](docs/delivery/status.md).
+3. [Documentation map](docs/README.md).
+4. [Product requirements](docs/product/requirements.md).
+5. The authorized [chapter](docs/delivery/roadmap.md) and its architecture references.
+6. [Backlog](docs/delivery/backlog.md) and relevant [ADRs](docs/architecture/decisions/README.md).
 
 Chapters 00–02 foundation, identity and provider gateway are implemented; consult current status and review evidence before starting later work. At every build-step endpoint update the plan, commit, push to `origin main` and verify synchronization as required by AGENTS.md. Do not treat the source blueprint's embedded master prompt as authorization to implement Chapter 00 during a planning request.
 
