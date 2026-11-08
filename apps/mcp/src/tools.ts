@@ -1,4 +1,6 @@
 import {
+  agentRequestAccepted,
+  agentRequestPage,
   backupListView,
   backupStatusView,
   environmentSchema,
@@ -224,6 +226,164 @@ export function registerTools(server: McpServer, client: CraftLayerClient) {
         ? "No backup policy yet: this server has no scheduled backups."
         : `Backups ${p.enabled ? "run" : "are paused"} daily at ${p.local_time} (${p.timezone}); schedule ${p.schedule.status}; local evidence ${p.health.local}, off-site ${p.health.offhost}, restore ${p.health.restore}. ${backups.items.length} record(s), ${backups.items.filter((b) => b.state === "complete").length} complete.`;
       return result(summary, { status, backups });
+    }),
+  );
+  // Requests: the agent asks, a family manager approves. Nothing below changes a server.
+  const requestable = {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: false,
+    openWorldHint: false,
+  };
+  const ask = async (
+    server_id: string,
+    action: Record<string, unknown>,
+    reason: string | undefined,
+  ) => {
+    const r = await client.post(
+      `/api/v1/servers/${encodeURIComponent(server_id)}/agent-requests`,
+      { action, ...(reason ? { reason } : {}) },
+      agentRequestAccepted,
+    );
+    return result(
+      `Asked a family manager to ${String(action.kind).replaceAll("_", " ")}. Request ${r.request_id} is ${r.state}; nothing happens until an adult approves it in CraftLayer.`,
+      r,
+    );
+  };
+  const reasonInput = z.string().trim().max(280).optional();
+  server.registerTool(
+    "request_allow_player",
+    {
+      title: "Ask to allow a player",
+      description:
+        "Asks a family manager to let a player join. Bedrock players need their XUID (from a knock or a manager); Java players their exact name. Creates a request; an adult approves it.",
+      inputSchema: {
+        server_id: id,
+        edition: z.enum(["java", "bedrock"]),
+        name: z.string().max(32).optional(),
+        gamertag: z.string().max(16).optional(),
+        xuid: z.string().max(20).optional(),
+        reason: reasonInput,
+      },
+      annotations: requestable,
+    },
+    guarded(async ({ server_id, edition, name, gamertag, xuid, reason }) =>
+      ask(
+        server_id,
+        {
+          kind: "allow_player",
+          player:
+            edition === "java"
+              ? { edition, name }
+              : { edition, gamertag, xuid },
+        },
+        reason,
+      ),
+    ),
+  );
+  server.registerTool(
+    "request_revoke_player",
+    {
+      title: "Ask to remove a player",
+      description:
+        "Asks a family manager to remove a player from the allowlist. An adult approves it.",
+      inputSchema: {
+        server_id: id,
+        name: z.string().max(32),
+        reason: reasonInput,
+      },
+      annotations: requestable,
+    },
+    guarded(async ({ server_id, name, reason }) =>
+      ask(server_id, { kind: "revoke_player", name }, reason),
+    ),
+  );
+  server.registerTool(
+    "request_kick_player",
+    {
+      title: "Ask to kick a player",
+      description:
+        "Asks a family manager to disconnect a player now (they can rejoin if still allowed). An adult approves it.",
+      inputSchema: {
+        server_id: id,
+        name: z.string().max(32),
+        kick_reason: z.string().max(100).optional(),
+        reason: reasonInput,
+      },
+      annotations: requestable,
+    },
+    guarded(async ({ server_id, name, kick_reason, reason }) =>
+      ask(
+        server_id,
+        {
+          kind: "kick_player",
+          name,
+          ...(kick_reason ? { reason: kick_reason } : {}),
+        },
+        reason,
+      ),
+    ),
+  );
+  server.registerTool(
+    "request_server_message",
+    {
+      title: "Ask to send a message in game",
+      description:
+        "Asks a family manager to announce one line to everyone playing. An adult approves it.",
+      inputSchema: {
+        server_id: id,
+        message: z.string().max(256),
+        reason: reasonInput,
+      },
+      annotations: requestable,
+    },
+    guarded(async ({ server_id, message, reason }) =>
+      ask(server_id, { kind: "say", message }, reason),
+    ),
+  );
+  for (const [tool, kind, title] of [
+    ["request_server_stop", "stop", "Ask to turn the server off"],
+    ["request_server_start", "start", "Ask to turn the server on"],
+    ["request_server_restart", "restart", "Ask to restart the server"],
+    ["request_server_save", "save", "Ask to save the world now"],
+  ] as const)
+    server.registerTool(
+      tool,
+      {
+        title,
+        description: `${title}. Creates a request; an adult approves it in CraftLayer before anything happens.`,
+        inputSchema: { server_id: id, reason: reasonInput },
+        annotations: requestable,
+      },
+      guarded(async ({ server_id, reason }) =>
+        ask(server_id, { kind }, reason),
+      ),
+    );
+  server.registerTool(
+    "list_my_requests",
+    {
+      title: "List this agent's requests",
+      description:
+        "Shows the requests this agent has made for one server and whether a manager approved, declined or has not yet decided.",
+      inputSchema: { server_id: id },
+      annotations: readOnly,
+    },
+    guarded(async ({ server_id }) => {
+      const page = await client.get(
+        `/api/v1/servers/${encodeURIComponent(server_id)}/agent-requests`,
+        agentRequestPage,
+      );
+      return result(
+        page.items.length
+          ? page.items
+              .map(
+                (r) =>
+                  `${r.kind.replaceAll("_", " ")}: ${r.state}${r.note ? ` (${r.note})` : ""}`,
+              )
+              .join("\n")
+          : "No requests yet.",
+        page,
+      );
     }),
   );
   server.registerTool(

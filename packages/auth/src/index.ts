@@ -63,8 +63,39 @@ export interface Principal {
   /** For an agent token this is the token ID; no browser session exists. */
   sessionId: string;
   /** Present when the caller is an external AI agent using a scoped token. */
-  agent?: { id: string; name: string; organizationId: string };
+  agent?: {
+    id: string;
+    name: string;
+    organizationId: string;
+    /** Action kinds this agent may request; adults approve each one. */
+    mayRequest: readonly string[];
+  };
 }
+/** Action kinds an agent token may be allowed to request (never execute). Mirrors the
+ * contracts enum; an adult with the mapped permission approves each request. */
+const requestableActions = [
+  "allow_player",
+  "revoke_player",
+  "kick_player",
+  "say",
+  "save",
+  "start",
+  "stop",
+  "restart",
+] as const;
+const requestablePermission: Record<
+  (typeof requestableActions)[number],
+  Permission
+> = {
+  allow_player: "player:manage",
+  revoke_player: "player:manage",
+  kick_player: "player:manage",
+  say: "server:control",
+  save: "server:control",
+  start: "server:control",
+  stop: "server:control",
+  restart: "server:control",
+};
 const agentDenied = () =>
   new AuthError(
     403,
@@ -507,9 +538,10 @@ export class AuthService {
           token_id: string;
           token_name: string;
           organization_id: string;
+          may_request: string[];
         }
       >(
-        "select u.*,t.id as token_id,t.name as token_name,t.organization_id from agent_tokens t join users u on u.id=t.created_by where t.token_hash=$1 and t.revoked_at is null and t.expires_at>$2 and u.disabled_at is null and u.account_type='adult' for share of u",
+        "select u.*,t.id as token_id,t.name as token_name,t.organization_id,t.may_request from agent_tokens t join users u on u.id=t.created_by where t.token_hash=$1 and t.revoked_at is null and t.expires_at>$2 and u.disabled_at is null and u.account_type='adult' for share of u",
         [digest(token), this.now()],
       )
     ).rows[0];
@@ -528,6 +560,7 @@ export class AuthService {
         id: row.token_id,
         name: row.token_name,
         organizationId: row.organization_id,
+        mayRequest: row.may_request,
       },
     };
   }
@@ -2416,6 +2449,7 @@ export class AuthService {
       projectId: string;
       environmentId?: string | undefined;
       expiresInDays?: number | undefined;
+      mayRequest?: string[] | undefined;
     },
   ) {
     const value = z
@@ -2425,9 +2459,11 @@ export class AuthService {
         projectId: z.uuid(),
         environmentId: z.uuid().optional(),
         expiresInDays: z.number().int().min(1).max(90).default(30),
+        mayRequest: z.array(z.enum(requestableActions)).max(8).default([]),
       })
       .parse(input);
-    const permissions = [...new Set(value.permissions)];
+    const permissions = [...new Set(value.permissions)],
+      mayRequest = [...new Set(value.mayRequest)];
     return this.orgAction(
       token,
       org,
@@ -2455,6 +2491,14 @@ export class AuthService {
             "The environment does not belong to that project.",
           );
         // A token never exceeds its creator: every permission must be held now, in that scope.
+        // Requestable actions are bounded by what the creator could approve in that scope.
+        for (const kind of mayRequest)
+          if (!canAccess(a, requestablePermission[kind], scope))
+            throw new AuthError(
+              403,
+              "PERMISSION_DENIED",
+              "You can only let an agent request actions you could approve in that scope.",
+            );
         for (const permission of permissions)
           if (
             !canAccess(a, permission, scope) &&
@@ -2474,7 +2518,7 @@ export class AuthService {
           expiresAt = new Date(now.getTime() + value.expiresInDays * 86400000);
         try {
           await client.query(
-            "insert into agent_tokens(id,organization_id,membership_id,created_by,name,token_hash,permissions,project_id,environment_id,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+            "insert into agent_tokens(id,organization_id,membership_id,created_by,name,token_hash,permissions,project_id,environment_id,created_at,expires_at,may_request) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
             [
               id,
               org,
@@ -2487,6 +2531,7 @@ export class AuthService {
               value.environmentId ?? null,
               now,
               expiresAt,
+              mayRequest,
             ],
           );
         } catch (error) {
@@ -2518,6 +2563,7 @@ export class AuthService {
           name: value.name,
           token: secret,
           permissions,
+          may_request: mayRequest,
           project_id: value.projectId,
           environment_id: value.environmentId ?? null,
           expires_at: expiresAt,
@@ -2539,6 +2585,7 @@ export class AuthService {
             id: string;
             name: string;
             permissions: string[];
+            may_request: string[];
             project_id: string;
             environment_id: string | null;
             created_by: string;
@@ -2547,7 +2594,7 @@ export class AuthService {
             last_used_at: Date | null;
             revoked_at: Date | null;
           }>(
-            "select id,name,permissions,project_id,environment_id,created_by,created_at,expires_at,last_used_at,revoked_at from agent_tokens where organization_id=$1 order by created_at desc limit 100",
+            "select id,name,permissions,may_request,project_id,environment_id,created_by,created_at,expires_at,last_used_at,revoked_at from agent_tokens where organization_id=$1 order by created_at desc limit 100",
             [org],
           )
         ).rows.map((row) => ({

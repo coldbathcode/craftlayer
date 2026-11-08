@@ -10,6 +10,10 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import {
+  type AgentRequestApi,
+  registerAgentRequests,
+} from "./agent-request-routes.js";
 import { registerAuth, requestToken } from "./auth-routes.js";
 import { type BackupApi, registerBackups } from "./backup-routes.js";
 import {
@@ -33,6 +37,7 @@ export async function buildApp(options: {
   minecraft?: MinecraftApi;
   backups?: BackupApi;
   actions?: ServerActionApi;
+  agentRequests?: AgentRequestApi;
   nodes?: NodeApi;
   deployments?: DeploymentApi;
   publicUrl?: string;
@@ -185,6 +190,8 @@ export async function buildApp(options: {
     await registerBackups(app, options.backups);
   if (options.actions && options.auth)
     await registerServerActions(app, options.actions);
+  if (options.agentRequests && options.auth)
+    await registerAgentRequests(app, options.agentRequests);
   if (options.minecraft && options.auth)
     await registerMinecraft(
       app,

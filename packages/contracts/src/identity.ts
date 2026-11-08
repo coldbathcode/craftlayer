@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { serverActionKind } from "./server-actions.js";
 
 const id = z.uuid(),
   date = z.iso.datetime();
@@ -124,11 +125,14 @@ export const agentTokenRequestSchema = z.strictObject({
   projectId: id,
   environmentId: id.optional(),
   expiresInDays: z.number().int().min(1).max(90).optional(),
+  /** Action kinds the agent may ask for; an adult still approves each one. */
+  mayRequest: z.array(serverActionKind).max(8).optional(),
 });
 export const agentTokenSchema = z.strictObject({
   id,
   name: z.string(),
   permissions: z.array(agentTokenPermissionSchema),
+  may_request: z.array(serverActionKind),
   project_id: id,
   environment_id: id.nullable(),
   created_by: id,
@@ -144,6 +148,7 @@ export const agentTokenCreatedSchema = z.strictObject({
   name: z.string(),
   token: z.string().regex(/^cla_[A-Za-z0-9_-]{43}$/),
   permissions: z.array(agentTokenPermissionSchema),
+  may_request: z.array(serverActionKind),
   project_id: id,
   environment_id: id.nullable(),
   expires_at: date,

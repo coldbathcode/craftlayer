@@ -7,6 +7,7 @@ import {
 } from "@craftlayer/config";
 import { createDatabase } from "@craftlayer/db";
 import {
+  AgentRequests,
   BackupRecords,
   DeploymentAdmissions,
   InventoryFileSource,
@@ -80,6 +81,11 @@ try {
   });
   const backups = new BackupRecords({ databaseUrl: config.DATABASE_URL, auth });
   const actions = new ServerActions({ databaseUrl: config.DATABASE_URL, auth });
+  const agentRequests = new AgentRequests({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    actions,
+  });
   const nodes = new NodeControl({
     databaseUrl: config.DATABASE_URL,
     auth,
@@ -157,6 +163,7 @@ try {
     minecraft,
     backups,
     actions,
+    agentRequests,
     nodes,
     deployments,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,

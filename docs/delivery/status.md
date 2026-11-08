@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan C3 — agents ask, adults approve, 2026-11-08
+
+Added migration 0031 (`may_request` on agent tokens with a SQL allowlist, `minecraft_agent_requests` with forward-only state and an insert trigger that refuses kinds the token does not carry, reference-only outbox), the `AgentRequests` service, `/api/v1/servers/{id}/agent-requests` and decide/cancel routes, request tools and `list_my_requests` in `apps/mcp`, and a POST path in the MCP client. Approval creates the A3 server action under the deciding adult's authority with the request ID as idempotency key. `pnpm test:db` PASS/0 (230 cases/10 files); `pnpm test` PASS/0 (447 cases). A real defect was found and fixed: nesting an identity guard inside another blocked on the session row until the statement timeout. No agent request can reach a server until node dispatch exists. See [ADR 0041](../architecture/decisions/0041-agent-requests.md) and the [runbook](../development/agent-access.md).
+
 ## Master plan A3 (intake) — typed server actions, 2026-11-08
 
 Added migration 0030 (`player:manage`, `server:control`, `minecraft_server_actions` with per-server fences, forward-only state, bounded evidence and a reference-only outbox), strict request contracts for allow/revoke/kick/say/save/start/stop/restart, the `ServerActions` service with idempotent replay, an eight-deep open queue, lifecycle ordering and cancel, and `/api/v1/servers/{id}/actions` routes. `claimNext`, `recordResult` and `expireStale` are composition-trusted for the coming node path and have no HTTP surface. `pnpm test:db` PASS/0 (226 cases/9 files) with the suite on its own database pair. No action reaches a server yet: requests show `awaiting_node` and expire after ten minutes. See [ADR 0040](../architecture/decisions/0040-server-action-intake.md) and the [runbook](../development/server-actions.md).

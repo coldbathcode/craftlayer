@@ -161,6 +161,7 @@ try {
   rmSync(join(previousManagement, "0028_agent_tokens.sql"));
   rmSync(join(previousManagement, "0029_backup_records.sql"));
   rmSync(join(previousManagement, "0030_server_actions.sql"));
+  rmSync(join(previousManagement, "0031_agent_requests.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
@@ -320,6 +321,32 @@ try {
   env.TEST_ACTIONS_IDENTITY_DATABASE_URL = actionsUrl("craftlayer_identity");
   run("pnpm", ["db:migrate"], {
     env: { ...env, MIGRATION_DATABASE_URL: actionsUrl("craftlayer_migrator") },
+    stdio: "inherit",
+  });
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_agent_requests_test OWNER craftlayer_migrator",
+  ]);
+  const agentRequestsUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_agent_requests_test`;
+  env.TEST_AGENT_REQUESTS_DATABASE_URL = agentRequestsUrl("craftlayer_runtime");
+  env.TEST_AGENT_REQUESTS_IDENTITY_DATABASE_URL = agentRequestsUrl(
+    "craftlayer_identity",
+  );
+  run("pnpm", ["db:migrate"], {
+    env: {
+      ...env,
+      MIGRATION_DATABASE_URL: agentRequestsUrl("craftlayer_migrator"),
+    },
     stdio: "inherit",
   });
   run("pnpm", ["test:integration"], { env, stdio: "inherit" });

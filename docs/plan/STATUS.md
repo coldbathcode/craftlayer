@@ -9,7 +9,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - **Original world:** the old `minecraft-java` server is stopped and untouched, with one encrypted archive on the owner's Mac.
 - **Backups:** the new family world has **no backup yet**. The record layer and the archive library (pause saving → flush → archive → re-hash → resume; verify; restore) are built; the archive was proven on a disposable local Paper server including a boot from the restored files. The nightly loop that runs it on the VPS is next (D1).
 - **Dashboard:** runs only on the owner's Mac; read-only snapshot of the real server; no controls (Milestone A).
-- **AI agents:** read-only access works end to end: a scoped key plus the `apps/mcp` server let an MCP client read the real registered VPS server through the local prototype (C1 and C2 built, 2026-11-08). No actions yet (C3), and only from the owner's machine until A1.
+- **AI agents:** read-only access works end to end (C1, C2), and agents can now *ask* for typed actions that an adult approves or declines (C3, built 2026-11-08); an approved request becomes a pending server action that waits for the node (A2). Only from the owner's machine until A1.
 
 ## Milestones
 
@@ -17,7 +17,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | --- | --- | --- |
 | [A — Live connection](A-live-connection.md) | Needs decision | A2 library, A3 intake and A4 plugin built locally; A1 needs the remote-access choice |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
-| [C — AI agent access](C-ai-agent-access.md) | In progress | Owner connects Claude Desktop (decision 6); C3 needs A3 |
+| [C — AI agent access](C-ai-agent-access.md) | In progress | C1–C3 built; owner connects Claude Desktop (decision 6); C4 needs A1 |
 | [D — Backups](D-backups.md) | In progress | D1: scheduler loop on the node (needs A2 on the VPS) |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F1 after C3 and B2; F2 needs Chapter 04 authorization |
@@ -36,7 +36,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | B4 | Usability check with a non-technical adult | B2 | Not started | — |
 | C1 | Agent tokens (scoped, expiring, revocable) | — | Built | 2026-11-08: migration 0028, API/SDK, [ADR 0035](../architecture/decisions/0035-agent-token-authority.md), [runbook](../development/agent-access.md); unit + database suites pass; no UI (B3) and no agent connected yet |
 | C2 | MCP server with read tools (stdio) | C1 | Built | 2026-11-08: `apps/mcp`, SDK 1.32.2, ten read tools; in-memory tests plus a real stdio run against the prototype reading the VPS playtest server, with environment scope and revocation proven; [how to connect](../development/agent-access.md#connect-claude-mcp-read-only). Not yet connected from Claude Desktop itself |
-| C3 | Approval-gated agent actions | C2, A3 | Not started | — |
+| C3 | Approval-gated agent actions | C2, A3 | Built | 2026-11-08: tokens carry requestable kinds; agents create requests via MCP; adults approve/decline; approval creates the A3 action as the adult; 230/230 database cases ([ADR 0041](../architecture/decisions/0041-agent-requests.md), [runbook](../development/agent-access.md)). Dashboard card is B3; effect waits for node dispatch |
 | C4 | Remote MCP on the VPS | C3, A1 | Not started | — |
 | D1 | Nightly consistent backup and Back up now | A2 | In progress | 2026-11-08: rules (ADR 0033) and durable records, permissions, routes and MCP `list_backups` built and verified ([ADR 0038](../architecture/decisions/0038-backup-records.md), [runbook](../development/backups.md)); the archive/verify/restore library is proven on a real local server ([ADR 0039](../architecture/decisions/0039-backup-archive-consistency.md)); the scheduler loop on the node remains |
 | D2 | Encrypted off-server copy | D1, Decision 4 | Needs decision | — |
@@ -71,3 +71,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — D1 records built: backup policy revisions, occurrences, evidence, legal holds, health and retention views; 222/222 database cases.
 - 2026-11-08 — D1 archive library built: consistent live backup, verification and restore proven on a real local Paper server, including a boot from the restored files.
 - 2026-11-08 — A3 intake built: typed server actions (allow, revoke, kick, say, save, start, stop, restart) as durable fenced requests with per-kind permissions.
+- 2026-11-08 — C3 built: agents ask, adults approve; MCP request tools; approval creates the real action as the adult.

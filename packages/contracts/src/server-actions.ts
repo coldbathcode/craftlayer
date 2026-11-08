@@ -109,3 +109,46 @@ export const serverActionPage = z.strictObject({
 export type ServerActionRequest = z.infer<typeof serverActionRequest>;
 export type ServerActionView = z.infer<typeof serverActionView>;
 export type ServerActionKind = z.infer<typeof serverActionKind>;
+// Agent requests (master plan C3): an agent asks, an adult approves.
+export const agentRequestInputSchema = z.strictObject({
+  action: serverActionRequest,
+  reason: z.string().trim().max(280).optional(),
+});
+export const agentRequestState = z.enum([
+  "pending",
+  "approved",
+  "declined",
+  "cancelled",
+  "expired",
+]);
+export const agentRequestDecision = z.strictObject({
+  decision: z.enum(["approve", "decline"]),
+  note: z.string().trim().max(280).optional(),
+});
+export const agentRequestView = z.strictObject({
+  id,
+  server_id: id,
+  agent_id: id,
+  agent_name: z.string(),
+  kind: serverActionKind,
+  request: serverActionRequest,
+  /** The agent's own words; untrusted, shown to the adult as plain text. */
+  reason: z.string().max(280),
+  state: agentRequestState,
+  decided_at: z.iso.datetime().nullable(),
+  note: z.string().max(280).nullable(),
+  action_id: id.nullable(),
+  created_at: z.iso.datetime(),
+  expires_at: z.iso.datetime(),
+  can_decide: z.boolean(),
+});
+export const agentRequestAccepted = z.strictObject({
+  request_id: id,
+  server_id: id,
+  state: agentRequestState,
+});
+export const agentRequestPage = z.strictObject({
+  server_id: id,
+  items: z.array(agentRequestView).max(100),
+});
+export type AgentRequestView = z.infer<typeof agentRequestView>;

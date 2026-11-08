@@ -49,17 +49,40 @@ export class CraftLayerClient {
     return this.options.organization;
   }
   async get<T extends z.ZodType>(path: string, schema: T): Promise<z.infer<T>> {
+    return this.#call("GET", path, schema);
+  }
+  /** Requests are the only writes an agent makes; the server records them for an adult. */
+  async post<T extends z.ZodType>(
+    path: string,
+    body: unknown,
+    schema: T,
+  ): Promise<z.infer<T>> {
+    return this.#call("POST", path, schema, body);
+  }
+  async #call<T extends z.ZodType>(
+    method: "GET" | "POST",
+    path: string,
+    schema: T,
+    body?: unknown,
+  ): Promise<z.infer<T>> {
     if (!path.startsWith("/api/v1/"))
       throw new CraftLayerError("PATH_INVALID", "Only /api/v1 paths are read.");
     let response: Response;
     try {
       response = await this.fetchImpl(new URL(path, this.options.url), {
-        method: "GET",
+        method,
         headers: {
           authorization: `Bearer ${this.options.token}`,
           "x-craftlayer-organization": this.options.organization,
           accept: "application/json",
+          ...(body === undefined
+            ? {}
+            : {
+                "content-type": "application/json",
+                "idempotency-key": crypto.randomUUID(),
+              }),
         },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         redirect: "error",
         signal: AbortSignal.timeout(5000),
       });
@@ -69,9 +92,9 @@ export class CraftLayerClient {
         "CraftLayer did not answer. Check that it is running and CRAFTLAYER_URL is right.",
       );
     }
-    const body: unknown = await response.json().catch(() => null);
+    const payload: unknown = await response.json().catch(() => null);
     if (!response.ok) {
-      const error = errorSchema.safeParse(body);
+      const error = errorSchema.safeParse(payload);
       const code = error.success ? error.data.error.code : "REQUEST_FAILED";
       throw new CraftLayerError(
         code,
@@ -86,7 +109,7 @@ export class CraftLayerClient {
                 : "CraftLayer could not process the request.",
       );
     }
-    const parsed = schema.safeParse(body);
+    const parsed = schema.safeParse(payload);
     if (!parsed.success)
       throw new CraftLayerError(
         "INVALID_RESPONSE",

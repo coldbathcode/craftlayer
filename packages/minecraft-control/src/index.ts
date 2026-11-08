@@ -1038,6 +1038,7 @@ export class MinecraftControl {
   }
 }
 
+export { AgentRequests } from "./agent-requests.js";
 export { BackupRecords } from "./backup-records.js";
 export {
   backupHealth,

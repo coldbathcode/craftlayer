@@ -66,13 +66,17 @@ Reads outside the token's project or world return 403; another organisation retu
 
 **Claude Code**: `claude mcp add craftlayer -e CRAFTLAYER_URL=http://127.0.0.1:3001 -e CRAFTLAYER_ORGANIZATION=<uuid> -e CRAFTLAYER_AGENT_TOKEN=cla_… -- node /absolute/path/to/craftlayer/apps/mcp/dist/main.js`
 
-Tools, all read-only: `get_connection_info`, `list_projects`, `list_environments`, `list_servers`, `get_server_status`, `list_players`, `get_operation_status`, `list_nodes`, `get_node_capacity`, `list_server_templates`. Each call is an ordinary API request with the agent's token, so scope, permissions and audit apply exactly as for a person. Ask Claude "Who is on Family Survival?" and it will call `list_servers` or `get_server_status`; the answer reports the *last observation* and says so. `list_backups` reads the backup policy, schedule health and recorded backups; it says so plainly when a server has no policy or no verified backup.
+Read tools: `get_connection_info`, `list_projects`, `list_environments`, `list_servers`, `get_server_status`, `list_players`, `list_backups`, `get_operation_status`, `list_nodes`, `get_node_capacity`, `list_server_templates`, `list_my_requests`. Request tools (only if the token carries the kind): `request_allow_player`, `request_revoke_player`, `request_kick_player`, `request_server_message`, `request_server_start`, `request_server_stop`, `request_server_restart`, `request_server_save`. Each call is an ordinary API request with the agent's token, so scope, permissions and audit apply exactly as for a person. Ask Claude "Who is on Family Survival?" and it will call `list_servers` or `get_server_status`; the answer reports the *last observation* and says so. `list_backups` reads the backup policy, schedule health and recorded backups; it says so plainly when a server has no policy or no verified backup.
 
 The server writes nothing to stdout except protocol frames; a startup problem is printed to stderr in one line without the token.
 
+## Let an agent ask for changes (requests)
+
+A token may carry `mayRequest`: the action kinds the agent is allowed to *ask* for (`allow_player`, `revoke_player`, `kick_player`, `say`, `save`, `start`, `stop`, `restart`). You can only list kinds you could approve yourself in that scope. The agent then has MCP tools such as `request_allow_player` and `request_server_stop`; each creates a request that waits for an adult. Decide with `POST /api/v1/agent-requests/{id}/decide` (`{"decision":"approve"}` or `"decline"`, optional `note`); approving creates the real server action in your name. Requests expire after 24 hours; the agent can cancel its own; `GET /api/v1/servers/{id}/agent-requests` lists them (an agent sees only its own). Design: [ADR 0041](../architecture/decisions/0041-agent-requests.md). Until the node agent is installed on the VPS, an approved request's action stays pending.
+
 ## Audit
 
-Creating and revoking a token are audited as `agent_token.created` and `agent_token.revoked` with the adult as actor. Denied agent requests are audited with `agent_id` in the details, so you can see which agent was refused.
+Creating and revoking a token are audited as `agent_token.created` and `agent_token.revoked` with the adult as actor. Denied agent calls are audited with `agent_id` in the details, so you can see which agent was refused. Requests add `server.agent_request_created` (actor: the token's creating adult, with `agent_id`), `server.agent_request_approved` / `declined` (actor: the deciding adult, with `requesting_agent_id` and, on approval, the `action_id`) and `server.agent_request_cancelled`.
 
 ## Limits
 

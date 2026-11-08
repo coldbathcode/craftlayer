@@ -112,14 +112,25 @@ describe("read-only tools", () => {
       "get_server_status",
       "list_backups",
       "list_environments",
+      "list_my_requests",
       "list_nodes",
       "list_players",
       "list_projects",
       "list_server_templates",
       "list_servers",
+      "request_allow_player",
+      "request_kick_player",
+      "request_revoke_player",
+      "request_server_message",
+      "request_server_restart",
+      "request_server_save",
+      "request_server_start",
+      "request_server_stop",
     ]);
     for (const tool of tools) {
-      expect(tool.annotations?.readOnlyHint).toBe(true);
+      expect(tool.annotations?.readOnlyHint).toBe(
+        !tool.name.startsWith("request_"),
+      );
       expect(tool.annotations?.destructiveHint).toBe(false);
     }
     responder = () => ({ status: 200, body: serverRow });
@@ -180,6 +191,43 @@ describe("read-only tools", () => {
     expect(String((odd.content as Array<{ text: string }>)[0]?.text)).toContain(
       "does not understand",
     );
+  });
+  it("turns an action request into a POST the adult must approve, never an effect", async () => {
+    const session = await connect();
+    close = session.close;
+    responder = (url) =>
+      url.pathname.endsWith("/agent-requests")
+        ? {
+            status: 202,
+            body: {
+              request_id: "3b9f2e4a-8c1d-4e5f-9a6b-7c8d9e0f1a2b",
+              server_id: serverId,
+              state: "pending",
+            },
+          }
+        : {
+            status: 404,
+            body: {
+              error: { code: "NOT_FOUND", message: "no", request_id: "r" },
+            },
+          };
+    const r = await session.client.callTool({
+      name: "request_allow_player",
+      arguments: {
+        server_id: serverId,
+        edition: "bedrock",
+        gamertag: "BigCrazyPickle",
+        xuid: "2535400000000001",
+        reason: "George knocked",
+      },
+    });
+    expect(r.isError).toBeFalsy();
+    const text = String((r.content as Array<{ text: string }>)[0]?.text);
+    expect(text).toContain("nothing happens until an adult approves");
+    const call = calls.at(-1);
+    expect(call?.url).toBe(`/api/v1/servers/${serverId}/agent-requests`);
+    expect(call?.headers["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(call?.headers["content-type"]).toBe("application/json");
   });
   it("rejects malformed IDs before any request is made", async () => {
     const session = await connect();
