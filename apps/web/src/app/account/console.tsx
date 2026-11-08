@@ -30,12 +30,14 @@ import {
   setupSchema,
 } from "@craftlayer/contracts";
 import { ApiError, identityRequest } from "@craftlayer/sdk";
+import QRCode from "qrcode";
 import {
   type FormEvent,
   type ReactNode,
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useState,
 } from "react";
 import type { z } from "zod";
@@ -131,6 +133,23 @@ function MfaEnrol({
   onDone: () => void;
   required?: boolean;
 }) {
+  // The QR code is drawn locally as SVG rectangles; the secret never leaves this page.
+  const qr = useMemo(() => {
+    if (!setup) return null;
+    try {
+      const code = QRCode.create(setup.otpauth_uri, {
+        errorCorrectionLevel: "M",
+      });
+      const size = code.modules.size,
+        cells: Array<[number, number]> = [];
+      for (let r = 0; r < size; r++)
+        for (let c = 0; c < size; c++)
+          if (code.modules.get(r, c)) cells.push([r, c]);
+      return { size, cells };
+    } catch {
+      return null;
+    }
+  }, [setup]);
   if (codes.length)
     return (
       <div className="account-card">
@@ -178,15 +197,49 @@ function MfaEnrol({
       onSubmit={(form) => onConfirm(value(form, "code"))}
     >
       <p className="account-help">
-        In your authenticator app, add an account by scanning the link below or
-        typing the secret, then enter the 6-digit code it shows.
+        Scan this with your phone's camera or authenticator app (Google
+        Authenticator, Authy, 1Password, or the iPhone Passwords app), then type
+        the 6-digit code it shows.
       </p>
-      <p>
-        <a href={setup.otpauth_uri}>Open in authenticator app</a>
-      </p>
-      <p>
-        Secret: <code>{setup.secret}</code>
-      </p>
+      {qr ? (
+        <svg
+          className="account-qr"
+          viewBox={`0 0 ${qr.size} ${qr.size}`}
+          width={260}
+          height={260}
+          role="img"
+          aria-label="QR code for your authenticator app"
+          shapeRendering="crispEdges"
+        >
+          <title>QR code for your authenticator app</title>
+          <rect width={qr.size} height={qr.size} fill="#fff" />
+          {qr.cells.map(([r, c]) => (
+            <rect
+              key={`${r}-${c}`}
+              x={c}
+              y={r}
+              width={1}
+              height={1}
+              fill="#000"
+            />
+          ))}
+        </svg>
+      ) : (
+        <p className="account-help">
+          The QR code could not be drawn here; type the key below instead.
+        </p>
+      )}
+      <details className="account-help">
+        <summary>Can't scan? Type the key instead</summary>
+        <p>
+          <code>{setup.secret}</code>
+        </p>
+        <p>
+          <a href={setup.otpauth_uri}>
+            Open in an authenticator app on this device
+          </a>
+        </p>
+      </details>
       <Field label="6-digit code" name="code" />
     </ActionForm>
   );

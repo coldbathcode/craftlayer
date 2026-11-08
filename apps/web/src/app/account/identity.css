@@ -303,3 +303,27 @@ td small,
     flex-wrap: wrap;
   }
 }
+.account-qr {
+  display: block;
+  margin: 0.75rem 0;
+  padding: 0.5rem;
+  background: #fff;
+  border-radius: 0.5rem;
+  max-width: 100%;
+  height: auto;
+}
+.account-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+.account-codes code {
+  display: block;
+  padding: 0.5rem;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 0.375rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.05em;
+}
