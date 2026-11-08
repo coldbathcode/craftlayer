@@ -42,6 +42,8 @@ export const organizationPermissions = [
   "agent:connect",
   "backup:read",
   "backup:manage",
+  "player:manage",
+  "server:control",
 ] as const;
 export type OrganizationPermission = (typeof organizationPermissions)[number];
 export const instancePermissions = [
@@ -93,6 +95,8 @@ export const rolePermissions = {
     "agent:connect",
     "backup:read",
     "backup:manage",
+    "player:manage",
+    "server:control",
   ],
   operator: [
     "server:read",

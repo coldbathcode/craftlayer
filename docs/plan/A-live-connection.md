@@ -45,7 +45,7 @@ Typed actions, each a durable operation with audit, idempotency and a truthful r
 | Turn on / off / restart | Agent starts or stops only containers carrying this deployment's ownership labels; graceful stop with save | Adults |
 | Back up now | See [Milestone D](D-backups.md) | Adults |
 
-- Every action re-checks permission in the API, the domain service and the agent (defence in depth, existing pattern).
+- Every action re-checks permission in the API, the domain service and the agent (defence in depth, existing pattern). *The request side is built (2026-11-08): [ADR 0040](../architecture/decisions/0040-server-action-intake.md), [runbook](../development/server-actions.md); dispatch to the node follows A2.*
 - Emergency stop still outranks everything.
 - **Done when:** each action works end to end on the real server, the audit shows who did it, a child account is refused at the API, and repeating a request does not repeat the effect.
 

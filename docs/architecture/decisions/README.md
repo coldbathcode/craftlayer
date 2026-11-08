@@ -68,3 +68,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0037 — Knock to join](0037-knock-to-join.md).
 - [0038 — Durable backup records](0038-backup-records.md).
 - [0039 — Backup archive consistency, verification and restore](0039-backup-archive-consistency.md).
+- [0040 — Typed server actions as durable requests](0040-server-action-intake.md).

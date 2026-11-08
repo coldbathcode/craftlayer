@@ -12,6 +12,7 @@ import {
   InventoryFileSource,
   MinecraftControl,
   NodeControl,
+  ServerActions,
 } from "@craftlayer/minecraft-control";
 import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
 import { RuntimeService, redisPublisher } from "@craftlayer/runtime";
@@ -78,6 +79,7 @@ try {
     auth,
   });
   const backups = new BackupRecords({ databaseUrl: config.DATABASE_URL, auth });
+  const actions = new ServerActions({ databaseUrl: config.DATABASE_URL, auth });
   const nodes = new NodeControl({
     databaseUrl: config.DATABASE_URL,
     auth,
@@ -154,6 +156,7 @@ try {
     runtime,
     minecraft,
     backups,
+    actions,
     nodes,
     deployments,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,

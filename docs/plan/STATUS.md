@@ -15,7 +15,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 
 | Milestone | State | Next step |
 | --- | --- | --- |
-| [A — Live connection](A-live-connection.md) | Needs decision | A2 control library done locally; A1 needs the remote-access choice |
+| [A — Live connection](A-live-connection.md) | Needs decision | A2 library, A3 intake and A4 plugin built locally; A1 needs the remote-access choice |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
 | [C — AI agent access](C-ai-agent-access.md) | In progress | Owner connects Claude Desktop (decision 6); C3 needs A3 |
 | [D — Backups](D-backups.md) | In progress | D1: scheduler loop on the node (needs A2 on the VPS) |
@@ -28,7 +28,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | --- | --- | --- | --- | --- |
 | A1 | Host CraftLayer privately on the VPS with two-factor sign-in | Decision 1 | Needs decision | — |
 | A2 | Server helper (node agent) on VPS with private control channel | A1 | In progress | 2026-11-08: control library built and proven on a real local Paper boot (typed RCON actions, Bedrock allow by XUID, verified reload, graceful stop); [ADR 0036](../architecture/decisions/0036-game-control-channel.md), [runbook](../development/game-control.md). VPS installation waits for A1 |
-| A3 | Real controls: players, kick, message, on/off/restart | A2 | Not started | — |
+| A3 | Real controls: players, kick, message, on/off/restart | A2 | In progress | 2026-11-08: typed, fenced, audited action intake with per-kind adult permissions built and verified (226/226 database cases; [ADR 0040](../architecture/decisions/0040-server-action-intake.md), [runbook](../development/server-actions.md)); node dispatch and dashboard buttons wait for A2 |
 | A4 | Knock to join | A3 | In progress | 2026-11-08: Knock server plugin and node reader built; plugin compiled against the pinned API and loaded cleanly on a real local Paper boot ([ADR 0037](../architecture/decisions/0037-knock-to-join.md)). Installing on the VPS and the dashboard card wait for A2/B2; a real refusal has not been recorded by it yet |
 | B1 | Design and plain-language copy for five screens | — | Built | 2026-11-08: [draft screens, words and error messages](design/family-ui.md); waits for owner review before B2 |
 | B2 | Build Home, Server, How to join | B1, A3 | Not started | — |
@@ -70,3 +70,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — A4 plugin built: allowlist refusals recorded as "asking to join" identities; loads on the real pinned server.
 - 2026-11-08 — D1 records built: backup policy revisions, occurrences, evidence, legal holds, health and retention views; 222/222 database cases.
 - 2026-11-08 — D1 archive library built: consistent live backup, verification and restore proven on a real local Paper server, including a boot from the restored files.
+- 2026-11-08 — A3 intake built: typed server actions (allow, revoke, kick, say, save, start, stop, restart) as durable fenced requests with per-kind permissions.

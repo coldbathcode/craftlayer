@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan A3 (intake) — typed server actions, 2026-11-08
+
+Added migration 0030 (`player:manage`, `server:control`, `minecraft_server_actions` with per-server fences, forward-only state, bounded evidence and a reference-only outbox), strict request contracts for allow/revoke/kick/say/save/start/stop/restart, the `ServerActions` service with idempotent replay, an eight-deep open queue, lifecycle ordering and cancel, and `/api/v1/servers/{id}/actions` routes. `claimNext`, `recordResult` and `expireStale` are composition-trusted for the coming node path and have no HTTP surface. `pnpm test:db` PASS/0 (226 cases/9 files) with the suite on its own database pair. No action reaches a server yet: requests show `awaiting_node` and expire after ten minutes. See [ADR 0040](../architecture/decisions/0040-server-action-intake.md) and the [runbook](../development/server-actions.md).
+
 ## Master plan D1 (archive library) — 2026-11-08
 
 Added `createBackupArchive`, `verifyBackupArchive` and `restoreBackupArchive` to the node game-control library ([ADR 0039](../architecture/decisions/0039-backup-archive-consistency.md)). On the disposable pinned Paper server the opt-in check took a live backup with saving paused and flushed (68 files, 6.6 MB, 524 KB archive), re-hashed unchanged, verified the archive, restored it into a fresh directory, booted a server from the restored files in 20 s, read back the seeded allowlist and stopped cleanly. Not scheduled, not encrypted, not on the VPS; archives contain plugin secrets and stay on protected storage.

@@ -123,6 +123,7 @@ export const operationView = z.strictObject({
     "identity_enroll",
     "backup_policy",
     "backup_request",
+    "server_action",
   ]),
   state: z.enum(["running", "succeeded", "failed"]),
   failure_code: z.enum([
@@ -165,6 +166,8 @@ export const serverActivity = z.strictObject({
           "server.backup_policy_set",
           "server.backup_requested",
           "server.backup_legal_hold_changed",
+          "server.action_requested",
+          "server.action_cancelled",
         ]),
         occurred_at: z.iso.datetime(),
         operation_id: z.uuid(),

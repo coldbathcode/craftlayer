@@ -20,6 +20,10 @@ import { type MinecraftApi, registerMinecraft } from "./minecraft-routes.js";
 import { type NodeApi, registerNodes } from "./node-routes.js";
 import { type ConnectionApi, registerProviders } from "./provider-routes.js";
 import { type RuntimeApi, registerRuntime } from "./runtime-routes.js";
+import {
+  registerServerActions,
+  type ServerActionApi,
+} from "./server-action-routes.js";
 export async function buildApp(options: {
   readiness: () => Promise<boolean>;
   logger?: FastifyBaseLogger;
@@ -28,6 +32,7 @@ export async function buildApp(options: {
   runtime?: RuntimeApi;
   minecraft?: MinecraftApi;
   backups?: BackupApi;
+  actions?: ServerActionApi;
   nodes?: NodeApi;
   deployments?: DeploymentApi;
   publicUrl?: string;
@@ -178,6 +183,8 @@ export async function buildApp(options: {
     );
   if (options.backups && options.auth)
     await registerBackups(app, options.backups);
+  if (options.actions && options.auth)
+    await registerServerActions(app, options.actions);
   if (options.minecraft && options.auth)
     await registerMinecraft(
       app,
