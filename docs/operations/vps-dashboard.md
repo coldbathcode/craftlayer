@@ -1,6 +1,6 @@
 # Hosting the dashboard on the VPS (master plan A1)
 
-Status: plan and owner steps, 2026-11-08. Two-factor sign-in (ADR 0042) is built; the deployment below has not run yet. Nothing here opens a public port: the dashboard is reachable only on the family's Tailscale network, over HTTPS.
+Status: deployed on 2026-11-08 at commit `ca524ec` as Compose project `craftlayer` under `/home/oli/craftlayer`: postgres, redis, api, worker and web healthy, migrations through 0032 applied, web listening on `127.0.0.1:3000` only (checked from outside: public port 3000 closed). Not yet reachable by the owner: HTTPS certificates and `tailscale serve` are pending, and the owner account has not been created. Nothing here opens a public port: the dashboard is reachable only on the family's Tailscale network, over HTTPS.
 
 ## Shape
 
@@ -18,8 +18,8 @@ Status: plan and owner steps, 2026-11-08. Two-factor sign-in (ADR 0042) is built
 
 ## Agent steps (approved VPS writes, each recorded in the private operator record)
 
-1. Clone the repository on the VPS under the owner's home, build the images there (or load images built on the Mac if the VPS is short of memory) and create `.env` with generated secrets, the tailnet public URL and `CRAFTLAYER_REQUIRE_MFA=true`.
-2. Start the stack with `docker compose up -d --wait`; confirm only `127.0.0.1:3000` is listening and that the public interface shows no new port.
+1. *(Done.)* Clone the repository on the VPS under the owner's home, build the images there (8 CPUs, 24 GB RAM) and create `.env` with generated secrets, the tailnet public URL and `CRAFTLAYER_REQUIRE_MFA=true`.
+2. *(Done.)* Start the stack with `docker compose up -d --wait`; confirm only `127.0.0.1:3000` is listening and that the public interface shows no new port.
 3. Bootstrap the owner account through the tailnet URL (the setup token is printed on the host only), enrol two-factor, and register the existing playtest server read-only, as the local prototype did.
 4. Verify from a phone off the home network: HTTPS certificate for the tailnet name, sign-in requires a code, the server page loads. Record the evidence.
 5. Then A2: enrol the node agent on the VPS against this stack and enable the private RCON channel.
