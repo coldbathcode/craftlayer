@@ -1,5 +1,17 @@
 export { allowRequest, GameActions, playerName } from "./actions.js";
 export {
+  BackupError,
+  type BackupEvidence,
+  type BackupManifest,
+  backupManifest,
+  createBackupArchive,
+  hashFiles,
+  readManifest,
+  restoreBackupArchive,
+  selectBackupFiles,
+  verifyBackupArchive,
+} from "./backup.js";
+export {
   floodgateName,
   floodgateUuid,
   xuidFromFloodgateUuid,

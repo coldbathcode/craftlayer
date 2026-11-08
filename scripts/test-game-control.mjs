@@ -5,7 +5,7 @@
 //   CRAFTLAYER_ACCEPT_EULA=true pnpm test:game-control
 // Nothing here touches the VPS or any existing world.
 import { spawnSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
@@ -185,6 +185,31 @@ try {
   } catch (error) {
     report.wrong_password = error.code;
   }
+  // Consistent backup of the running server: save-off, flush, archive, re-hash, save-on.
+  const { createBackupArchive, verifyBackupArchive, restoreBackupArchive } =
+    await import("../apps/minecraft-node/dist/game-control/index.js");
+  const backupDir = join(directory, "backups"),
+    occurrenceId = randomUUID(),
+    serverId = randomUUID();
+  const evidence = await createBackupArchive({
+    actions,
+    dataDir: data,
+    destinationDir: backupDir,
+    occurrenceId,
+    serverId,
+  });
+  report.backup = {
+    files: evidence.file_count,
+    total_bytes: evidence.total_bytes,
+    archive_bytes: evidence.size_bytes,
+    archive_sha256: evidence.archive_sha256.slice(0, 16),
+  };
+  report.backup_verified = (
+    await verifyBackupArchive(evidence.archive_path, evidence.manifest_path)
+  ).ok;
+  report.backup_consistency = JSON.parse(
+    await readFile(evidence.manifest_path, "utf8"),
+  ).consistency;
   const stopped = await actions.stop();
   report.stop = stopped.evidence;
   const stopStarted = Date.now();
@@ -276,6 +301,66 @@ try {
     }
     await session2.close().catch(() => {});
   } else report.knock_plugin = "skipped: javac not installed";
+  // Isolated restore: extract the archive into a fresh directory, boot a server from it,
+  // and prove the allowlist and world came back.
+  const restoreDir = join(directory, "restore");
+  await mkdir(restoreDir, { recursive: true });
+  const restored = await restoreBackupArchive(
+    evidence.archive_path,
+    evidence.manifest_path,
+    restoreDir,
+  );
+  report.restore_files = restored.files;
+  await writeFile(join(restoreDir, "eula.txt"), "eula=true\n");
+  const compose2 = JSON.parse(
+    await readFile(join(directory, "compose.json"), "utf8"),
+  );
+  compose2.services.minecraft.volumes[0].source = restoreDir;
+  await writeFile(
+    join(directory, "compose.json"),
+    `${JSON.stringify(compose2, null, 2)}\n`,
+  );
+  run("docker", [...composeArgs, "up", "-d", "--force-recreate"], {
+    stdio: ["ignore", "ignore", "pipe"],
+  });
+  const restoreLog = join(restoreDir, "logs", "latest.log");
+  const restoreStarted = Date.now();
+  for (;;) {
+    const log3 = await readFile(restoreLog, "utf8").catch(() => "");
+    if (/\]: Done \(/.test(log3)) break;
+    if (Date.now() - restoreStarted > 180000)
+      throw new Error("Restored server did not become ready within 180 s");
+    await delay(2000);
+  }
+  report.restore_boot_seconds = Math.round(
+    (Date.now() - restoreStarted) / 1000,
+  );
+  const session3 = await openRcon({
+    host: "127.0.0.1",
+    port: rconPort,
+    password,
+    timeoutMs: 20000,
+  });
+  report.restore_whitelist = (await session3.command("whitelist list")).body;
+  const actions3 = new GameActions(
+    session3,
+    new FileWhitelistStore(join(restoreDir, "whitelist.json")),
+  );
+  await actions3.stop();
+  for (let i = 0; i < 120; i++) {
+    const state = run("docker", [
+      "inspect",
+      "--format",
+      "{{.State.Status}} {{.State.ExitCode}}",
+      `${project}-minecraft-1`,
+    ]);
+    if (state.startsWith("exited")) {
+      report.exit_restored = state;
+      break;
+    }
+    await delay(1000);
+  }
+  await session3.close().catch(() => {});
   console.log(JSON.stringify(report, null, 2));
   const ok =
     report.allow_bedrock.ok &&
@@ -288,7 +373,11 @@ try {
     (typeof report.knock_plugin === "string" ||
       (report.knock_plugin_loaded &&
         !report.knock_plugin_log_errors &&
-        report.exit_with_plugin?.startsWith("exited 0")));
+        report.exit_with_plugin?.startsWith("exited 0"))) &&
+    report.backup_verified === true &&
+    report.restore_files === report.backup.files &&
+    /Seeded_Player/.test(report.restore_whitelist ?? "") &&
+    report.exit_restored?.startsWith("exited 0");
   process.exitCode = ok ? 0 : 1;
 } finally {
   await cleanup();

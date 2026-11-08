@@ -24,6 +24,10 @@ node scripts/minecraft/build-knock-plugin.mjs <bundle>/data/libraries
 
 The opt-in check below also builds it, installs it into the disposable server, restarts, and confirms it loads without errors. A real refusal needs a real client, so recording is proven on the family server once a real knock happens there.
 
+## Backups
+
+The same library carries the consistent backup archive (`createBackupArchive`, `verifyBackupArchive`, `restoreBackupArchive`); see the [backup runbook](backups.md) and [ADR 0039](../architecture/decisions/0039-backup-archive-consistency.md). The opt-in check below backs up the live disposable server and boots a second server from the restored files.
+
 ## Checks
 
 ```bash
