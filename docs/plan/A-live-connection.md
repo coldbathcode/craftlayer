@@ -28,7 +28,7 @@ Run the CraftLayer stack (web, API, worker, database, Redis) as its own Compose 
 Install the existing node agent on the VPS in its own container, enrolled with a one-use code, connecting to the API over the private Docker network (mTLS, signed commands — already built).
 
 - Give the game server a **private control channel**: enable RCON bound only to an internal Docker network shared with the node agent, password generated and held only by the agent. Never published to the host.
-- The agent gets typed, fixed actions only — no raw commands from callers.
+- The agent gets typed, fixed actions only — no raw commands from callers. *The library for this is built and proven locally (2026-11-08): see [ADR 0036](../architecture/decisions/0036-game-control-channel.md) and the [game control runbook](../development/game-control.md).*
 - **Done when:** dashboard shows live status and the real player list within 10 seconds of a change; RCON is unreachable from the host's public interface and from other containers; the agent cannot touch other projects' containers.
 - **Approval needed:** restart of the family server (about 1 minute) to enable the private channel.
 

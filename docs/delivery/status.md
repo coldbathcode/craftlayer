@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan A2 (library) — private game control, 2026-11-08
+
+Added `apps/minecraft-node/src/game-control`: a bounded Source RCON client, Floodgate identity derivation, an atomic compare-and-swap `whitelist.json` store and `GameActions` (players, allow, revoke, kick, say, save, pause saving, stop) with fixed verbs, validated arguments and verification against the server's own listing. An opt-in `pnpm test:game-control` boots a disposable pinned Paper server locally and exercises every action; it passed, including a Bedrock allow by XUID that needed a second reload before the server saw the rewritten file. Nothing is installed on the VPS and no API, UI or MCP action calls this yet; see [ADR 0036](../architecture/decisions/0036-game-control-channel.md) and the [runbook](../development/game-control.md).
+
 ## Master plan C2 — read-only MCP server, 2026-11-08
 
 Added `apps/mcp`: a stdio Model Context Protocol server on the official TypeScript SDK 1.32.2 with ten read-only tools that call the public API using an agent token, so the C1 scope, permission and audit rules apply unchanged. In-memory client/server tests plus a real stdio session against the rebuilt local prototype read the registered VPS playtest server, were refused outside the token's environment and failed immediately after revocation. The image build now copies the app manifest. No mutation tool, remote transport or Claude Desktop connection by the owner yet. See [runbook](../development/agent-access.md) and [status board](../plan/STATUS.md).

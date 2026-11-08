@@ -51,7 +51,8 @@
     "node:keygen": "node apps/minecraft-node/dist/main.js keygen",
     "node:run": "node apps/minecraft-node/dist/main.js run",
     "mcp": "node --import tsx apps/mcp/src/main.ts",
-    "mcp:run": "node apps/mcp/dist/main.js"
+    "mcp:run": "node apps/mcp/dist/main.js",
+    "test:game-control": "pnpm build:server && node scripts/test-game-control.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

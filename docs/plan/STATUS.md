@@ -15,7 +15,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 
 | Milestone | State | Next step |
 | --- | --- | --- |
-| [A — Live connection](A-live-connection.md) | Needs decision | A1 needs the remote-access choice |
+| [A — Live connection](A-live-connection.md) | Needs decision | A2 control library done locally; A1 needs the remote-access choice |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
 | [C — AI agent access](C-ai-agent-access.md) | In progress | Owner connects Claude Desktop (decision 6); C3 needs A3 |
 | [D — Backups](D-backups.md) | In progress | D1 durable records (rules done) |
@@ -27,7 +27,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | Step | What | Depends on | State | Evidence / note |
 | --- | --- | --- | --- | --- |
 | A1 | Host CraftLayer privately on the VPS with two-factor sign-in | Decision 1 | Needs decision | — |
-| A2 | Server helper (node agent) on VPS with private control channel | A1 | Not started | Node agent built and tested locally (CL-F25-01) |
+| A2 | Server helper (node agent) on VPS with private control channel | A1 | In progress | 2026-11-08: control library built and proven on a real local Paper boot (typed RCON actions, Bedrock allow by XUID, verified reload, graceful stop); [ADR 0036](../architecture/decisions/0036-game-control-channel.md), [runbook](../development/game-control.md). VPS installation waits for A1 |
 | A3 | Real controls: players, kick, message, on/off/restart | A2 | Not started | — |
 | A4 | Knock to join | A3 | Not started | Manual probe used for George, 2026-11-08 |
 | B1 | Design and plain-language copy for five screens | — | Built | 2026-11-08: [draft screens, words and error messages](design/family-ui.md); waits for owner review before B2 |
@@ -66,3 +66,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — C1 built: agent tokens with a database-enforced read-only allowlist; agents never exceed their creating adult.
 - 2026-11-08 — B1 drafted: five screens, plain words and error messages for owner review.
 - 2026-11-08 — C2 built: read-only MCP server; migration 0028 applied cleanly to the existing prototype database during the rebuild.
+- 2026-11-08 — A2 library built: private RCON game control with typed actions, verified against a real pinned Paper server locally.
