@@ -5,6 +5,12 @@ export {
   xuidFromFloodgateUuid,
 } from "./floodgate.js";
 export {
+  type Knock,
+  type KnockRecord,
+  knockRecord,
+  parseKnocks,
+} from "./knocks.js";
+export {
   assertCommandText,
   openRcon,
   RconError,

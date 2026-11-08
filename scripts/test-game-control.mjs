@@ -6,7 +6,7 @@
 // Nothing here touches the VPS or any existing world.
 import { spawnSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -211,6 +211,71 @@ try {
       log,
     );
   await session.close().catch(() => {});
+  // Knock plugin: build against this server's own API jars, install it, boot again and
+  // confirm it loads cleanly. A real refusal needs a real client, so loading is the proof here.
+  if (spawnSync("javac", ["-version"]).status === 0) {
+    const built = JSON.parse(
+      run("node", [
+        "scripts/minecraft/build-knock-plugin.mjs",
+        join(data, "libraries"),
+        join(directory, "craftlayer-knock.jar"),
+      ]),
+    );
+    report.knock_plugin = { sha256: built.sha256, bytes: built.bytes };
+    await mkdir(join(data, "plugins"), { recursive: true });
+    await cp(
+      join(directory, "craftlayer-knock.jar"),
+      join(data, "plugins", "craftlayer-knock.jar"),
+    );
+    run("docker", [...composeArgs, "start"], {
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const rebootStarted = Date.now();
+    let log2 = "";
+    for (;;) {
+      log2 = await readFile(logPath, "utf8").catch(() => "");
+      if (
+        /\]: Done \(/.test(log2) &&
+        /CraftLayerKnock\] Recording allowlist refusals/.test(log2)
+      )
+        break;
+      if (Date.now() - rebootStarted > 180000)
+        throw new Error("Server did not restart with the plugin within 180 s");
+      await delay(2000);
+    }
+    report.knock_plugin_loaded =
+      /CraftLayerKnock\] Recording allowlist refusals/.test(log2);
+    report.knock_plugin_log_errors =
+      /CraftLayerKnock[^\n]*(ERROR|Exception)|Could not load 'plugins\/craftlayer-knock/.test(
+        log2,
+      );
+    const session2 = await openRcon({
+      host: "127.0.0.1",
+      port: rconPort,
+      password,
+      timeoutMs: 20000,
+    });
+    const actions2 = new GameActions(
+      session2,
+      new FileWhitelistStore(join(data, "whitelist.json")),
+    );
+    report.players_with_plugin = (await actions2.players()).detail;
+    await actions2.stop();
+    for (let i = 0; i < 120; i++) {
+      const state = run("docker", [
+        "inspect",
+        "--format",
+        "{{.State.Status}} {{.State.ExitCode}}",
+        `${project}-minecraft-1`,
+      ]);
+      if (state.startsWith("exited")) {
+        report.exit_with_plugin = state;
+        break;
+      }
+      await delay(1000);
+    }
+    await session2.close().catch(() => {});
+  } else report.knock_plugin = "skipped: javac not installed";
   console.log(JSON.stringify(report, null, 2));
   const ok =
     report.allow_bedrock.ok &&
@@ -219,7 +284,11 @@ try {
     report.save.saved &&
     report.wrong_password === "RCON_AUTH_FAILED" &&
     report.exit.startsWith("exited 0") &&
-    !report.log_has_rcon_password;
+    !report.log_has_rcon_password &&
+    (typeof report.knock_plugin === "string" ||
+      (report.knock_plugin_loaded &&
+        !report.knock_plugin_log_errors &&
+        report.exit_with_plugin?.startsWith("exited 0")));
   process.exitCode = ok ? 0 : 1;
 } finally {
   await cleanup();

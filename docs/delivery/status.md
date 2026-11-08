@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan A4 (plugin and reader) — knock to join, 2026-11-08
+
+Added the `CraftLayerKnock` Paper plugin (`infra/minecraft/plugins/craftlayer-knock`), built by `scripts/minecraft/build-knock-plugin.mjs` with the system JDK against a booted server's own API jars, and `parseKnocks` in the node game-control library. The plugin records only allowlist refusals (name, account UUID, XUID for Bedrock, time; no addresses) and changes nothing. The opt-in real-server check now builds, installs and reboots with the plugin: it loaded without errors and the server stopped cleanly again. A real refusal has not yet been recorded by it; installation on the VPS waits for the A2 approval. See [ADR 0037](../architecture/decisions/0037-knock-to-join.md) and the [runbook](../development/game-control.md).
+
 ## Master plan A2 (library) — private game control, 2026-11-08
 
 Added `apps/minecraft-node/src/game-control`: a bounded Source RCON client, Floodgate identity derivation, an atomic compare-and-swap `whitelist.json` store and `GameActions` (players, allow, revoke, kick, say, save, pause saving, stop) with fixed verbs, validated arguments and verification against the server's own listing. An opt-in `pnpm test:game-control` boots a disposable pinned Paper server locally and exercises every action; it passed, including a Bedrock allow by XUID that needed a second reload before the server saw the rewritten file. Nothing is installed on the VPS and no API, UI or MCP action calls this yet; see [ADR 0036](../architecture/decisions/0036-game-control-channel.md) and the [runbook](../development/game-control.md).

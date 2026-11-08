@@ -1,0 +1,6 @@
+name: CraftLayerKnock
+version: 0.1.0
+main: dev.craftlayer.knock.KnockPlugin
+api-version: "1.21"
+description: Records allowlist refusals (name, account UUID/XUID, time) so a family manager can allow exactly that account. Grants nothing; records no addresses.
+authors: [CraftLayer]

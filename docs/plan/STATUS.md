@@ -29,7 +29,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | A1 | Host CraftLayer privately on the VPS with two-factor sign-in | Decision 1 | Needs decision | — |
 | A2 | Server helper (node agent) on VPS with private control channel | A1 | In progress | 2026-11-08: control library built and proven on a real local Paper boot (typed RCON actions, Bedrock allow by XUID, verified reload, graceful stop); [ADR 0036](../architecture/decisions/0036-game-control-channel.md), [runbook](../development/game-control.md). VPS installation waits for A1 |
 | A3 | Real controls: players, kick, message, on/off/restart | A2 | Not started | — |
-| A4 | Knock to join | A3 | Not started | Manual probe used for George, 2026-11-08 |
+| A4 | Knock to join | A3 | In progress | 2026-11-08: Knock server plugin and node reader built; plugin compiled against the pinned API and loaded cleanly on a real local Paper boot ([ADR 0037](../architecture/decisions/0037-knock-to-join.md)). Installing on the VPS and the dashboard card wait for A2/B2; a real refusal has not been recorded by it yet |
 | B1 | Design and plain-language copy for five screens | — | Built | 2026-11-08: [draft screens, words and error messages](design/family-ui.md); waits for owner review before B2 |
 | B2 | Build Home, Server, How to join | B1, A3 | Not started | — |
 | B3 | Family and AI helpers screens | B2, C1 | Not started | — |
@@ -67,3 +67,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — B1 drafted: five screens, plain words and error messages for owner review.
 - 2026-11-08 — C2 built: read-only MCP server; migration 0028 applied cleanly to the existing prototype database during the rebuild.
 - 2026-11-08 — A2 library built: private RCON game control with typed actions, verified against a real pinned Paper server locally.
+- 2026-11-08 — A4 plugin built: allowlist refusals recorded as "asking to join" identities; loads on the real pinned server.

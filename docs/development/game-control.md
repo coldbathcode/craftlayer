@@ -11,6 +11,19 @@ Status: built and verified locally against a real pinned Paper server on 2026-11
 - `FileWhitelistStore` — atomic, compare-and-swap editing of `whitelist.json`, used for Bedrock players because their Floodgate UUIDs cannot be looked up by the server.
 - `floodgateUuid(xuid)` / `floodgateName(gamertag)` — the identity rules Floodgate applies, checked against a UUID observed in the real server log.
 
+## Knock to join (server plugin)
+
+`infra/minecraft/plugins/craftlayer-knock` is a small Paper plugin that records allowlist refusals as one JSON line each (`plugins/CraftLayerKnock/knocks.jsonl`): time, name, account UUID, edition and the XUID for Bedrock accounts. It never records addresses, never changes the login result, rate-limits to one line per account per minute and rotates at 1 MiB. `parseKnocks` in the node library turns that file into "asking to join" entries (one per account, attempts counted, 24-hour expiry, XUID derived from the UUID). Design: [ADR 0037](../architecture/decisions/0037-knock-to-join.md).
+
+Build it with the system JDK against a booted pinned server's own API jars, so it matches what runs:
+
+```bash
+node scripts/minecraft/build-knock-plugin.mjs <bundle>/data/libraries
+# writes infra/minecraft/plugins/craftlayer-knock/dist/craftlayer-knock.jar and prints its SHA-256
+```
+
+The opt-in check below also builds it, installs it into the disposable server, restarts, and confirms it loads without errors. A real refusal needs a real client, so recording is proven on the family server once a real knock happens there.
+
 ## Checks
 
 ```bash
