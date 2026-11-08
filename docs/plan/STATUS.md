@@ -72,3 +72,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — D1 archive library built: consistent live backup, verification and restore proven on a real local Paper server, including a boot from the restored files.
 - 2026-11-08 — A3 intake built: typed server actions (allow, revoke, kick, say, save, start, stop, restart) as durable fenced requests with per-kind permissions.
 - 2026-11-08 — C3 built: agents ask, adults approve; MCP request tools; approval creates the real action as the adult.
+- 2026-11-08 — Owner's local dashboard rebuilt with migrations 0029–0031; the agent-request flow proven live against the registered VPS server.

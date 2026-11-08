@@ -101,7 +101,7 @@ export class CraftLayerClient {
         response.status === 401
           ? "The agent token is invalid, expired or revoked. Ask a manager for a new one."
           : response.status === 403
-            ? "This agent is not allowed to read that. A manager can widen its scope."
+            ? "This agent is not allowed to do that. A manager can widen its scope."
             : response.status === 404
               ? "Nothing with that ID is visible to this agent."
               : response.status === 429

@@ -166,7 +166,7 @@ describe("read-only tools", () => {
     });
     expect(denied.isError).toBe(true);
     const text = String((denied.content as Array<{ text: string }>)[0]?.text);
-    expect(text).toContain("not allowed to read that");
+    expect(text).toContain("not allowed to do that");
     expect(text).toContain("PERMISSION_DENIED");
     expect(text).not.toContain(token.slice(4));
     responder = () => ({
