@@ -116,6 +116,7 @@ export const agentTokenPermissionSchema = z.enum([
   "event:read",
   "mission:read",
   "agent:read",
+  "backup:read",
 ]);
 export const agentTokenRequestSchema = z.strictObject({
   name: z.string().trim().min(1).max(60),

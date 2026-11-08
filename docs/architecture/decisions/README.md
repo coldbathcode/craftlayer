@@ -66,3 +66,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0035 — Agent token authority](0035-agent-token-authority.md).
 - [0036 — Private game control channel](0036-game-control-channel.md).
 - [0037 — Knock to join](0037-knock-to-join.md).
+- [0038 — Durable backup records](0038-backup-records.md).

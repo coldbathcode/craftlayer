@@ -110,6 +110,7 @@ describe("read-only tools", () => {
       "get_node_capacity",
       "get_operation_status",
       "get_server_status",
+      "list_backups",
       "list_environments",
       "list_nodes",
       "list_players",

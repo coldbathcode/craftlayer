@@ -159,6 +159,7 @@ try {
   rmSync(join(previousManagement, "0026_deployment_approval_requests.sql"));
   rmSync(join(previousManagement, "0027_deployment_approval_decisions.sql"));
   rmSync(join(previousManagement, "0028_agent_tokens.sql"));
+  rmSync(join(previousManagement, "0029_backup_records.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),
@@ -277,6 +278,28 @@ try {
         "CREATE TABLE project_reference_fixture(organization_id uuid not null,project_id uuid not null,foreign key(organization_id,project_id) references projects(organization_id,id)); ALTER TABLE project_reference_fixture ENABLE ROW LEVEL SECURITY; ALTER TABLE project_reference_fixture FORCE ROW LEVEL SECURITY; CREATE POLICY fixture_scope ON project_reference_fixture USING(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid) WITH CHECK(organization_id=nullif(current_setting('app.organization_id',true),'')::uuid); GRANT SELECT,INSERT,DELETE ON project_reference_fixture TO craftlayer_runtime;",
     },
   );
+  // Backup records get their own installation so suites can run in parallel.
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_backups_test OWNER craftlayer_migrator",
+  ]);
+  const backupsUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_backups_test`;
+  env.TEST_BACKUPS_DATABASE_URL = backupsUrl("craftlayer_runtime");
+  env.TEST_BACKUPS_IDENTITY_DATABASE_URL = backupsUrl("craftlayer_identity");
+  run("pnpm", ["db:migrate"], {
+    env: { ...env, MIGRATION_DATABASE_URL: backupsUrl("craftlayer_migrator") },
+    stdio: "inherit",
+  });
   run("pnpm", ["test:integration"], { env, stdio: "inherit" });
   cpSync("packages/db/migrations", migrationFixture, { recursive: true });
   writeFileSync(

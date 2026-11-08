@@ -1,4 +1,6 @@
 import {
+  backupListView,
+  backupStatusView,
   environmentSchema,
   itemsSchema,
   meSchema,
@@ -197,6 +199,31 @@ export function registerTools(server: McpServer, client: CraftLayerClient) {
           ? `Nobody was playing at the last observation (${view.freshness}).`
           : `Playing (${view.freshness}): ${view.players.map((p) => `${p.name} [${p.edition}]`).join(", ")}.`;
       return result(summary, view);
+    }),
+  );
+  server.registerTool(
+    "list_backups",
+    {
+      title: "List backups",
+      description:
+        "Backup policy, schedule health and recorded backups for one server. Records only; a listed backup is proven only if it shows verification evidence.",
+      inputSchema: { server_id: id },
+      annotations: readOnly,
+    },
+    guarded(async ({ server_id }) => {
+      const status = await client.get(
+        `/api/v1/servers/${encodeURIComponent(server_id)}/backup-status`,
+        backupStatusView,
+      );
+      const backups = await client.get(
+        `/api/v1/servers/${encodeURIComponent(server_id)}/backups`,
+        backupListView,
+      );
+      const p = status.policy;
+      const summary = !p
+        ? "No backup policy yet: this server has no scheduled backups."
+        : `Backups ${p.enabled ? "run" : "are paused"} daily at ${p.local_time} (${p.timezone}); schedule ${p.schedule.status}; local evidence ${p.health.local}, off-site ${p.health.offhost}, restore ${p.health.restore}. ${backups.items.length} record(s), ${backups.items.filter((b) => b.state === "complete").length} complete.`;
+      return result(summary, { status, backups });
     }),
   );
   server.registerTool(

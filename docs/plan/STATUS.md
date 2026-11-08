@@ -7,7 +7,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - **Family server:** running on the VPS (Paper 26.3 with Geyser/Floodgate). iPads join on port 19133; Java ports stay private. Allowlist enforced.
 - **Players:** Alex and Charlie joined from iPads on 2026-11-08. George's account could not be looked up publicly; a temporary server plugin is waiting to record his account on his next attempt so he can be added.
 - **Original world:** the old `minecraft-java` server is stopped and untouched, with one encrypted archive on the owner's Mac.
-- **Backups:** the new family world has **no backup yet** (Milestone D).
+- **Backups:** the new family world has **no backup yet**. The record layer (policy, schedule, evidence, legal hold) is built and verified; the nightly effect that actually archives the world is next (D1).
 - **Dashboard:** runs only on the owner's Mac; read-only snapshot of the real server; no controls (Milestone A).
 - **AI agents:** read-only access works end to end: a scoped key plus the `apps/mcp` server let an MCP client read the real registered VPS server through the local prototype (C1 and C2 built, 2026-11-08). No actions yet (C3), and only from the owner's machine until A1.
 
@@ -18,7 +18,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | [A — Live connection](A-live-connection.md) | Needs decision | A2 control library done locally; A1 needs the remote-access choice |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
 | [C — AI agent access](C-ai-agent-access.md) | In progress | Owner connects Claude Desktop (decision 6); C3 needs A3 |
-| [D — Backups](D-backups.md) | In progress | D1 durable records (rules done) |
+| [D — Backups](D-backups.md) | In progress | D1 effect: scheduler loop and node-side archive |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F1 after C3 and B2; F2 needs Chapter 04 authorization |
 
@@ -38,7 +38,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | C2 | MCP server with read tools (stdio) | C1 | Built | 2026-11-08: `apps/mcp`, SDK 1.32.2, ten read tools; in-memory tests plus a real stdio run against the prototype reading the VPS playtest server, with environment scope and revocation proven; [how to connect](../development/agent-access.md#connect-claude-mcp-read-only). Not yet connected from Claude Desktop itself |
 | C3 | Approval-gated agent actions | C2, A3 | Not started | — |
 | C4 | Remote MCP on the VPS | C3, A1 | Not started | — |
-| D1 | Nightly consistent backup and Back up now | A2 | In progress | Schedule and retention rules done (ADR 0033) |
+| D1 | Nightly consistent backup and Back up now | A2 | In progress | 2026-11-08: rules (ADR 0033) and durable records, permissions, routes and MCP `list_backups` built and verified ([ADR 0038](../architecture/decisions/0038-backup-records.md), [runbook](../development/backups.md)); the scheduler loop and node-side archive remain |
 | D2 | Encrypted off-server copy | D1, Decision 4 | Needs decision | — |
 | D3 | Weekly automatic isolated restore test | D1 | Not started | One manual isolated restore of the old world passed (P3) |
 | D4 | Adult-approved real restore | D3 | Not started | — |
@@ -68,3 +68,4 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 - 2026-11-08 — C2 built: read-only MCP server; migration 0028 applied cleanly to the existing prototype database during the rebuild.
 - 2026-11-08 — A2 library built: private RCON game control with typed actions, verified against a real pinned Paper server locally.
 - 2026-11-08 — A4 plugin built: allowlist refusals recorded as "asking to join" identities; loads on the real pinned server.
+- 2026-11-08 — D1 records built: backup policy revisions, occurrences, evidence, legal holds, health and retention views; 222/222 database cases.

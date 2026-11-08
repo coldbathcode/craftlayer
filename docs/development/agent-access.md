@@ -66,7 +66,7 @@ Reads outside the token's project or world return 403; another organisation retu
 
 **Claude Code**: `claude mcp add craftlayer -e CRAFTLAYER_URL=http://127.0.0.1:3001 -e CRAFTLAYER_ORGANIZATION=<uuid> -e CRAFTLAYER_AGENT_TOKEN=cla_… -- node /absolute/path/to/craftlayer/apps/mcp/dist/main.js`
 
-Tools, all read-only: `get_connection_info`, `list_projects`, `list_environments`, `list_servers`, `get_server_status`, `list_players`, `get_operation_status`, `list_nodes`, `get_node_capacity`, `list_server_templates`. Each call is an ordinary API request with the agent's token, so scope, permissions and audit apply exactly as for a person. Ask Claude "Who is on Family Survival?" and it will call `list_servers` or `get_server_status`; the answer reports the *last observation* and says so. There is no `list_backups` yet because CraftLayer has no backup records yet (Milestone D).
+Tools, all read-only: `get_connection_info`, `list_projects`, `list_environments`, `list_servers`, `get_server_status`, `list_players`, `get_operation_status`, `list_nodes`, `get_node_capacity`, `list_server_templates`. Each call is an ordinary API request with the agent's token, so scope, permissions and audit apply exactly as for a person. Ask Claude "Who is on Family Survival?" and it will call `list_servers` or `get_server_status`; the answer reports the *last observation* and says so. `list_backups` reads the backup policy, schedule health and recorded backups; it says so plainly when a server has no policy or no verified backup.
 
 The server writes nothing to stdout except protocol frames; a startup problem is printed to stderr in one line without the token.
 

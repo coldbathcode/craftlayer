@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan D1 (records) — CL-F2-03 checkpoint B, 2026-11-08
+
+Added migration 0029 (`backup:read`/`backup:manage`, append-only policy revisions with a constant `policy_id`, idempotent occurrences with forward-only state, backup records with set-once evidence and authored legal holds, a reference-only outbox, and `backup:read` for agent tokens), the `BackupRecords` service, `/api/v1/servers/{id}/backup-*` routes, Drizzle documentation tables and a read-only MCP `list_backups`. Effect-side `record*`/`scheduleDue` methods have no HTTP surface. `pnpm test:db` PASS/0 on its own disposable database pair (222 cases/8 files). Nothing saves, copies, restores or deletes; the family world still has no backup. See [ADR 0038](../architecture/decisions/0038-backup-records.md), [runbook](../development/backups.md) and the [status board](../plan/STATUS.md).
+
 ## Master plan A4 (plugin and reader) — knock to join, 2026-11-08
 
 Added the `CraftLayerKnock` Paper plugin (`infra/minecraft/plugins/craftlayer-knock`), built by `scripts/minecraft/build-knock-plugin.mjs` with the system JDK against a booted server's own API jars, and `parseKnocks` in the node game-control library. The plugin records only allowlist refusals (name, account UUID, XUID for Bedrock, time; no addresses) and changes nothing. The opt-in real-server check now builds, installs and reboots with the plugin: it loaded without errors and the server stopped cleanly again. A real refusal has not yet been recorded by it; installation on the VPS waits for the A2 approval. See [ADR 0037](../architecture/decisions/0037-knock-to-join.md) and the [runbook](../development/game-control.md).

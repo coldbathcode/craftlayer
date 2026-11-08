@@ -40,6 +40,8 @@ export const organizationPermissions = [
   "research:execute",
   "audit:read",
   "agent:connect",
+  "backup:read",
+  "backup:manage",
 ] as const;
 export type OrganizationPermission = (typeof organizationPermissions)[number];
 export const instancePermissions = [
@@ -89,9 +91,12 @@ export const rolePermissions = {
     "research:execute",
     "audit:read",
     "agent:connect",
+    "backup:read",
+    "backup:manage",
   ],
   operator: [
     "server:read",
+    "backup:read",
     "player:read",
     "operation:read",
     "organization:read",
@@ -120,6 +125,7 @@ export const rolePermissions = {
   ],
   viewer: [
     "server:read",
+    "backup:read",
     "player:read",
     "operation:read",
     "organization:read",
@@ -170,5 +176,6 @@ export const agentTokenPermissions = [
   "event:read",
   "mission:read",
   "agent:read",
+  "backup:read",
 ] as const satisfies readonly OrganizationPermission[];
 export type AgentTokenPermission = (typeof agentTokenPermissions)[number];

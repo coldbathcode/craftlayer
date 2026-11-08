@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { agentTokenPermissionSchema } from "../../packages/contracts/src/index.js";
 import {
@@ -12,14 +12,19 @@ describe("agent token permission allowlist", () => {
     expect([...agentTokenPermissionSchema.options].sort()).toEqual(
       [...agentTokenPermissions].sort(),
     );
-    const sql = readFileSync(
-      new URL(
-        "../../packages/db/migrations/0028_agent_tokens.sql",
-        import.meta.url,
-      ),
-      "utf8",
+    const migrations = new URL(
+      "../../packages/db/migrations/",
+      import.meta.url,
     );
-    const literal = /permissions <@ ARRAY\[([^\]]+)\]::text\[\]/.exec(sql)?.[1];
+    const latest = readdirSync(migrations)
+      .filter((f) => f.endsWith(".sql"))
+      .sort()
+      .map((f) => readFileSync(new URL(f, migrations), "utf8"))
+      .filter((sql) => /permissions <@ ARRAY\[/.test(sql))
+      .at(-1);
+    const literal = /permissions <@ ARRAY\[([^\]]+)\]::text\[\]/.exec(
+      latest ?? "",
+    )?.[1];
     expect(literal).toBeTruthy();
     const inSql = (literal ?? "")
       .split(",")

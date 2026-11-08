@@ -193,7 +193,13 @@ describe("Minecraft registry tenant and operation boundary", () => {
           "select permission from role_permissions where role_id='00000000-0000-4000-8000-00000000f102' order by permission",
         )
       ).rows.map((r) => r.permission);
-      expect(rows).toEqual(["operation:read", "player:read", "server:read"]);
+      // 0029 grants viewers backup:read on upgrade as well as on fresh installs.
+      expect(rows).toEqual([
+        "backup:read",
+        "operation:read",
+        "player:read",
+        "server:read",
+      ]);
       expect(
         (
           await c.query(

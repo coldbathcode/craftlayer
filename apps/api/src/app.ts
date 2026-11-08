@@ -11,6 +11,7 @@ import {
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
 import { registerAuth, requestToken } from "./auth-routes.js";
+import { type BackupApi, registerBackups } from "./backup-routes.js";
 import {
   type DeploymentApi,
   registerDeployments,
@@ -26,6 +27,7 @@ export async function buildApp(options: {
   providers?: ConnectionApi;
   runtime?: RuntimeApi;
   minecraft?: MinecraftApi;
+  backups?: BackupApi;
   nodes?: NodeApi;
   deployments?: DeploymentApi;
   publicUrl?: string;
@@ -174,6 +176,8 @@ export async function buildApp(options: {
       options.deployments,
       options.publicUrl ?? "http://127.0.0.1:3000",
     );
+  if (options.backups && options.auth)
+    await registerBackups(app, options.backups);
   if (options.minecraft && options.auth)
     await registerMinecraft(
       app,
