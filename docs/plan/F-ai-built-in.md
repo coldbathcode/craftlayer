@@ -10,7 +10,7 @@ AI helps the family in two ways: an assistant in the dashboard that manages serv
 
 - "Ask CraftLayer" panel for adults: "Who played this week?", "Let George in", "Back up before we update".
 - Uses the same tools and approval flow as [Milestone C](C-ai-agent-access.md), acting with the signed-in adult's permissions. Proposed changes appear as buttons the adult taps; the assistant's text never performs an action by itself.
-- Runs through the existing provider gateway (Chapter 02): free-only by default, with budgets and emergency stop. Paid models only if the owner turns them on.
+- Runs through the existing provider gateway (Chapter 02): free-only until a key is configured, with budgets and emergency stop. The owner has decided (decision 3) to allow paid and free models and will supply keys for the main foundation models, OpenRouter, Ollama and local providers; OpenRouter and Ollama adapters exist today and direct adapters are added as needed.
 - Not available to child accounts.
 - **Done when:** the five B4 usability tasks can also be done by conversation, with every change confirmed by a tap and audited.
 

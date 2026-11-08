@@ -38,7 +38,7 @@ An AI agent (for example Claude) connected through MCP can answer "Is the server
 | E | **New servers in a few taps** | Create a new world from the phone with a 3-question wizard | [E — new servers](plan/E-new-servers.md) |
 | F | **AI built in** | An assistant in the dashboard, then AI helpers in the game | [F — AI built in](plan/F-ai-built-in.md) |
 
-How work is run, checked and published: [how to run the plan](plan/RUNNING.md). Decisions only the owner can make are listed on the [status board](plan/STATUS.md#decisions-needed-from-the-owner).
+How work is run, checked and published: [how to run the plan](plan/RUNNING.md). The owner's decisions are recorded on the [status board](plan/STATUS.md#owner-decisions).
 
 ## Order and what can run in parallel
 

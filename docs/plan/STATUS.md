@@ -49,16 +49,19 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 | F1 | Dashboard assistant | C3, B2, Decision 3 | Not started | Provider gateway built (Chapter 02) |
 | F2 | In-game AI helpers | F1, Chapter 04 authorization | Not started | Fleet runtime built (Chapter 03) |
 
-## Decisions needed from the owner
+## Owner decisions
 
-| # | Decision | Options | Recommendation | Blocks |
-| --- | --- | --- | --- | --- |
-| 1 | How you reach the dashboard from your phone | Tailscale (private network app); Cloudflare Tunnel + Access (email code) | Tailscale: nothing public, free, simple on iPhone/iPad | A1 |
-| 2 | Who approves creating servers and restores | Keep two adults; single-owner mode with typed confirmation and a short delay | Single-owner mode if you are the only adult managing it | E3 |
-| 3 | Can the dashboard assistant use paid AI | Free models only; allow paid with a monthly cap | Free only to start | F1 |
-| 4 | Where off-server backups go | Backblaze B2 (cheap cloud storage); your Mac; another disk | Backblaze B2 | D2 |
-| 5 | The original world | Keep stopped; bring it back as a second managed server | Bring back after Milestone D, from a fresh backup | — |
-| 6 | Which AI agent to connect first | Claude Desktop; Claude Code; other MCP client | Claude Desktop | C2 how-to |
+Decided on 2026-11-08 unless noted.
+
+| # | Decision | Answer | Consequence |
+| --- | --- | --- | --- |
+| 1 | How you reach the dashboard from your phone | **Tailscale** (free Personal plan; the owner asked whether it is free and it is for a family) | A1 installs Tailscale on the VPS and the owner's devices; the dashboard is served only on the tailnet over HTTPS |
+| 2 | Who approves creating servers and restores | **Single-owner mode** with typed confirmation and a short delay | E3 adds the mode behind an ADR; two-adult approval stays available |
+| 3 | Can the assistant use paid AI | **Yes, paid and free**: the owner supplies keys for the main foundation models, OpenRouter, Ollama and local providers | F1 uses the existing provider gateway (OpenRouter and Ollama adapters exist; direct adapters are added as needed); free-only remains the default until a key is configured, with budgets and emergency stop |
+| 4 | Where off-server backups go | **Must be free** | D2 pulls encrypted archives to the owner's Mac over Tailscale (free) and may add a free-tier bucket later |
+| 5 | The original world | **Remove it; keep things fresh** | Its encrypted archive and key stay on the owner's Mac. Removal of the stopped container and `/opt/minecraft-java` is a destructive VPS change: it runs only after a fresh decrypt-and-verify of the archive and one explicit confirmation of the exact scope |
+| 6 | Which AI agent to connect first | **Claude Desktop** | Setup steps are in the [agent runbook](../development/agent-access.md#connect-claude-mcp-read-only) |
+| 7 | Screen designs (B1) | **Approved** | B2 may start once A3 actions can run |
 
 ## Change log
 

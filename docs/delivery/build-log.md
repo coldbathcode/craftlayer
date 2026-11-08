@@ -571,3 +571,7 @@ Documentation only: [screens, words and error messages](../plan/design/family-ui
 
 `pnpm prototype:up` rebuilt the owner's local dashboard images and applied migrations 0029, 0030 and 0031 to the existing prototype database without error; web, API, worker and node-control reported healthy. A private script then proved C3 on that live instance against the real registered VPS playtest server: a token with `mayRequest: ["say"]` drove the built MCP server over stdio; `request_server_message` created a pending request; `request_server_stop` was refused (`AGENT_MAY_NOT_REQUEST`); the parent saw the request with the agent's name and reason and `can_decide`; approval produced a `say` server action, `pending` with `awaiting_node` true and fence 1; the agent's `list_my_requests` showed "approved (Test only)"; the action was cancelled and the token revoked afterwards. The MCP client's 403 wording was generalised from "read" to "do" because it now covers requests. No VPS change.
 
+## Owner decisions recorded, 2026-11-08
+
+The owner answered the six status-board decisions and approved the B1 screen designs: Tailscale for remote access, single-owner approval mode, paid and free AI with owner-supplied keys (foundation models, OpenRouter, Ollama, local), free off-site backups, removal of the original stopped world (archive and key retained on the owner's Mac; removal waits for a fresh decrypt-and-verify and one explicit scope confirmation), and Claude Desktop first. Plan files updated; no code or VPS change.
+
