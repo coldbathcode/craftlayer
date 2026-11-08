@@ -522,3 +522,8 @@ Added contracts and pure functions only. `pnpm exec vitest run packages/minecraf
 The first run failed one case because the test expected `overdue` at exactly 60 minutes late while the rule is strictly more than 60; the code stayed and the test now asserts both sides of the boundary. A manual mutation run removed or altered 15 retention, schedule, occurrence and health rules; all 15 were killed. This is a targeted sample. Nothing here proves a backup works; MC-08 restore, corruption, key, disk and extraction gates remain open.
 
 K2 records were corrected in the same publication: the qualifier adapter is parked because the qualifier also runs after a job exists, when `currentApproval` denies, and the gateway has no identity service. The mutation count in the K2 entry was also corrected.
+
+## CL-F25-03/P5 — approved Bedrock exposure, 2026-11-08
+
+Operator change on the owned deployment only, after explicit owner approval of the two Bedrock ports. File backups first, then graceful stop (exit 143 after world save, no OOM), rebinding, advertise address and allowlist, and recreation of this container. Ready in about 17 seconds with built-in signaling started. Host listeners: 0.0.0.0:19133 TCP and UDP, 127.0.0.1:25585. External probe: signaling 404 (expected), Java ports closed. Read-only root, 3 GiB, 2 CPUs and unprivileged settings are unchanged. Private dashboard observation succeeded with the new exact-binding guard. No repository code changed. No game join has happened yet, so nothing about admission is claimed.
+

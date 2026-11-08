@@ -2,7 +2,15 @@
 
 Last updated: 2026-11-07.
 
-## Current operator checkpoint — CL-F25-03/P4, 2026-11-07
+## Current operator checkpoint — CL-F25-03/P5, 2026-11-08
+
+The owner supplied the players' Xbox gamertags and the iPad client version (26.60), and explicitly approved exposing only the Bedrock ports. The pinned Geyser build lists 26.60 among its supported Bedrock versions; that is a support claim, not proof of a join. Within this deployment only: backed up the edited files to a private timestamped directory on the host, gracefully stopped the instance (world saved, no OOM), bound only signaling TCP and game UDP 19133 to all IPv4 addresses, set `advertise-addresses` to the public address, wrote Floodgate-format allowlist entries, recorded the approval in the private operator record, and recreated only this container. Java stays on loopback. From outside: signaling TCP answers (HTTP 404, which is expected for a bare request), and Java 25585 and 25565 are closed. Allowlist enforcement, online authentication and resource limits are unchanged. The original `minecraft-java` container remains exited, and no other project's container was touched.
+
+Two of the three gamertags resolved to XUIDs through the GeyserMC lookup that Floodgate itself uses, and their Floodgate UUIDs are allowlisted. The third gamertag is not in that cache, so it stays off the list until a real denied join logs its identity; it is not guessed. The dashboard observation script now refuses unless bindings exactly match the approved set, instead of requiring loopback. A fresh observation reads online, 0 players, allowlist enforced.
+
+**Not yet verified:** a real iPad admission, a real denial, UDP session behaviour through the public address, new-world backup and isolated restore. No password exists for Bedrock servers; the allowlist with Xbox authentication is the admission control. Gamertags, XUIDs and the host address are private and stay out of Git.
+
+## Previous operator checkpoint — CL-F25-03/P4, 2026-11-07
 
 The separate playtest server is **running on the VPS with nobody admitted**. The owner completed the sudo storage step; all ten read-only preflight checks then passed, and a Codex session seeded the empty world and started only the owned Compose project. An independent Claude Code read-only review confirmed: Paper 26.3 answers Java status on VPS loopback with 0/5 players, online authentication and enforced empty allowlist, no OP, no RCON/query/management listener, non-root, read-only root, all capabilities dropped, 2 CPU/3 GiB limits, no restart policy and bounded ext4 storage. Geyser built-in signaling started without the earlier native-loader failure. The original `minecraft-java` container is still exited with unchanged identity, and the only baseline differences are this new container and another project's unrelated recreation of its own services.
 

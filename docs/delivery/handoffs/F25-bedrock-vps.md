@@ -49,3 +49,12 @@ False lead to avoid: the container shows a random high UDP socket and TCP listen
 The host firewall does not itself restrict game ports. Loopback binding is the effective control, so changing a binding to a public address exposes that port immediately; provider edge filtering is unverified. Exposure needs explicit owner approval and must include only the TCP signaling and UDP game port, never Java admin or management listeners.
 
 Next, once the owner supplies gamertags, client version and exposure approval: write those into a new approved operator record, set the public `advertise-addresses`, add allowlisted Floodgate identities through the official procedure, restart only this instance and run real iPad allowed and denied joins. Then graceful stop, new-world backup and isolated restore. Send the completion email only after a real join succeeds. Refresh the dashboard with the private `observe-playtest.mjs`; it refuses if bindings stop being loopback-only, so it must be deliberately changed alongside approved exposure.
+
+## P5 continuation — approved Bedrock exposure
+
+The owner supplied the gamertags, iPad version 26.60, and approval to expose only the Bedrock ports. The pinned Geyser lists 26.60 as supported. Only this deployment changed: the edited files were copied to a private `change-<timestamp>` directory beside its Compose file, then the instance was gracefully stopped. Signaling TCP and game UDP 19133 were rebound to all IPv4 addresses with the public advertise address, Java was left on loopback, and only this container was recreated. External checks: 19133 TCP answers, Java ports closed.
+
+Allowlisting uses Floodgate UUIDs derived from XUIDs (`00000000-0000-0000-` plus the 16-hex-digit XUID) with the `.` username prefix, written while stopped because the instance has no console or RCON. Two gamertags resolved through the GeyserMC lookup. The third returns "not in cache", so that player must attempt one join. The denial then logs the identity, and adding it needs another graceful restart, because there is no console to run `whitelist reload`. Do not guess a UUID, and do not relax online authentication or allowlisting.
+
+Rollback: stop this project, restore the four files from the change directory and run `up -d` for this project only. The world is retained. Next: real allowed and denied iPad joins, add the third player, then graceful stop, backup and isolated restore. The completion email waits on a real join.
+
