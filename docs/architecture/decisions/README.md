@@ -70,3 +70,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0039 — Backup archive consistency, verification and restore](0039-backup-archive-consistency.md).
 - [0040 — Typed server actions as durable requests](0040-server-action-intake.md).
 - [0041 — Agents ask, adults approve](0041-agent-requests.md).
+- [0042 — Two-factor sign-in for adults](0042-two-factor-sign-in.md).

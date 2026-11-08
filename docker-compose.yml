@@ -88,6 +88,7 @@ services:
       CRAFTLAYER_RECOVERY_TOKEN: ${CRAFTLAYER_RECOVERY_TOKEN:?Run pnpm setup:local}
       CRAFTLAYER_CSRF_SECRET: ${CRAFTLAYER_CSRF_SECRET:?Run pnpm setup:local}
       CRAFTLAYER_PUBLIC_URL: ${CRAFTLAYER_PUBLIC_URL:-http://127.0.0.1:3000}
+      CRAFTLAYER_REQUIRE_MFA: ${CRAFTLAYER_REQUIRE_MFA:-false}
     depends_on:
       migrate: { condition: service_completed_successfully }
       redis: { condition: service_healthy }

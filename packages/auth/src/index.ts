@@ -21,6 +21,14 @@ import {
 import { hash, verify } from "@node-rs/argon2";
 import pg from "pg";
 import { z } from "zod";
+import {
+  base32Encode,
+  newRecoveryCodes,
+  newTotpSecret,
+  normalizeRecoveryCode,
+  otpauthUri,
+  verifyTotp,
+} from "./totp.js";
 
 export class AuthError extends Error {
   constructor(
@@ -96,6 +104,16 @@ const requestablePermission: Record<
   stop: "server:control",
   restart: "server:control",
 };
+/** A failed code must be audited even though the enclosing transaction rolls back. */
+class MfaCodeInvalid extends AuthError {
+  constructor(
+    public readonly auditUser: string,
+    public readonly auditAction: string,
+    message = "That code did not match.",
+  ) {
+    super(401, "MFA_CODE_INVALID", message);
+  }
+}
 const agentDenied = () =>
   new AuthError(
     403,
@@ -112,6 +130,8 @@ export interface AuthOptions {
   bootstrapToken: string;
   recoveryToken: string;
   csrfSecret: string;
+  /** When true, adults must enrol and verify a one-time code before any other call. */
+  requireMfa?: boolean | undefined;
   clock?: () => Date;
   deliverReset?:
     | ((recipient: string, token: string) => Promise<void>)
@@ -121,6 +141,8 @@ export interface SessionResult {
   cookieToken: string;
   csrf_token: string;
   user: PublicUser;
+  /** `verify`: enter a code; `enroll`: set up two-factor first; `none`: signed in. */
+  mfa: "none" | "verify" | "enroll";
 }
 export class AuthService {
   #pool: pg.Pool;
@@ -338,10 +360,11 @@ export class AuthService {
         "update sessions set revoked_at=$2 where token_hash=$1",
         [digest(previous), this.now()],
       );
-    const cookieToken = randomBytes(32).toString("base64url"),
+    const mfa = await this.mfaState(client, user),
+      cookieToken = randomBytes(32).toString("base64url"),
       now = this.now();
     await client.query(
-      "insert into sessions(id,user_id,token_hash,auth_version,idle_expires_at,expires_at,created_at) values($1,$2,$3,$4,$5,$6,$7)",
+      "insert into sessions(id,user_id,token_hash,auth_version,idle_expires_at,expires_at,created_at,mfa_pending) values($1,$2,$3,$4,$5,$6,$7,$8)",
       [
         randomUUID(),
         user.id,
@@ -350,13 +373,57 @@ export class AuthService {
         new Date(now.getTime() + 1800000),
         new Date(now.getTime() + 43200000),
         now,
+        mfa !== "none",
       ],
     );
     return {
       cookieToken,
       csrf_token: this.csrfToken(cookieToken),
       user: this.publicUser(user),
+      mfa,
     };
+  }
+  /** Adults with a confirmed authenticator must verify; where MFA is required, adults without one must enrol. */
+  private async mfaState(
+    client: pg.PoolClient,
+    user: Pick<UserRow, "id" | "account_type">,
+  ): Promise<"none" | "verify" | "enroll"> {
+    if (user.account_type !== "adult") return "none";
+    const enrolled = (
+      await client.query<{ confirmed_at: Date | null }>(
+        "select confirmed_at from user_totp where user_id=$1",
+        [user.id],
+      )
+    ).rows[0];
+    if (enrolled?.confirmed_at) return "verify";
+    return this.#options.requireMfa ? "enroll" : "none";
+  }
+  #totpKey() {
+    return Buffer.from(
+      hkdfSync(
+        "sha256",
+        Buffer.from(this.#options.csrfSecret, "hex"),
+        "craftlayer/totp/v1",
+        "totp-secret-encryption",
+        32,
+      ),
+    );
+  }
+  #sealTotp(secret: Buffer) {
+    const iv = randomBytes(12),
+      cipher = createCipheriv("aes-256-gcm", this.#totpKey(), iv),
+      text = Buffer.concat([cipher.update(secret), cipher.final()]);
+    return Buffer.concat([iv, cipher.getAuthTag(), text]).toString("base64url");
+  }
+  #openTotp(sealed: string) {
+    const raw = Buffer.from(sealed, "base64url"),
+      decipher = createDecipheriv(
+        "aes-256-gcm",
+        this.#totpKey(),
+        raw.subarray(0, 12),
+      );
+    decipher.setAuthTag(raw.subarray(12, 28));
+    return Buffer.concat([decipher.update(raw.subarray(28)), decipher.final()]);
   }
   csrfToken(cookieToken: string) {
     return createHmac("sha256", this.#options.csrfSecret)
@@ -494,19 +561,28 @@ export class AuthService {
   private async sessionIn(
     client: pg.PoolClient,
     token: string,
+    allowPending = false,
   ): Promise<Principal> {
     this.ensureReady();
     if (token.startsWith("cla_")) return this.agentIn(client, token);
     if (!/^[A-Za-z0-9_-]{43}$/.test(token))
       throw new AuthError(401, "UNAUTHENTICATED", "Sign in to continue.");
     const now = this.now();
-    const result = await client.query<UserRow & { session_id: string }>(
-      "select u.*,s.id as session_id from sessions s join users u on u.id=s.user_id where s.token_hash=$1 and s.revoked_at is null and s.expires_at>$2 and s.idle_expires_at>$2 and u.disabled_at is null and s.auth_version=u.auth_version for share of u for update of s",
+    const result = await client.query<
+      UserRow & { session_id: string; mfa_pending: boolean }
+    >(
+      "select u.*,s.id as session_id,s.mfa_pending from sessions s join users u on u.id=s.user_id where s.token_hash=$1 and s.revoked_at is null and s.expires_at>$2 and s.idle_expires_at>$2 and u.disabled_at is null and s.auth_version=u.auth_version for share of u for update of s",
       [digest(token), now],
     );
     const row = result.rows[0];
     if (!row)
       throw new AuthError(401, "UNAUTHENTICATED", "Sign in to continue.");
+    if (row.mfa_pending && !allowPending)
+      throw new AuthError(
+        401,
+        "MFA_REQUIRED",
+        "Finish two-factor sign-in to continue.",
+      );
     await client.query(
       "update sessions set idle_expires_at=least(expires_at,$2) where id=$1",
       [row.session_id, new Date(now.getTime() + 1800000)],
@@ -571,7 +647,7 @@ export class AuthService {
   async logout(token: string) {
     this.ensureReady();
     return this.transaction(async (client) => {
-      const p = await this.sessionIn(client, token);
+      const p = await this.sessionIn(client, token, true);
       if (p.agent) throw agentDenied();
       await client.query("update sessions set revoked_at=$2 where id=$1", [
         p.sessionId,
@@ -607,7 +683,7 @@ export class AuthService {
   }
   async me(token: string) {
     return this.transaction(async (client) => {
-      const p = await this.sessionIn(client, token);
+      const p = await this.sessionIn(client, token, true);
       await client.query("select set_config('app.user_id',$1,true)", [
         p.user.id,
       ]);
@@ -632,12 +708,34 @@ export class AuthService {
         : await client.query("select 1 from instance_owners where user_id=$1", [
             p.user.id,
           ]);
+      const pending = p.agent
+        ? false
+        : !!(
+            await client.query<{ mfa_pending: boolean }>(
+              "select mfa_pending from sessions where id=$1",
+              [p.sessionId],
+            )
+          ).rows[0]?.mfa_pending;
+      const enrolled = p.agent
+        ? false
+        : !!(
+            await client.query(
+              "select 1 from user_totp where user_id=$1 and confirmed_at is not null",
+              [p.user.id],
+            )
+          ).rowCount;
       return {
         user: p.user,
-        organizations,
+        organizations: pending ? [] : organizations,
         instance_owner: !!owner.rowCount,
         current_session_id: p.sessionId,
         csrf_token: this.csrfToken(token),
+        mfa: {
+          enrolled,
+          pending,
+          required:
+            !!this.#options.requireMfa && p.user.account_type === "adult",
+        },
       };
     });
   }
@@ -2648,6 +2746,214 @@ export class AuthService {
       },
       true,
     );
+  }
+
+  /** Runs a two-factor transaction; a failed code rolls it back and is audited separately. */
+  private async mfaGuarded<T>(
+    operation: (client: pg.PoolClient) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await this.transaction(operation);
+    } catch (error) {
+      if (error instanceof MfaCodeInvalid)
+        await this.transaction((client) =>
+          this.audit(client, error.auditUser, error.auditAction, null, false),
+        );
+      throw error;
+    }
+  }
+  /** Start enrolment: a fresh secret, shown once as base32 and an otpauth URI. */
+  async totpSetup(token: string) {
+    return this.transaction(async (client) => {
+      const p = await this.sessionIn(client, token, true);
+      if (p.agent) throw agentDenied();
+      if (p.user.account_type !== "adult")
+        throw new AuthError(403, "PERMISSION_DENIED", "Adults only.");
+      const existing = (
+        await client.query<{ confirmed_at: Date | null }>(
+          "select confirmed_at from user_totp where user_id=$1 for update",
+          [p.user.id],
+        )
+      ).rows[0];
+      if (existing?.confirmed_at)
+        throw new AuthError(
+          409,
+          "MFA_ALREADY_ENABLED",
+          "Two-factor sign-in is already on. Turn it off with a code first.",
+        );
+      const secret = newTotpSecret(),
+        now = this.now();
+      await client.query("delete from user_totp where user_id=$1", [p.user.id]);
+      await client.query(
+        "insert into user_totp(user_id,secret_ciphertext,created_at) values($1,$2,$3)",
+        [p.user.id, this.#sealTotp(secret), now],
+      );
+      await this.audit(client, p.user.id, "auth.mfa_setup_started");
+      return {
+        secret: base32Encode(secret),
+        otpauth_uri: otpauthUri("CraftLayer", p.user.login, secret),
+      };
+    });
+  }
+  /** Confirm enrolment with a code; returns recovery codes exactly once and completes a pending sign-in. */
+  async totpConfirm(token: string, code: string, source: string) {
+    await this.rate("mfa-confirm", source, 10);
+    return this.mfaGuarded(async (client) => {
+      const p = await this.sessionIn(client, token, true);
+      if (p.agent) throw agentDenied();
+      const row = (
+        await client.query<{
+          secret_ciphertext: string;
+          confirmed_at: Date | null;
+          last_step: string;
+        }>("select * from user_totp where user_id=$1 for update", [p.user.id])
+      ).rows[0];
+      if (!row || row.confirmed_at)
+        throw new AuthError(
+          409,
+          "MFA_SETUP_REQUIRED",
+          "Start two-factor setup first.",
+        );
+      const step = verifyTotp(
+        this.#openTotp(row.secret_ciphertext),
+        String(code),
+        this.now().getTime(),
+        BigInt(row.last_step),
+      );
+      if (step === null) {
+        throw new MfaCodeInvalid(
+          p.user.id,
+          "auth.mfa_confirm",
+          "That code did not match. Try the current code.",
+        );
+      }
+      const now = this.now(),
+        codes = newRecoveryCodes();
+      await client.query(
+        "update user_totp set confirmed_at=$2,last_step=$3 where user_id=$1",
+        [p.user.id, now, step.toString()],
+      );
+      await client.query("delete from user_totp_recovery where user_id=$1", [
+        p.user.id,
+      ]);
+      for (const c of codes)
+        await client.query(
+          "insert into user_totp_recovery(id,user_id,code_hash,created_at) values($1,$2,$3,$4)",
+          [randomUUID(), p.user.id, digest(normalizeRecoveryCode(c)), now],
+        );
+      await client.query("update sessions set mfa_pending=false where id=$1", [
+        p.sessionId,
+      ]);
+      await this.audit(client, p.user.id, "auth.mfa_enabled");
+      return { recovery_codes: codes };
+    });
+  }
+  /** Finish a pending sign-in with an authenticator code or one recovery code. */
+  async mfaVerify(token: string, code: string, source: string) {
+    await this.rate("mfa-verify", source, 10);
+    return this.mfaGuarded(async (client) => {
+      const p = await this.sessionIn(client, token, true);
+      if (p.agent) throw agentDenied();
+      const row = (
+        await client.query<{ secret_ciphertext: string; last_step: string }>(
+          "select secret_ciphertext,last_step from user_totp where user_id=$1 and confirmed_at is not null for update",
+          [p.user.id],
+        )
+      ).rows[0];
+      if (!row)
+        throw new AuthError(
+          409,
+          "MFA_SETUP_REQUIRED",
+          "Set up two-factor sign-in first.",
+        );
+      const value = String(code).trim();
+      const step = /^[0-9]{6}$/.test(value)
+        ? verifyTotp(
+            this.#openTotp(row.secret_ciphertext),
+            value,
+            this.now().getTime(),
+            BigInt(row.last_step),
+          )
+        : null;
+      let method: "totp" | "recovery" | null = step === null ? null : "totp";
+      if (method === "totp")
+        await client.query(
+          "update user_totp set last_step=$2 where user_id=$1",
+          [p.user.id, String(step)],
+        );
+      else {
+        const used = await client.query(
+          "update user_totp_recovery set used_at=$3 where user_id=$1 and code_hash=$2 and used_at is null",
+          [p.user.id, digest(normalizeRecoveryCode(value)), this.now()],
+        );
+        if (used.rowCount) method = "recovery";
+      }
+      if (!method) {
+        throw new MfaCodeInvalid(
+          p.user.id,
+          "auth.mfa_verify",
+          "That code did not match.",
+        );
+      }
+      await client.query("update sessions set mfa_pending=false where id=$1", [
+        p.sessionId,
+      ]);
+      await this.audit(
+        client,
+        p.user.id,
+        method === "totp" ? "auth.mfa_verified" : "auth.mfa_recovery_used",
+      );
+      const remaining = (
+        await client.query<{ n: number }>(
+          "select count(*)::int n from user_totp_recovery where user_id=$1 and used_at is null",
+          [p.user.id],
+        )
+      ).rows[0];
+      return {
+        ok: true as const,
+        method,
+        recovery_codes_left: remaining?.n ?? 0,
+      };
+    });
+  }
+  /** Turn two-factor off with a current code. Where MFA is required, the next sign-in must enrol again. */
+  async totpDisable(token: string, code: string, source: string) {
+    await this.rate("mfa-disable", source, 10);
+    return this.mfaGuarded(async (client) => {
+      const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
+      const row = (
+        await client.query<{ secret_ciphertext: string; last_step: string }>(
+          "select secret_ciphertext,last_step from user_totp where user_id=$1 and confirmed_at is not null for update",
+          [p.user.id],
+        )
+      ).rows[0];
+      if (!row)
+        throw new AuthError(
+          409,
+          "MFA_NOT_ENABLED",
+          "Two-factor sign-in is not on.",
+        );
+      const step = verifyTotp(
+        this.#openTotp(row.secret_ciphertext),
+        String(code).trim(),
+        this.now().getTime(),
+        BigInt(row.last_step),
+      );
+      if (step === null) {
+        throw new MfaCodeInvalid(
+          p.user.id,
+          "auth.mfa_disable",
+          "That code did not match.",
+        );
+      }
+      await client.query("delete from user_totp_recovery where user_id=$1", [
+        p.user.id,
+      ]);
+      await client.query("delete from user_totp where user_id=$1", [p.user.id]);
+      await this.audit(client, p.user.id, "auth.mfa_disabled");
+      return { ok: true as const };
+    });
   }
 
   // CHAPTER_METHODS

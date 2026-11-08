@@ -15,7 +15,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 
 | Milestone | State | Next step |
 | --- | --- | --- |
-| [A — Live connection](A-live-connection.md) | Needs decision | A2 library, A3 intake and A4 plugin built locally; A1 needs the remote-access choice |
+| [A — Live connection](A-live-connection.md) | In progress | Tailscale on the VPS, two-factor built; deploy the stack next (A1), then A2–A4 go live |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
 | [C — AI agent access](C-ai-agent-access.md) | In progress | C1–C3 built; owner connects Claude Desktop (decision 6); C4 needs A1 |
 | [D — Backups](D-backups.md) | In progress | D1: scheduler loop on the node (needs A2 on the VPS) |
@@ -26,7 +26,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-08. Stat
 
 | Step | What | Depends on | State | Evidence / note |
 | --- | --- | --- | --- | --- |
-| A1 | Host CraftLayer privately on the VPS with two-factor sign-in | Decision 1 | Needs decision | — |
+| A1 | Host CraftLayer privately on the VPS with two-factor sign-in | Decision 1 | In progress | 2026-11-08: Tailscale is on the VPS (owner); two-factor sign-in built and verified (232/232 database cases; [ADR 0042](../architecture/decisions/0042-two-factor-sign-in.md)); server management now allowed for private-HTTPS + required-MFA deployments; [deployment runbook](../operations/vps-dashboard.md) drafted. Next: owner enables HTTPS certs and joins devices; then the stack is deployed on the VPS |
 | A2 | Server helper (node agent) on VPS with private control channel | A1 | In progress | 2026-11-08: control library built and proven on a real local Paper boot (typed RCON actions, Bedrock allow by XUID, verified reload, graceful stop); [ADR 0036](../architecture/decisions/0036-game-control-channel.md), [runbook](../development/game-control.md). VPS installation waits for A1 |
 | A3 | Real controls: players, kick, message, on/off/restart | A2 | In progress | 2026-11-08: typed, fenced, audited action intake with per-kind adult permissions built and verified (226/226 database cases; [ADR 0040](../architecture/decisions/0040-server-action-intake.md), [runbook](../development/server-actions.md)); node dispatch and dashboard buttons wait for A2 |
 | A4 | Knock to join | A3 | In progress | 2026-11-08: Knock server plugin and node reader built; plugin compiled against the pinned API and loaded cleanly on a real local Paper boot ([ADR 0037](../architecture/decisions/0037-knock-to-join.md)). Installing on the VPS and the dashboard card wait for A2/B2; a real refusal has not been recorded by it yet |
@@ -76,3 +76,4 @@ Decided on 2026-11-08 unless noted.
 - 2026-11-08 — A3 intake built: typed server actions (allow, revoke, kick, say, save, start, stop, restart) as durable fenced requests with per-kind permissions.
 - 2026-11-08 — C3 built: agents ask, adults approve; MCP request tools; approval creates the real action as the adult.
 - 2026-11-08 — Owner's local dashboard rebuilt with migrations 0029–0031; the agent-request flow proven live against the registered VPS server.
+- 2026-11-08 — Decisions recorded; Tailscale joined on the VPS by the owner; two-factor sign-in built (A1).

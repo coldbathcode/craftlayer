@@ -17,7 +17,7 @@ The dashboard runs only on the owner's Mac. The game runs on the VPS. Nothing co
 Run the CraftLayer stack (web, API, worker, database, Redis) as its own Compose project on the VPS, bound to loopback only. Reach it from the owner's phone and laptop through a private access layer, never a public port.
 
 - Owner decision 1 (2026-11-08): **Tailscale**. The VPS and the owner's devices join one tailnet; the dashboard is served only there over HTTPS (`tailscale serve`), so no public port is opened. See [decisions](STATUS.md#owner-decisions).
-- Add TOTP two-factor sign-in for adults (closes the F1 remote-entry/MFA gate).
+- Add TOTP two-factor sign-in for adults (closes the F1 remote-entry/MFA gate). *Built 2026-11-08: [ADR 0042](../architecture/decisions/0042-two-factor-sign-in.md).* Deployment steps: [VPS dashboard runbook](../operations/vps-dashboard.md).
 - Migrate the prototype's real records (the two registered servers) or start fresh; generated prototype passwords are not reused.
 - Separate database volume, own backup of the CraftLayer database (pg_dump nightly, retained), resource limits so it cannot starve the game.
 - **Done when:** the owner signs in from a phone off the home network with two-factor; the stack survives a reboot; no new public port is open (checked from outside).

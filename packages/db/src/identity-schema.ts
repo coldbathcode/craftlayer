@@ -49,6 +49,26 @@ export const sessions = pgTable("sessions", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  mfaPending: boolean("mfa_pending").notNull().default(false),
+});
+/** SQL 0032 is authoritative; secrets are sealed by the identity service. */
+export const userTotp = pgTable("user_totp", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id),
+  secretCiphertext: text("secret_ciphertext").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  lastStep: integer("last_step").notNull().default(0),
+});
+export const userTotpRecovery = pgTable("user_totp_recovery", {
+  id: uuid("id").primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id),
+  codeHash: char("code_hash", { length: 64 }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
 });
 export const memberships = pgTable(
   "memberships",

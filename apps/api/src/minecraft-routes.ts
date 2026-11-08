@@ -36,11 +36,14 @@ export async function registerMinecraft(
   publicUrl: string,
   nodes?: NodeApi,
   deployments?: DeploymentApi,
+  remoteQualified = false,
 ) {
   const api = app.withTypeProvider<ZodTypeProvider>();
-  const enabled = ["localhost", "127.0.0.1", "[::1]"].includes(
-    new URL(publicUrl).hostname,
-  );
+  // Server management is local-only unless the deployment is private HTTPS with
+  // required two-factor sign-in (ADR 0042), which the entry point attests.
+  const enabled =
+    remoteQualified ||
+    ["localhost", "127.0.0.1", "[::1]"].includes(new URL(publicUrl).hostname);
   app.addHook("onRequest", async (r, reply) => {
     reply.header("X-Request-Id", r.id);
     const path = r.routeOptions.url ?? r.url.split("?")[0] ?? "";

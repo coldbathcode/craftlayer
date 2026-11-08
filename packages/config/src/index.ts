@@ -79,6 +79,8 @@ const schema = z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
+    /** Adults must enrol and verify two-factor sign-in before anything else. Set true for any remotely reachable deployment. */
+    CRAFTLAYER_REQUIRE_MFA: z.enum(["true", "false"]).optional(),
     CRAFTLAYER_PUBLIC_URL: z
       .url()
       .refine((value) => {

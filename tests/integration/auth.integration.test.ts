@@ -13,6 +13,7 @@ import {
   AuthService,
   type ExecutionGrant,
 } from "../../packages/auth/src/index.js";
+import { base32Decode, totpAt } from "../../packages/auth/src/totp.js";
 import { createLogger } from "../../packages/config/src/index.js";
 import {
   defaultBudgetLimits,
@@ -1059,6 +1060,175 @@ describe("agent tokens (master plan C1)", () => {
       expect.arrayContaining(["agent_token.created", "agent_token.revoked"]),
     );
     expect(JSON.stringify(audit)).not.toContain(live.token.slice(4));
+  });
+});
+describe("two-factor sign-in", () => {
+  const code = (secret: string, at = now.getTime()) =>
+    totpAt(base32Decode(secret), at);
+  it("enrols with a confirmed code, then requires a code at sign-in and blocks a pending session", async () => {
+    const adult = await fixtureMember("org_admin");
+    const setup = await auth.totpSetup(adult.token);
+    expect(setup.secret).toMatch(/^[A-Z2-7]{32}$/);
+    expect(setup.otpauth_uri).toContain("issuer=CraftLayer");
+    await expect(
+      auth.totpConfirm(adult.token, "000000", "mfa-a"),
+    ).rejects.toMatchObject({ code: "MFA_CODE_INVALID" });
+    const confirmed = await auth.totpConfirm(
+      adult.token,
+      code(setup.secret),
+      "mfa-a",
+    );
+    expect(confirmed.recovery_codes).toHaveLength(8);
+    const stored = (
+      await pool.query(
+        "select secret_ciphertext from user_totp where user_id=$1",
+        [adult.userId],
+      )
+    ).rows[0];
+    expect(stored.secret_ciphertext).not.toContain(setup.secret);
+    const confirmCode = code(setup.secret);
+    // A fresh sign-in is now pending until a code is given. Move one step on so the
+    // confirmation code is still inside the drift window but already spent.
+    now = new Date(now.getTime() + 30000);
+    const login = await auth.login(
+      { login: adult.login, password },
+      "mfa-login",
+    );
+    expect(login.mfa).toBe("verify");
+    await expect(
+      auth.listProjects(login.cookieToken, orgId),
+    ).rejects.toMatchObject({ code: "MFA_REQUIRED" });
+    expect(
+      (
+        await app.inject({
+          url: "/api/v1/projects",
+          headers: {
+            cookie: `craftlayer_session=${login.cookieToken}`,
+            "x-craftlayer-organization": orgId,
+          },
+        })
+      ).json().error.code,
+    ).toBe("MFA_REQUIRED");
+    const me = await auth.me(login.cookieToken);
+    expect(me.mfa).toEqual({ enrolled: true, pending: true, required: false });
+    expect(me.organizations).toEqual([]);
+    // Wrong code, the already-spent confirmation code, then the current one; the
+    // current one cannot be used twice either.
+    await expect(
+      auth.mfaVerify(login.cookieToken, "123456", "mfa-b"),
+    ).rejects.toMatchObject({ code: "MFA_CODE_INVALID" });
+    await expect(
+      auth.mfaVerify(login.cookieToken, confirmCode, "mfa-b"),
+    ).rejects.toMatchObject({ code: "MFA_CODE_INVALID" });
+    const current = code(setup.secret);
+    const verified = await auth.mfaVerify(login.cookieToken, current, "mfa-b");
+    expect(verified.method).toBe("totp");
+    const replay = await auth.login(
+      { login: adult.login, password },
+      "mfa-replay",
+    );
+    await expect(
+      auth.mfaVerify(replay.cookieToken, current, "mfa-b"),
+    ).rejects.toMatchObject({ code: "MFA_CODE_INVALID" });
+    expect(
+      (await auth.listProjects(login.cookieToken, orgId)).length,
+    ).toBeGreaterThanOrEqual(0);
+    // A recovery code works once; the second use fails.
+    const again = await auth.login(
+      { login: adult.login, password },
+      "mfa-login-2",
+    );
+    const recovery = confirmed.recovery_codes[0] ?? "";
+    expect(
+      (await auth.mfaVerify(again.cookieToken, recovery.toUpperCase(), "mfa-c"))
+        .method,
+    ).toBe("recovery");
+    const third = await auth.login(
+      { login: adult.login, password },
+      "mfa-login-3",
+    );
+    await expect(
+      auth.mfaVerify(third.cookieToken, recovery, "mfa-c"),
+    ).rejects.toMatchObject({ code: "MFA_CODE_INVALID" });
+    // Disabling needs a full session and a current code; afterwards sign-in is plain again.
+    await expect(
+      auth.totpDisable(third.cookieToken, code(setup.secret), "mfa-d"),
+    ).rejects.toMatchObject({ code: "MFA_REQUIRED" });
+    now = new Date(now.getTime() + 30000);
+    await auth.totpDisable(again.cookieToken, code(setup.secret), "mfa-d");
+    expect(
+      (await auth.login({ login: adult.login, password }, "mfa-login-4")).mfa,
+    ).toBe("none");
+    const audit = await auth.listAudit(ownerToken, orgId).catch(() => []);
+    void audit;
+    const events = (
+      await pool.query(
+        "select action,outcome from instance_audit_events where actor_id=$1 order by id",
+        [adult.userId],
+      )
+    ).rows.map((r) => `${r.action}:${r.outcome}`);
+    expect(events).toEqual(
+      expect.arrayContaining([
+        "auth.mfa_setup_started:allowed",
+        "auth.mfa_confirm:denied",
+        "auth.mfa_enabled:allowed",
+        "auth.mfa_verify:denied",
+        "auth.mfa_verified:allowed",
+        "auth.mfa_recovery_used:allowed",
+        "auth.mfa_disabled:allowed",
+      ]),
+    );
+  });
+  it("forces enrolment when the instance requires two-factor, and leaves agents and children alone", async () => {
+    const strict = new AuthService({
+      databaseUrl,
+      bootstrapToken,
+      recoveryToken,
+      csrfSecret,
+      requireMfa: true,
+      clock: () => now,
+    });
+    await strict.initialize();
+    try {
+      const adult = await fixtureMember("viewer");
+      const login = await strict.login(
+        { login: adult.login, password },
+        "strict-a",
+      );
+      expect(login.mfa).toBe("enroll");
+      await expect(strict.me(login.cookieToken)).resolves.toMatchObject({
+        mfa: { enrolled: false, pending: true, required: true },
+      });
+      await expect(
+        strict.listProjects(login.cookieToken, orgId),
+      ).rejects.toMatchObject({ code: "MFA_REQUIRED" });
+      const setup = await strict.totpSetup(login.cookieToken);
+      await strict.totpConfirm(
+        login.cookieToken,
+        code(setup.secret),
+        "strict-b",
+      );
+      // Enrolment completes the pending sign-in.
+      await expect(
+        strict.listProjects(login.cookieToken, orgId),
+      ).resolves.toBeDefined();
+      const child = await fixtureMember("child", orgId, true);
+      expect(
+        (await strict.login({ login: child.login, password }, "strict-c")).mfa,
+      ).toBe("none");
+      const agent = await strict.createAgentToken(ownerToken, orgId, {
+        name: "strict agent",
+        permissions: ["organization:read"],
+        projectId: (
+          await strict.createProject(ownerToken, orgId, "MFA project")
+        ).id,
+      });
+      await expect(strict.me(agent.token)).resolves.toMatchObject({
+        mfa: { pending: false },
+      });
+    } finally {
+      await strict.close();
+    }
   });
 });
 describe("password recovery and child onboarding", () => {

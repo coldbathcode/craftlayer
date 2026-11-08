@@ -41,6 +41,8 @@ export async function buildApp(options: {
   nodes?: NodeApi;
   deployments?: DeploymentApi;
   publicUrl?: string;
+  /** True only when private HTTPS entry and required MFA are both configured. */
+  remoteManagement?: boolean;
 }) {
   const app = Fastify({
     bodyLimit: 16384,
@@ -199,6 +201,7 @@ export async function buildApp(options: {
       options.publicUrl ?? "http://127.0.0.1:3000",
       options.nodes,
       options.deployments,
+      options.remoteManagement ?? false,
     );
   await app.ready();
   return app;

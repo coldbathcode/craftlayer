@@ -10,9 +10,12 @@ export const publicUserSchema = z.strictObject({
   email: z.email().nullable(),
 });
 export const organizationSchema = z.strictObject({ id, name: z.string() });
+export const mfaStateSchema = z.enum(["none", "verify", "enroll"]);
 export const sessionSchema = z.strictObject({
   user: publicUserSchema,
   csrf_token: z.string().length(43),
+  /** `verify`: enter a code; `enroll`: set up two-factor first; `none`: signed in. */
+  mfa: mfaStateSchema,
 });
 export const meSchema = z.strictObject({
   user: publicUserSchema,
@@ -20,6 +23,11 @@ export const meSchema = z.strictObject({
   instance_owner: z.boolean(),
   current_session_id: id,
   csrf_token: z.string().length(43),
+  mfa: z.strictObject({
+    enrolled: z.boolean(),
+    pending: z.boolean(),
+    required: z.boolean(),
+  }),
 });
 export const authoritySchema = z.strictObject({
   account_type: z.enum(["adult", "child"]),
@@ -153,7 +161,26 @@ export const agentTokenCreatedSchema = z.strictObject({
   environment_id: id.nullable(),
   expires_at: date,
 });
+export const mfaCodeSchema = z.strictObject({
+  code: z.string().trim().min(6).max(32),
+});
+export const mfaSetupSchema = z.strictObject({
+  secret: z.string().regex(/^[A-Z2-7]{32}$/),
+  otpauth_uri: z.string().startsWith("otpauth://totp/"),
+});
+export const mfaConfirmedSchema = z.strictObject({
+  recovery_codes: z.array(z.string()).length(8),
+});
+export const mfaVerifiedSchema = z.strictObject({
+  ok: z.literal(true),
+  method: z.enum(["totp", "recovery"]),
+  recovery_codes_left: z.number().int().min(0),
+});
 export const identityResponseContracts = {
+  "POST /api/v1/auth/mfa/setup": mfaSetupSchema,
+  "POST /api/v1/auth/mfa/confirm": mfaConfirmedSchema,
+  "POST /api/v1/auth/mfa/verify": mfaVerifiedSchema,
+  "POST /api/v1/auth/mfa/disable": okSchema,
   "GET /api/v1/agent-tokens": itemsSchema(agentTokenSchema),
   "POST /api/v1/agent-tokens": agentTokenCreatedSchema,
   "DELETE /api/v1/agent-tokens/:id": okSchema,

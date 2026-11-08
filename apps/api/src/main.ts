@@ -42,6 +42,7 @@ try {
     bootstrapToken: config.CRAFTLAYER_BOOTSTRAP_TOKEN,
     recoveryToken: config.CRAFTLAYER_RECOVERY_TOKEN,
     csrfSecret: config.CRAFTLAYER_CSRF_SECRET,
+    requireMfa: config.CRAFTLAYER_REQUIRE_MFA === "true",
     ...(config.CRAFTLAYER_SMTP_URL && config.CRAFTLAYER_SMTP_FROM
       ? {
           deliverReset: createResetDelivery(
@@ -167,6 +168,9 @@ try {
     nodes,
     deployments,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
+    remoteManagement:
+      config.CRAFTLAYER_REQUIRE_MFA === "true" &&
+      config.CRAFTLAYER_PUBLIC_URL.startsWith("https://"),
     readiness: async () => {
       const [db, pong] = await within(
         Promise.all([

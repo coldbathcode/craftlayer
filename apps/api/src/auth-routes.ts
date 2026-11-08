@@ -3,6 +3,7 @@ import {
   agentTokenRequestSchema,
   errorSchema,
   identityResponseContracts,
+  mfaCodeSchema,
 } from "@craftlayer/contracts";
 import { organizationPermissions } from "@craftlayer/core";
 import cookie from "@fastify/cookie";
@@ -107,7 +108,11 @@ export async function registerAuth(
     result: Awaited<ReturnType<IdentityService["login"]>>,
   ) => {
     reply.setCookie(sessionCookie, result.cookieToken, cookieOptions);
-    return { user: result.user, csrf_token: result.csrf_token };
+    return {
+      user: result.user,
+      csrf_token: result.csrf_token,
+      mfa: result.mfa,
+    };
   };
   api.get("/api/v1/auth/setup", async () => auth.setupStatus());
   api.post(
@@ -135,6 +140,30 @@ export async function registerAuth(
       ),
   );
   api.get("/api/v1/auth/me", async (request) => auth.me(token(request)));
+  // Two-factor sign-in. Setup/confirm/verify work on a pending session; disable needs a full one.
+  api.post("/api/v1/auth/mfa/setup", async (request) =>
+    auth.totpSetup(token(request)),
+  );
+  api.post(
+    "/api/v1/auth/mfa/confirm",
+    { schema: { body: mfaCodeSchema } },
+    async (request) =>
+      auth.totpConfirm(token(request), request.body.code, request.ip),
+  );
+  api.post(
+    "/api/v1/auth/mfa/verify",
+    { schema: { body: mfaCodeSchema } },
+    async (request) =>
+      auth.mfaVerify(token(request), request.body.code, request.ip),
+  );
+  api.post(
+    "/api/v1/auth/mfa/disable",
+    { schema: { body: mfaCodeSchema } },
+    async (request) => {
+      await auth.totpDisable(token(request), request.body.code, request.ip);
+      return { ok: true };
+    },
+  );
   api.post("/api/v1/auth/logout", async (request, reply) => {
     await auth.logout(token(request));
     reply.clearCookie(sessionCookie, cookieOptions);

@@ -14,6 +14,9 @@ import {
   type Member,
   memberSchema,
   meSchema,
+  mfaConfirmedSchema,
+  mfaSetupSchema,
+  mfaVerifiedSchema,
   okSchema,
   type Project,
   projectSchema,
@@ -111,6 +114,83 @@ function ActionForm({
     </form>
   );
 }
+function MfaEnrol({
+  busy,
+  setup,
+  codes,
+  onStart,
+  onConfirm,
+  onDone,
+  required,
+}: {
+  busy: boolean;
+  setup: { secret: string; otpauth_uri: string } | null;
+  codes: string[];
+  onStart: () => Promise<boolean>;
+  onConfirm: (code: string) => Promise<boolean>;
+  onDone: () => void;
+  required?: boolean;
+}) {
+  if (codes.length)
+    return (
+      <div className="account-card">
+        <h2>Save your recovery codes</h2>
+        <p className="account-help">
+          Each code works once if you lose your authenticator. Store them
+          somewhere private; they will not be shown again.
+        </p>
+        <ul className="account-codes">
+          {codes.map((c) => (
+            <li key={c}>
+              <code>{c}</code>
+            </li>
+          ))}
+        </ul>
+        <button type="button" className="account-button" onClick={onDone}>
+          I have saved them
+        </button>
+      </div>
+    );
+  if (!setup)
+    return (
+      <div className="account-card">
+        <h2>{required ? "Set up two-factor sign-in" : "Two-factor sign-in"}</h2>
+        <p className="account-help">
+          {required
+            ? "This CraftLayer is reachable away from home, so every adult signs in with a password and a code from an authenticator app."
+            : "Add a code from an authenticator app to every sign-in."}
+        </p>
+        <button
+          type="button"
+          className="account-button"
+          disabled={busy}
+          onClick={() => void onStart()}
+        >
+          {busy ? "Working…" : "Start setup"}
+        </button>
+      </div>
+    );
+  return (
+    <ActionForm
+      title="Confirm your authenticator"
+      button="Turn on two-factor"
+      busy={busy}
+      onSubmit={(form) => onConfirm(value(form, "code"))}
+    >
+      <p className="account-help">
+        In your authenticator app, add an account by scanning the link below or
+        typing the secret, then enter the 6-digit code it shows.
+      </p>
+      <p>
+        <a href={setup.otpauth_uri}>Open in authenticator app</a>
+      </p>
+      <p>
+        Secret: <code>{setup.secret}</code>
+      </p>
+      <Field label="6-digit code" name="code" />
+    </ActionForm>
+  );
+}
 type Snapshot = {
   authority: AuthorityView | null;
   projects: Project[];
@@ -140,7 +220,12 @@ export function IdentityConsole() {
     [notice, setNotice] = useState(""),
     [inviteLink, setInviteLink] = useState(""),
     [sessions, setSessions] = useState<SessionItem[]>([]),
-    [fragment, setFragment] = useState({ invite: "", reset: "" });
+    [fragment, setFragment] = useState({ invite: "", reset: "" }),
+    [mfaSetup, setMfaSetup] = useState<{
+      secret: string;
+      otpauth_uri: string;
+    } | null>(null),
+    [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const clear = useCallback(() => {
     setMe(null);
     setOrg("");
@@ -157,7 +242,13 @@ export function IdentityConsole() {
           ? previous
           : (result.organizations[0]?.id ?? ""),
       );
-      setMode("account");
+      setMode(
+        result.mfa.pending
+          ? result.mfa.enrolled
+            ? "mfa-verify"
+            : "mfa-enroll"
+          : "account",
+      );
     } catch (e) {
       if (e instanceof ApiError && e.status === 401) {
         clear();
@@ -191,7 +282,14 @@ export function IdentityConsole() {
       }
       if (f.reset) setMode("reset");
       else if (f.invite) setMode("invite");
-      else if (current.status === "fulfilled") setMode("account");
+      else if (current.status === "fulfilled")
+        setMode(
+          current.value.mfa.pending
+            ? current.value.mfa.enrolled
+              ? "mfa-verify"
+              : "mfa-enroll"
+            : "account",
+        );
       else if (setup.status === "fulfilled")
         setMode(setup.value.required ? "setup" : "login");
       else {
@@ -477,6 +575,90 @@ export function IdentityConsole() {
               onClick={() => setMode("forgot")}
             >
               Forgot your password?
+            </button>
+          </div>
+        )}
+        {(mode === "mfa-verify" || mode === "mfa-enroll") && (
+          <div className="account-auth">
+            {mode === "mfa-verify" ? (
+              <ActionForm
+                title="Enter your two-factor code"
+                button="Continue"
+                busy={busy}
+                onSubmit={(form) =>
+                  mutate(
+                    () =>
+                      post("/api/v1/auth/mfa/verify", mfaVerifiedSchema, {
+                        code: value(form, "code"),
+                      }),
+                    "Signed in.",
+                  )
+                }
+              >
+                <p className="account-help">
+                  Open your authenticator app and type the 6-digit code, or use
+                  one of your recovery codes.
+                </p>
+                <Field label="Code" name="code" />
+              </ActionForm>
+            ) : (
+              <MfaEnrol
+                busy={busy}
+                setup={mfaSetup}
+                codes={recoveryCodes}
+                onStart={() =>
+                  mutate(
+                    async () =>
+                      setMfaSetup(
+                        await post(
+                          "/api/v1/auth/mfa/setup",
+                          mfaSetupSchema,
+                          {},
+                        ),
+                      ),
+                    "Scan or type the secret into your authenticator app, then enter a code.",
+                    false,
+                  )
+                }
+                onConfirm={(code: string) =>
+                  mutate(
+                    async () =>
+                      setRecoveryCodes(
+                        (
+                          await post(
+                            "/api/v1/auth/mfa/confirm",
+                            mfaConfirmedSchema,
+                            { code },
+                          )
+                        ).recovery_codes,
+                      ),
+                    "Two-factor sign-in is on. Save your recovery codes somewhere safe.",
+                    false,
+                  )
+                }
+                onDone={() => {
+                  setMfaSetup(null);
+                  setRecoveryCodes([]);
+                  void session();
+                }}
+                required
+              />
+            )}
+            <button
+              type="button"
+              className="text-button"
+              onClick={() =>
+                mutate(
+                  () =>
+                    identityRequest("/api/v1/auth/logout", okSchema, {
+                      method: "POST",
+                      csrf: me?.csrf_token ?? "",
+                    }),
+                  "Signed out.",
+                )
+              }
+            >
+              Sign out
             </button>
           </div>
         )}
