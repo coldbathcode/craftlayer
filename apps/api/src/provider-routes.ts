@@ -22,6 +22,7 @@ export async function registerProviders(
   providers: ConnectionApi,
 ) {
   const api = app.withTypeProvider<ZodTypeProvider>(),
+    // Provider credentials stay browser-session only; agent bearers are never read here.
     token = (r: FastifyRequest) => r.cookies.craftlayer_session ?? "";
   const org = (r: FastifyRequest) =>
     (() => {

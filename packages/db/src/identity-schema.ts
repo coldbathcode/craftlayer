@@ -123,3 +123,46 @@ export const environments = pgTable(
     }),
   ],
 );
+/** Master plan C1. CHECK/trigger/RLS rules live in migration 0028. */
+export const agentTokens = pgTable(
+  "agent_tokens",
+  {
+    id: uuid("id").primaryKey(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id),
+    membershipId: uuid("membership_id").notNull(),
+    createdBy: uuid("created_by")
+      .notNull()
+      .references(() => users.id),
+    name: varchar("name", { length: 60 }).notNull(),
+    tokenHash: char("token_hash", { length: 64 }).notNull().unique(),
+    permissions: text("permissions").array().notNull(),
+    projectId: uuid("project_id").notNull(),
+    environmentId: uuid("environment_id"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    revokedBy: uuid("revoked_by").references(() => users.id),
+  },
+  (t) => [
+    unique().on(t.organizationId, t.id),
+    foreignKey({
+      columns: [t.organizationId, t.membershipId],
+      foreignColumns: [memberships.organizationId, memberships.id],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.projectId],
+      foreignColumns: [projects.organizationId, projects.id],
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.projectId, t.environmentId],
+      foreignColumns: [
+        environments.organizationId,
+        environments.projectId,
+        environments.id,
+      ],
+    }),
+  ],
+);

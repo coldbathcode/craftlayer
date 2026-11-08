@@ -26,6 +26,7 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { requestToken } from "./auth-routes.js";
 import type { DeploymentApi } from "./deployment-routes.js";
 import type { NodeApi } from "./node-routes.js";
 export type MinecraftApi = Pick<MinecraftControl, keyof MinecraftControl>;
@@ -55,7 +56,7 @@ export async function registerMinecraft(
         "Remote management is unavailable until private entry and privileged MFA are qualified.",
       );
   });
-  const token = (r: FastifyRequest) => r.cookies.craftlayer_session ?? "";
+  const token = requestToken;
   const org = (r: FastifyRequest) => {
     const v = z.uuid().safeParse(r.headers["x-craftlayer-organization"]);
     if (!v.success)

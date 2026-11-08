@@ -27,7 +27,7 @@ An AI agent such as Claude can connect to CraftLayer, see the family servers, an
 
 ## Steps
 
-- **C1 — Agent tokens.** Machine principal type, hashed scoped tokens with expiry, create/list/revoke API and simple screen, audit actor `agent:<name>`. Database tests for scope, revocation and cross-tenant denial.
+- **C1 — Agent tokens.** *Built 2026-11-08.* Hashed scoped tokens with expiry, create/list/revoke API and SDK client, audit with `agent_id` details. The allowlist is enforced in code and by a SQL CHECK; a token only narrows its creating adult's current authority. Database tests cover scope, cross-tenant denial, expiry, revocation, creator demotion and direct-SQL tampering. The management screen is part of B3. See [ADR 0035](../architecture/decisions/0035-agent-token-authority.md) and the [runbook](../development/agent-access.md).
 - **C2 — MCP read tools.** `apps/mcp` with stdio transport and the read tools above. Works against the current registry immediately and against live data once [A2](A-live-connection.md) lands. Includes a how-to for connecting Claude Desktop and Claude Code.
 - **C3 — Approval-gated actions.** Agent request model, dashboard approval card, per-agent pre-allow for low-risk actions, MCP action tools. Needs [A3](A-live-connection.md) for real effects.
 - **C4 — Remote MCP.** Streamable HTTP endpoint on the VPS behind the private access layer, token validation, rate limits.

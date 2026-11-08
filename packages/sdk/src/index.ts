@@ -1,4 +1,11 @@
-import { errorSchema } from "@craftlayer/contracts";
+import {
+  type AgentTokenRequest,
+  agentTokenCreatedSchema,
+  agentTokenSchema,
+  errorSchema,
+  itemsSchema,
+  okSchema,
+} from "@craftlayer/contracts";
 import type { z } from "zod";
 export class ApiError extends Error {
   constructor(
@@ -73,6 +80,34 @@ export async function identityRequest<T extends z.ZodType>(
   return parsed.data;
 }
 
+/** Adult-only management of external AI agent access (master plan C1). */
+export function agentTokenClient(
+  organization: string,
+  csrf: string,
+  signal?: AbortSignal,
+) {
+  const context = { organization, csrf, ...(signal ? { signal } : {}) };
+  return {
+    list: () =>
+      identityRequest(
+        "/api/v1/agent-tokens",
+        itemsSchema(agentTokenSchema),
+        context,
+      ),
+    create: (input: AgentTokenRequest) =>
+      identityRequest("/api/v1/agent-tokens", agentTokenCreatedSchema, {
+        ...context,
+        method: "POST",
+        json: input,
+      }),
+    revoke: (id: string) =>
+      identityRequest(
+        `/api/v1/agent-tokens/${encodeURIComponent(id)}`,
+        okSchema,
+        { ...context, method: "DELETE" },
+      ),
+  };
+}
 export { deploymentClient } from "./deployments.js";
 export { minecraftClient } from "./minecraft.js";
 export { nodeClient } from "./nodes.js";

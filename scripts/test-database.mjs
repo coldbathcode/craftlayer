@@ -158,6 +158,7 @@ try {
   rmSync(join(previousManagement, "0025_enrollment_history_order.sql"));
   rmSync(join(previousManagement, "0026_deployment_approval_requests.sql"));
   rmSync(join(previousManagement, "0027_deployment_approval_decisions.sql"));
+  rmSync(join(previousManagement, "0028_agent_tokens.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),

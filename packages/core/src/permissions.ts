@@ -39,6 +39,7 @@ export const organizationPermissions = [
   "coding:execute",
   "research:execute",
   "audit:read",
+  "agent:connect",
 ] as const;
 export type OrganizationPermission = (typeof organizationPermissions)[number];
 export const instancePermissions = [
@@ -87,6 +88,7 @@ export const rolePermissions = {
     "coding:execute",
     "research:execute",
     "audit:read",
+    "agent:connect",
   ],
   operator: [
     "server:read",
@@ -153,3 +155,20 @@ export const builderDelegatedPermissions = [
   "preset:launch",
   "stop:request",
 ] as const satisfies readonly OrganizationPermission[];
+/** Everything an external AI agent token may carry. Read-only by design; the SQL
+ * CHECK on `agent_tokens.permissions` enforces the same list, so a code bug cannot
+ * widen it. Management, approval, credential, network and child permissions are
+ * never grantable to an agent. Keep in sync with `agentTokenPermissionSchema`. */
+export const agentTokenPermissions = [
+  "organization:read",
+  "project:read",
+  "environment:read",
+  "server:read",
+  "player:read",
+  "operation:read",
+  "node:read",
+  "event:read",
+  "mission:read",
+  "agent:read",
+] as const satisfies readonly OrganizationPermission[];
+export type AgentTokenPermission = (typeof agentTokenPermissions)[number];

@@ -1,4 +1,5 @@
 import {
+  agentTokenPermissions,
   builderDelegatedPermissions,
   childPermissions,
   organizationPermissions,
@@ -39,6 +40,7 @@ const orgActions = new Set([
   "budget:manage",
   "preset:approve",
   "audit:read",
+  "agent:connect",
 ]);
 /** Scope comes from canonical DB rows, never a caller-supplied owner/world claim. */
 export function canAccess(
@@ -82,4 +84,49 @@ export function canAccess(
     (base && (explicit || (reads.has(permission) && matching.length > 0))) ||
     (!child && delegated)
   );
+}
+export interface AgentTokenScope {
+  permissions: readonly string[];
+  projectId: string;
+  environmentId: string | null;
+}
+/** Authority an external AI agent token confers right now: the token's allowlisted
+ * permissions, intersected with what its creating adult can currently do in the
+ * token's scope. Agents are never administrators, never children and never hold
+ * roles, so every scoped decision must match an explicit synthesized grant. */
+export function narrowAgentAuthority(
+  creator: Authority,
+  token: AgentTokenScope,
+): Authority {
+  const none: Authority = {
+    accountType: "adult",
+    permissions: [],
+    roles: [],
+    orgAdmin: false,
+    grants: [],
+  };
+  if (creator.accountType !== "adult") return none;
+  const scope: AccessScope = token.environmentId
+    ? {
+        kind: "environment",
+        id: token.environmentId,
+        projectId: token.projectId,
+      }
+    : { kind: "project", id: token.projectId };
+  const permissions = [...new Set(token.permissions)].filter(
+    (p) =>
+      (agentTokenPermissions as readonly string[]).includes(p) &&
+      creator.permissions.includes(p),
+  );
+  return {
+    ...none,
+    permissions,
+    grants: permissions
+      .filter((permission) => canAccess(creator, permission, scope))
+      .map((permission) => ({
+        permission,
+        projectId: token.projectId,
+        environmentId: token.environmentId,
+      })),
+  };
 }

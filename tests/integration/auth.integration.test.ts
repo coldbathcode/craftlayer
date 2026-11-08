@@ -713,6 +713,354 @@ async function emailFixture() {
   );
   return { ...user, login, email };
 }
+describe("agent tokens (master plan C1)", () => {
+  const bearer = (token: string, org = orgId) => ({
+    authorization: `Bearer ${token}`,
+    "x-craftlayer-organization": org,
+  });
+  /** The identity role sees agent_tokens only inside an organization context. */
+  async function inOrg<T>(
+    operation: (client: pg.PoolClient) => Promise<T>,
+  ): Promise<T> {
+    const client = await pool.connect();
+    try {
+      await client.query("begin");
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        orgId,
+      ]);
+      const result = await operation(client);
+      await client.query("commit");
+      return result;
+    } catch (error) {
+      await client.query("rollback").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+  async function createToken(
+    creator: string,
+    input: Partial<Parameters<typeof auth.createAgentToken>[2]> & {
+      projectId: string;
+    },
+  ) {
+    return auth.createAgentToken(creator, orgId, {
+      name: `agent-${randomBytes(4).toString("hex")}`,
+      permissions: ["organization:read", "project:read", "environment:read"],
+      ...input,
+    });
+  }
+  it("issues a one-time secret, stores only its hash and reads within scope only", async () => {
+    const visible = await auth.createProject(
+        ownerToken,
+        orgId,
+        "Agent visible",
+      ),
+      hidden = await auth.createProject(ownerToken, orgId, "Agent hidden"),
+      world = await auth.createEnvironment(ownerToken, orgId, {
+        projectId: visible.id,
+        name: "Agent world",
+        type: "minecraft",
+      });
+    const created = await createToken(ownerToken, {
+      projectId: visible.id,
+      name: "Claude on the laptop",
+    });
+    expect(created.token).toMatch(/^cla_[A-Za-z0-9_-]{43}$/);
+    const stored = await inOrg(
+      async (client) =>
+        (
+          await client.query(
+            "select token_hash,permissions from agent_tokens where id=$1",
+            [created.id],
+          )
+        ).rows[0],
+    );
+    expect(stored.token_hash).not.toContain(created.token.slice(4));
+    expect(stored.token_hash).toBe(
+      createHash("sha256").update(created.token).digest("hex"),
+    );
+    expect(
+      (await pool.query("select count(*)::int as n from agent_tokens")).rows[0]
+        .n,
+    ).toBe(0);
+    const listed = await auth.listAgentTokens(ownerToken, orgId);
+    expect(JSON.stringify(listed)).not.toContain(created.token.slice(4));
+    expect(listed.find((t) => t.id === created.id)).toMatchObject({
+      name: "Claude on the laptop",
+      state: "active",
+      created_by: ownerId,
+    });
+    expect(
+      (
+        await app.inject({
+          url: `/api/v1/projects/${visible.id}`,
+          headers: bearer(created.token),
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: "/api/v1/projects",
+          headers: bearer(created.token),
+        })
+      ).json().items,
+    ).toEqual([{ id: visible.id, name: "Agent visible" }]);
+    expect(
+      (
+        await app.inject({
+          url: `/api/v1/environments/${world.id}`,
+          headers: bearer(created.token),
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: `/api/v1/projects/${hidden.id}`,
+          headers: bearer(created.token),
+        })
+      ).statusCode,
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          url: "/api/v1/projects",
+          headers: bearer(created.token, crypto.randomUUID()),
+        })
+      ).statusCode,
+    ).toBe(404);
+    const authority = (
+      await app.inject({
+        url: "/api/v1/auth/authority",
+        headers: bearer(created.token),
+      })
+    ).json();
+    expect(authority.roles).toEqual([]);
+    expect(authority.can_manage_members).toBe(false);
+    expect([...authority.permissions].sort()).toEqual([
+      "environment:read",
+      "organization:read",
+      "project:read",
+    ]);
+    // A bearer is explicit authority: no CSRF or Origin, but still no permission.
+    const write = await app.inject({
+      method: "POST",
+      url: "/api/v1/projects",
+      headers: bearer(created.token),
+      payload: { name: "agent project" },
+    });
+    expect(write.statusCode).toBe(403);
+    expect(write.json().error.code).toBe("PERMISSION_DENIED");
+    const me = await auth.me(created.token);
+    expect(me.instance_owner).toBe(false);
+    expect(me.organizations.map((o) => o.id)).toEqual([orgId]);
+    const used = await inOrg(
+      async (client) =>
+        (
+          await client.query(
+            "select last_used_at from agent_tokens where id=$1",
+            [created.id],
+          )
+        ).rows[0],
+    );
+    expect(used.last_used_at).not.toBeNull();
+    const denied = (
+      await pool.query(
+        "select details from instance_audit_events where action='access.denied' and details->>'agent_id'=$1",
+        [created.id],
+      )
+    ).rows;
+    expect(denied.length).toBeGreaterThan(0);
+  });
+  it("refuses anything an agent must never do", async () => {
+    const project = await auth.createProject(ownerToken, orgId, "Agent limits");
+    const created = await createToken(ownerToken, { projectId: project.id });
+    const attempts: Array<() => Promise<unknown>> = [
+      () =>
+        auth.createAgentToken(created.token, orgId, {
+          name: "nested",
+          permissions: ["project:read"],
+          projectId: project.id,
+        }),
+      () => auth.revokeAgentToken(created.token, orgId, created.id),
+      () => auth.logout(created.token),
+      () => auth.listSessions(created.token),
+      () => auth.createOrganization(created.token, "agent org"),
+      () => auth.guardInstance(created.token, async () => true),
+      () =>
+        auth.issueExecutionGrant(created.token, orgId, "project:read", {
+          kind: "project",
+          id: project.id,
+        }),
+    ];
+    for (const attempt of attempts)
+      await expect(attempt()).rejects.toMatchObject({ status: 403 });
+    await expect(
+      createToken(ownerToken, {
+        projectId: project.id,
+        permissions: ["membership:manage" as "project:read"],
+      }),
+    ).rejects.toThrow();
+    await expect(
+      inOrg((client) =>
+        client.query(
+          "insert into agent_tokens(id,organization_id,membership_id,created_by,name,token_hash,permissions,project_id,created_at,expires_at) select $1,organization_id,membership_id,created_by,'direct',repeat('a',64),array['membership:manage'],project_id,now(),now()+interval '1 day' from agent_tokens where id=$2",
+          [crypto.randomUUID(), created.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    // The identity role holds no DELETE privilege (42501); the trigger (23514) backs it up.
+    await expect(
+      inOrg((client) =>
+        client.query("delete from agent_tokens where id=$1", [created.id]),
+      ),
+    ).rejects.toSatisfy((error: unknown) =>
+      ["42501", "23514"].includes(String((error as { code?: string }).code)),
+    );
+    // Scope columns carry no UPDATE privilege for the identity role (42501); the trigger (23514) backs it up.
+    await expect(
+      inOrg((client) =>
+        client.query(
+          "update agent_tokens set permissions=array['server:read'] where id=$1",
+          [created.id],
+        ),
+      ),
+    ).rejects.toSatisfy((error: unknown) =>
+      ["42501", "23514"].includes(String((error as { code?: string }).code)),
+    );
+    const child = await fixtureMember("child", orgId, true);
+    await expect(
+      createToken(child.token, { projectId: project.id }),
+    ).rejects.toMatchObject({ status: 403 });
+    const viewer = await fixtureMember("viewer");
+    await expect(
+      createToken(viewer.token, { projectId: project.id }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(
+      (
+        await app.inject({
+          url: "/api/v1/projects",
+          headers: bearer("cla_not-a-real-token"),
+        })
+      ).statusCode,
+    ).toBe(401);
+  });
+  it("never exceeds its creator and follows the creator's current authority", async () => {
+    const project = await auth.createProject(ownerToken, orgId, "Agent follow");
+    const admin = await fixtureMember("org_admin");
+    const roles = await auth.listRoles(ownerToken, orgId);
+    const viewerRole = roles.find((r) => r.name === "viewer");
+    const created = await createToken(admin.token, {
+      projectId: project.id,
+      permissions: ["project:read", "server:read"],
+    });
+    const read = () =>
+      app.inject({
+        url: `/api/v1/projects/${project.id}`,
+        headers: bearer(created.token),
+      });
+    expect((await read()).statusCode).toBe(200);
+    // Demote the creator to viewer without a grant on this project: the agent loses access too.
+    await auth.setMemberRoles(ownerToken, orgId, admin.memberId, [
+      viewerRole?.id ?? "",
+    ]);
+    expect((await read()).statusCode).toBe(403);
+    await grantFixture(admin.memberId, "project:read", project.id);
+    expect((await read()).statusCode).toBe(200);
+    // A viewer with a grant may still only hand out what it holds.
+    await expect(
+      createToken(admin.token, {
+        projectId: project.id,
+        permissions: ["project:read", "server:read"],
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await auth.setMembershipDisabled(ownerToken, orgId, admin.memberId, true);
+    expect((await read()).statusCode).toBe(404);
+    await auth.setMembershipDisabled(ownerToken, orgId, admin.memberId, false);
+    await auth.setUserDisabled(ownerToken, admin.userId, true);
+    expect((await read()).statusCode).toBe(401);
+  });
+  it("expires, revokes once and keeps names unique among active tokens", async () => {
+    const project = await auth.createProject(ownerToken, orgId, "Agent life");
+    const short = await createToken(ownerToken, {
+      projectId: project.id,
+      name: "Short lived",
+      expiresInDays: 1,
+    });
+    await expect(
+      createToken(ownerToken, { projectId: project.id, name: "short LIVED" }),
+    ).rejects.toMatchObject({ status: 409 });
+    now = new Date(now.getTime() + 86400001);
+    // The browser session expired with the clock; the agent token did too.
+    ownerToken = (
+      await auth.login({ login: ownerLogin, password }, "agent-life")
+    ).cookieToken;
+    expect(
+      (
+        await app.inject({
+          url: `/api/v1/projects/${project.id}`,
+          headers: bearer(short.token),
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (await auth.listAgentTokens(ownerToken, orgId)).find(
+        (t) => t.id === short.id,
+      )?.state,
+    ).toBe("expired");
+    // A name stays taken until its token is revoked, even after expiry.
+    await expect(
+      createToken(ownerToken, { projectId: project.id, name: "Short lived" }),
+    ).rejects.toMatchObject({ status: 409 });
+    await auth.revokeAgentToken(ownerToken, orgId, short.id);
+    const other = await fixtureMember("org_admin");
+    const live = await createToken(ownerToken, {
+      projectId: project.id,
+      name: "Short lived",
+    });
+    const headers = {
+      cookie: `craftlayer_session=${other.token}`,
+      "x-craftlayer-organization": orgId,
+      origin: "http://127.0.0.1:3000",
+      "x-csrf-token": auth.csrfToken(other.token),
+    };
+    expect(
+      (
+        await app.inject({
+          method: "DELETE",
+          url: `/api/v1/agent-tokens/${live.id}`,
+          headers,
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          url: `/api/v1/projects/${project.id}`,
+          headers: bearer(live.token),
+        })
+      ).statusCode,
+    ).toBe(401);
+    await expect(
+      auth.revokeAgentToken(ownerToken, orgId, live.id),
+    ).rejects.toMatchObject({ status: 409 });
+    await expect(
+      inOrg((client) =>
+        client.query(
+          "update agent_tokens set revoked_at=null,revoked_by=null where id=$1",
+          [live.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const audit = await auth.listAudit(ownerToken, orgId);
+    expect(audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining(["agent_token.created", "agent_token.revoked"]),
+    );
+    expect(JSON.stringify(audit)).not.toContain(live.token.slice(4));
+  });
+});
 describe("password recovery and child onboarding", () => {
   it("returns generic reset responses, encrypts queued tokens and consumes once", async () => {
     const person = await emailFixture();

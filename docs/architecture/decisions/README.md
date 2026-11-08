@@ -63,3 +63,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 
 - [0033 — Backup schedule semantics](0033-backup-schedule-semantics.md).
 - [0034 — Master plan: usable first, agent access early](0034-master-plan-usable-first.md).
+- [0035 — Agent token authority](0035-agent-token-authority.md).

@@ -4,6 +4,10 @@ Last updated: 2026-11-08.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
 
+## Master plan C1 — agent tokens, 2026-11-08
+
+Added migration 0028, `agent:connect`, the `agentTokenPermissions` allowlist and `narrowAgentAuthority` in core, agent-token authentication and management in `AuthService`, contracts, SDK client, `/api/v1/agent-tokens` routes and bearer acceptance on identity, server, node and deployment routes. Agents read only; they never exceed their creating adult, cannot mint agents, manage sessions, create organizations, use owner operations or obtain execution grants. Provider routes ignore agent bearers. Checks and limits are in the [build log](build-log.md); state on the [status board](../plan/STATUS.md). No UI, MCP server or agent action exists yet.
+
 ## Current operator checkpoint — CL-F25-03/P5, 2026-11-08
 
 The owner supplied the players' Xbox gamertags and the iPad client version (26.60), and explicitly approved exposing only the Bedrock ports. The pinned Geyser build lists 26.60 among its supported Bedrock versions; that is a support claim, not proof of a join. Within this deployment only: backed up the edited files to a private timestamped directory on the host, gracefully stopped the instance (world saved, no OOM), bound only signaling TCP and game UDP 19133 to all IPv4 addresses, set `advertise-addresses` to the public address, wrote Floodgate-format allowlist entries, recorded the approval in the private operator record, and recreated only this container. Java stays on loopback. From outside: signaling TCP answers (HTTP 404, which is expected for a bare request), and Java 25585 and 25565 are closed. Allowlist enforcement, online authentication and resource limits are unchanged. The original `minecraft-java` container remains exited, and no other project's container was touched.

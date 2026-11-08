@@ -10,7 +10,7 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { registerAuth } from "./auth-routes.js";
+import { registerAuth, requestToken } from "./auth-routes.js";
 import {
   type DeploymentApi,
   registerDeployments,
@@ -91,7 +91,7 @@ export async function buildApp(options: {
     if (error instanceof AuthError) {
       if ([401, 403, 404].includes(error.status))
         await options.auth
-          ?.recordDenied(request.cookies?.craftlayer_session ?? "", request.ip)
+          ?.recordDenied(requestToken(request), request.ip)
           .catch(() => {});
       void reply.code(error.status).send({
         error: {

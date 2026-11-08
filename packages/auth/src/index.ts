@@ -11,8 +11,10 @@ import {
 import {
   type AccessScope,
   type Authority,
+  agentTokenPermissions,
   canAccess,
   childPermissions,
+  narrowAgentAuthority,
   organizationPermissions,
   type Permission,
 } from "@craftlayer/core";
@@ -55,10 +57,20 @@ export interface PublicUser {
 }
 export interface Principal {
   authorityExpiresAt?: number;
+  /** For an agent token this is the creating adult, on whose behalf the agent reads. */
   user: PublicUser;
   userVersion: number;
+  /** For an agent token this is the token ID; no browser session exists. */
   sessionId: string;
+  /** Present when the caller is an external AI agent using a scoped token. */
+  agent?: { id: string; name: string; organizationId: string };
 }
+const agentDenied = () =>
+  new AuthError(
+    403,
+    "AGENT_DENIED",
+    "Agent tokens cannot perform this action.",
+  );
 interface UserRow extends PublicUser {
   password_hash: string;
   auth_version: number;
@@ -166,6 +178,8 @@ export class AuthService {
             "project_id",
             "environment_id",
             "permission",
+            "permissions",
+            "agent_id",
           ].includes(key),
       ) ||
       JSON.stringify(details).length > 2048
@@ -451,6 +465,7 @@ export class AuthService {
     token: string,
   ): Promise<Principal> {
     this.ensureReady();
+    if (token.startsWith("cla_")) return this.agentIn(client, token);
     if (!/^[A-Za-z0-9_-]{43}$/.test(token))
       throw new AuthError(401, "UNAUTHENTICATED", "Sign in to continue.");
     const now = this.now();
@@ -471,6 +486,51 @@ export class AuthService {
       sessionId: row.session_id,
     };
   }
+  /** An agent token authenticates as its creating adult, narrowed later by `authority`.
+   * The row is found by hash before any organization context exists. */
+  private async agentIn(
+    client: pg.PoolClient,
+    token: string,
+  ): Promise<Principal> {
+    if (!/^cla_[A-Za-z0-9_-]{43}$/.test(token))
+      throw new AuthError(
+        401,
+        "UNAUTHENTICATED",
+        "Agent token is invalid, expired or revoked.",
+      );
+    await client.query("select set_config('app.agent_token_hash',$1,true)", [
+      digest(token),
+    ]);
+    const row = (
+      await client.query<
+        UserRow & {
+          token_id: string;
+          token_name: string;
+          organization_id: string;
+        }
+      >(
+        "select u.*,t.id as token_id,t.name as token_name,t.organization_id from agent_tokens t join users u on u.id=t.created_by where t.token_hash=$1 and t.revoked_at is null and t.expires_at>$2 and u.disabled_at is null and u.account_type='adult' for share of u",
+        [digest(token), this.now()],
+      )
+    ).rows[0];
+    await client.query("select set_config('app.agent_token_hash','',true)");
+    if (!row)
+      throw new AuthError(
+        401,
+        "UNAUTHENTICATED",
+        "Agent token is invalid, expired or revoked.",
+      );
+    return {
+      user: this.publicUser(row),
+      userVersion: row.auth_version,
+      sessionId: row.token_id,
+      agent: {
+        id: row.token_id,
+        name: row.token_name,
+        organizationId: row.organization_id,
+      },
+    };
+  }
   async authenticate(token: string) {
     this.ensureReady();
     return this.transaction((client) => this.sessionIn(client, token));
@@ -479,6 +539,7 @@ export class AuthService {
     this.ensureReady();
     return this.transaction(async (client) => {
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       await client.query("update sessions set revoked_at=$2 where id=$1", [
         p.sessionId,
         this.now(),
@@ -489,6 +550,7 @@ export class AuthService {
   async listSessions(token: string) {
     return this.transaction(async (client) => {
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       return (
         await client.query(
           "select id,created_at,expires_at from sessions where user_id=$1 and revoked_at is null and expires_at>$2 and idle_expires_at>$2 order by created_at desc limit 100",
@@ -500,6 +562,7 @@ export class AuthService {
   async revokeSession(token: string, id: string) {
     return this.transaction(async (client) => {
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       const r = await client.query(
         "update sessions set revoked_at=$3 where id=$1 and user_id=$2 and revoked_at is null",
         [id, p.user.id, this.now()],
@@ -516,8 +579,8 @@ export class AuthService {
         p.user.id,
       ]);
       const memberships = await client.query<{ organization_id: string }>(
-        "select organization_id from memberships where user_id=$1 and disabled_at is null limit 100",
-        [p.user.id],
+        "select organization_id from memberships where user_id=$1 and disabled_at is null and ($2::uuid is null or organization_id=$2::uuid) limit 100",
+        [p.user.id, p.agent?.organizationId ?? null],
       );
       const organizations = [];
       for (const m of memberships.rows) {
@@ -531,10 +594,11 @@ export class AuthService {
         ).rows[0];
         if (org) organizations.push(org);
       }
-      const owner = await client.query(
-        "select 1 from instance_owners where user_id=$1",
-        [p.user.id],
-      );
+      const owner = p.agent
+        ? { rowCount: 0 }
+        : await client.query("select 1 from instance_owners where user_id=$1", [
+            p.user.id,
+          ]);
       return {
         user: p.user,
         organizations,
@@ -548,6 +612,55 @@ export class AuthService {
     await client.query("select set_config('app.organization_id',$1,true)", [
       org,
     ]);
+    if (p.agent) {
+      // An agent exists in exactly one organization and cannot see any other.
+      if (p.agent.organizationId !== org)
+        throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+      const now = this.now();
+      const token = (
+        await client.query<{
+          membership_id: string;
+          permissions: string[];
+          project_id: string;
+          environment_id: string | null;
+          last_used_at: Date | null;
+        }>(
+          "select membership_id,permissions,project_id,environment_id,last_used_at from agent_tokens where organization_id=$1 and id=$2 and revoked_at is null and expires_at>$3",
+          [org, p.agent.id, now],
+        )
+      ).rows[0];
+      if (!token)
+        throw new AuthError(
+          401,
+          "UNAUTHENTICATED",
+          "Agent token is invalid, expired or revoked.",
+        );
+      const creator = (
+        await client.query<{ id: string; auth_version: number }>(
+          "select id,auth_version from memberships where organization_id=$1 and id=$2 and user_id=$3 and disabled_at is null for share",
+          [org, token.membership_id, p.user.id],
+        )
+      ).rows[0];
+      if (!creator)
+        throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+      const base = await this.memberAuthority(client, org, creator.id, p);
+      if (
+        !token.last_used_at ||
+        token.last_used_at.getTime() < now.getTime() - 60000
+      )
+        await client.query(
+          "update agent_tokens set last_used_at=$3 where organization_id=$1 and id=$2 and (last_used_at is null or last_used_at<$3)",
+          [org, p.agent.id, now],
+        );
+      return {
+        member: creator,
+        a: narrowAgentAuthority(base, {
+          permissions: token.permissions,
+          projectId: token.project_id,
+          environmentId: token.environment_id,
+        }),
+      };
+    }
     const member = (
       await client.query<{ id: string; auth_version: number }>(
         "select id,auth_version from memberships where organization_id=$1 and user_id=$2 and disabled_at is null for share",
@@ -556,6 +669,15 @@ export class AuthService {
     ).rows[0];
     if (!member)
       throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+    return { member, a: await this.memberAuthority(client, org, member.id, p) };
+  }
+  private async memberAuthority(
+    client: pg.PoolClient,
+    org: string,
+    memberId: string,
+    p: Principal,
+  ): Promise<Authority> {
+    const member = { id: memberId };
     const roles = await client.query<{ name: string; built_in: boolean }>(
       "select r.name,r.built_in from membership_roles mr join roles r on r.organization_id=mr.organization_id and r.id=mr.role_id where mr.organization_id=$1 and mr.membership_id=$2",
       [org, member.id],
@@ -583,7 +705,7 @@ export class AuthService {
         environmentId: x.environment_id,
       })),
     };
-    return { member, a };
+    return a;
   }
   private async canonicalScope(
     client: pg.PoolClient,
@@ -634,7 +756,8 @@ export class AuthService {
     this.ensureReady();
     if (!z.uuid().safeParse(org).success)
       throw new AuthError(404, "NOT_FOUND", "Organization not found.");
-    let actor: string | null = null;
+    let actor: string | null = null,
+      agent: string | null = null;
     try {
       return await this.transaction(async (client) => {
         if (write)
@@ -644,6 +767,7 @@ export class AuthService {
           );
         const p = await this.sessionIn(client, token);
         actor = p.user.id;
+        agent = p.agent?.id ?? null;
         const { member, a } = await this.authority(client, p, org);
         const canonical = await this.canonicalScope(client, org, scope);
         if (!canAccess(a, permission, canonical))
@@ -657,7 +781,15 @@ export class AuthService {
     } catch (error) {
       if (error instanceof AuthError && [403, 404].includes(error.status))
         await this.transaction((client) =>
-          this.audit(client, actor, "access.denied", null, false),
+          this.audit(
+            client,
+            actor,
+            "access.denied",
+            null,
+            false,
+            undefined,
+            agent ? { agent_id: agent } : {},
+          ),
         );
       throw error;
     }
@@ -720,6 +852,7 @@ export class AuthService {
     this.ensureReady();
     return this.transaction(async (client) => {
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       if (
         p.user.account_type !== "adult" ||
         !(
@@ -761,6 +894,7 @@ export class AuthService {
     name = z.string().trim().min(1).max(120).parse(name);
     return this.transaction(async (client) => {
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       if (
         p.user.account_type !== "adult" ||
         !(
@@ -975,6 +1109,7 @@ export class AuthService {
       permission,
       scope,
       async (client, p, _a, member) => {
+        if (p.agent) throw agentDenied();
         const issuedAt = this.now().getTime();
         const grant: ExecutionGrant = {
           version: 1,
@@ -1619,6 +1754,7 @@ export class AuthService {
         let user: UserRow;
         if (existingSession) {
           const p = await this.sessionIn(client, existingSession);
+          if (p.agent) throw agentDenied();
           if (p.user.account_type !== "adult")
             throw new AuthError(
               403,
@@ -1703,6 +1839,7 @@ export class AuthService {
     return this.transaction(async (client) => {
       await client.query("select pg_advisory_xact_lock(74618002)");
       const p = await this.sessionIn(client, token);
+      if (p.agent) throw agentDenied();
       if (
         p.user.account_type !== "adult" ||
         !(
@@ -2265,6 +2402,204 @@ export class AuthService {
         null,
         false,
       ),
+    );
+  }
+
+  /** Master plan C1. A token is shown once, stored hashed, and can only narrow the
+   * creating adult's current authority. Agents cannot mint agents. */
+  async createAgentToken(
+    token: string,
+    org: string,
+    input: {
+      name: string;
+      permissions: string[];
+      projectId: string;
+      environmentId?: string | undefined;
+      expiresInDays?: number | undefined;
+    },
+  ) {
+    const value = z
+      .strictObject({
+        name: z.string().trim().min(1).max(60),
+        permissions: z.array(z.enum(agentTokenPermissions)).min(1).max(16),
+        projectId: z.uuid(),
+        environmentId: z.uuid().optional(),
+        expiresInDays: z.number().int().min(1).max(90).default(30),
+      })
+      .parse(input);
+    const permissions = [...new Set(value.permissions)];
+    return this.orgAction(
+      token,
+      org,
+      "agent:connect",
+      { kind: "organization", id: org },
+      async (client, p, a, member) => {
+        if (p.agent) throw agentDenied();
+        if (p.user.account_type !== "adult")
+          throw new AuthError(
+            403,
+            "PERMISSION_DENIED",
+            "An adult account is required.",
+          );
+        const scope = await this.canonicalScope(
+          client,
+          org,
+          value.environmentId
+            ? { kind: "environment", id: value.environmentId }
+            : { kind: "project", id: value.projectId },
+        );
+        if (scope.kind === "environment" && scope.projectId !== value.projectId)
+          throw new AuthError(
+            400,
+            "SCOPE_MISMATCH",
+            "The environment does not belong to that project.",
+          );
+        // A token never exceeds its creator: every permission must be held now, in that scope.
+        for (const permission of permissions)
+          if (
+            !canAccess(a, permission, scope) &&
+            !(
+              permission === "organization:read" &&
+              canAccess(a, permission, { kind: "organization", id: org })
+            )
+          )
+            throw new AuthError(
+              403,
+              "PERMISSION_DENIED",
+              "You can only give an agent permissions you hold in that scope.",
+            );
+        const secret = `cla_${randomBytes(32).toString("base64url")}`,
+          id = randomUUID(),
+          now = this.now(),
+          expiresAt = new Date(now.getTime() + value.expiresInDays * 86400000);
+        try {
+          await client.query(
+            "insert into agent_tokens(id,organization_id,membership_id,created_by,name,token_hash,permissions,project_id,environment_id,created_at,expires_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+            [
+              id,
+              org,
+              member.id,
+              p.user.id,
+              value.name,
+              digest(secret),
+              permissions,
+              value.projectId,
+              value.environmentId ?? null,
+              now,
+              expiresAt,
+            ],
+          );
+        } catch (error) {
+          if ((error as { code?: string }).code === "23505")
+            throw new AuthError(
+              409,
+              "AGENT_NAME_TAKEN",
+              "An active agent already uses that name.",
+            );
+          throw error;
+        }
+        await this.audit(
+          client,
+          p.user.id,
+          "agent_token.created",
+          id,
+          true,
+          org,
+          {
+            permissions,
+            project_id: value.projectId,
+            ...(value.environmentId
+              ? { environment_id: value.environmentId }
+              : {}),
+          },
+        );
+        return {
+          id,
+          name: value.name,
+          token: secret,
+          permissions,
+          project_id: value.projectId,
+          environment_id: value.environmentId ?? null,
+          expires_at: expiresAt,
+        };
+      },
+      true,
+    );
+  }
+  async listAgentTokens(token: string, org: string) {
+    return this.orgAction(
+      token,
+      org,
+      "agent:connect",
+      { kind: "organization", id: org },
+      async (client) => {
+        const now = this.now();
+        return (
+          await client.query<{
+            id: string;
+            name: string;
+            permissions: string[];
+            project_id: string;
+            environment_id: string | null;
+            created_by: string;
+            created_at: Date;
+            expires_at: Date;
+            last_used_at: Date | null;
+            revoked_at: Date | null;
+          }>(
+            "select id,name,permissions,project_id,environment_id,created_by,created_at,expires_at,last_used_at,revoked_at from agent_tokens where organization_id=$1 order by created_at desc limit 100",
+            [org],
+          )
+        ).rows.map((row) => ({
+          ...row,
+          state: row.revoked_at
+            ? ("revoked" as const)
+            : row.expires_at <= now
+              ? ("expired" as const)
+              : ("active" as const),
+        }));
+      },
+    );
+  }
+  /** Revocation is immediate and final; the row is retained for audit. */
+  async revokeAgentToken(token: string, org: string, id: string) {
+    if (!z.uuid().safeParse(id).success)
+      throw new AuthError(404, "NOT_FOUND", "Agent token not found.");
+    return this.orgAction(
+      token,
+      org,
+      "agent:connect",
+      { kind: "organization", id: org },
+      async (client, p) => {
+        if (p.agent) throw agentDenied();
+        const r = await client.query(
+          "update agent_tokens set revoked_at=$3,revoked_by=$4 where organization_id=$1 and id=$2 and revoked_at is null",
+          [org, id, this.now(), p.user.id],
+        );
+        if (!r.rowCount) {
+          const exists = await client.query(
+            "select 1 from agent_tokens where organization_id=$1 and id=$2",
+            [org, id],
+          );
+          throw exists.rowCount
+            ? new AuthError(
+                409,
+                "AGENT_TOKEN_REVOKED",
+                "Agent token was already revoked.",
+              )
+            : new AuthError(404, "NOT_FOUND", "Agent token not found.");
+        }
+        await this.audit(
+          client,
+          p.user.id,
+          "agent_token.revoked",
+          id,
+          true,
+          org,
+          { agent_id: id },
+        );
+      },
+      true,
     );
   }
 

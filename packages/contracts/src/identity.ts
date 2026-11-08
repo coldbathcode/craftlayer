@@ -104,7 +104,53 @@ export const invitationItemSchema = z.strictObject({
   consumed_at: date.nullable(),
   revoked_at: date.nullable(),
 });
+/** Mirrors `agentTokenPermissions` in @craftlayer/core; a unit test keeps them equal. */
+export const agentTokenPermissionSchema = z.enum([
+  "organization:read",
+  "project:read",
+  "environment:read",
+  "server:read",
+  "player:read",
+  "operation:read",
+  "node:read",
+  "event:read",
+  "mission:read",
+  "agent:read",
+]);
+export const agentTokenRequestSchema = z.strictObject({
+  name: z.string().trim().min(1).max(60),
+  permissions: z.array(agentTokenPermissionSchema).min(1).max(16),
+  projectId: id,
+  environmentId: id.optional(),
+  expiresInDays: z.number().int().min(1).max(90).optional(),
+});
+export const agentTokenSchema = z.strictObject({
+  id,
+  name: z.string(),
+  permissions: z.array(agentTokenPermissionSchema),
+  project_id: id,
+  environment_id: id.nullable(),
+  created_by: id,
+  created_at: date,
+  expires_at: date,
+  last_used_at: date.nullable(),
+  revoked_at: date.nullable(),
+  state: z.enum(["active", "expired", "revoked"]),
+});
+/** The secret appears exactly once, in this response. */
+export const agentTokenCreatedSchema = z.strictObject({
+  id,
+  name: z.string(),
+  token: z.string().regex(/^cla_[A-Za-z0-9_-]{43}$/),
+  permissions: z.array(agentTokenPermissionSchema),
+  project_id: id,
+  environment_id: id.nullable(),
+  expires_at: date,
+});
 export const identityResponseContracts = {
+  "GET /api/v1/agent-tokens": itemsSchema(agentTokenSchema),
+  "POST /api/v1/agent-tokens": agentTokenCreatedSchema,
+  "DELETE /api/v1/agent-tokens/:id": okSchema,
   "POST /api/v1/auth/logout": okSchema,
   "DELETE /api/v1/auth/sessions/:id": okSchema,
   "POST /api/v1/organizations": organizationSchema,
@@ -150,3 +196,6 @@ export type Role = z.infer<typeof roleSchema>;
 export type Audit = z.infer<typeof auditSchema>;
 export type SessionItem = z.infer<typeof sessionItemSchema>;
 export type ResourceGrant = z.infer<typeof grantSchema>;
+export type AgentToken = z.infer<typeof agentTokenSchema>;
+export type AgentTokenCreated = z.infer<typeof agentTokenCreatedSchema>;
+export type AgentTokenRequest = z.infer<typeof agentTokenRequestSchema>;

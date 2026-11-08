@@ -1,5 +1,9 @@
 import { AuthError, type IdentityService, loginName } from "@craftlayer/auth";
-import { errorSchema, identityResponseContracts } from "@craftlayer/contracts";
+import {
+  agentTokenRequestSchema,
+  errorSchema,
+  identityResponseContracts,
+} from "@craftlayer/contracts";
 import { organizationPermissions } from "@craftlayer/core";
 import cookie from "@fastify/cookie";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -10,6 +14,18 @@ const password = z.string().min(1).max(128),
   login = loginName,
   id = z.uuid();
 export const sessionCookie = "craftlayer_session";
+/** Browser sessions arrive as a cookie. External AI agents present a scoped
+ * `cla_` token as a bearer header; it is explicit, so CSRF/Origin checks that
+ * protect ambient cookies do not apply to it. Any other bearer is ignored. */
+export const agentBearer = (request: FastifyRequest) => {
+  const header = request.headers.authorization;
+  return typeof header === "string" &&
+    /^Bearer cla_[A-Za-z0-9_-]{43}$/.test(header)
+    ? header.slice(7)
+    : "";
+};
+export const requestToken = (request: FastifyRequest) =>
+  agentBearer(request) || (request.cookies?.[sessionCookie] ?? "");
 export async function registerAuth(
   app: FastifyInstance,
   auth: IdentityService,
@@ -43,8 +59,7 @@ export async function registerAuth(
       };
   });
   const api = app.withTypeProvider<ZodTypeProvider>();
-  const token = (request: FastifyRequest) =>
-    request.cookies[sessionCookie] ?? "";
+  const token = requestToken;
   const cookieOptions = {
     path: "/",
     httpOnly: true,
@@ -58,6 +73,8 @@ export async function registerAuth(
     if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
     // Worker RPC accepts only registered bearer identity; cookie sessions never authorize it.
     if (request.routeOptions.url?.startsWith("/api/v1/worker/")) return;
+    // An explicit agent bearer is not ambient browser authority.
+    if (agentBearer(request)) return;
     if (request.headers.origin !== origin)
       throw new AuthError(
         403,
@@ -438,6 +455,31 @@ export async function registerAuth(
         request.params.id,
         request.body.password,
       ),
+  );
+  api.get("/api/v1/agent-tokens", async (request) => ({
+    items: await auth.listAgentTokens(token(request), organization(request)),
+  }));
+  api.post(
+    "/api/v1/agent-tokens",
+    { schema: { body: agentTokenRequestSchema } },
+    async (request) =>
+      auth.createAgentToken(
+        token(request),
+        organization(request),
+        request.body,
+      ),
+  );
+  api.delete(
+    "/api/v1/agent-tokens/:id",
+    { schema: { params: z.strictObject({ id }) } },
+    async (request) => {
+      await auth.revokeAgentToken(
+        token(request),
+        organization(request),
+        request.params.id,
+      );
+      return { ok: true };
+    },
   );
   api.get("/api/v1/auth/authority", async (request) =>
     auth.authorityView(token(request), organization(request)),

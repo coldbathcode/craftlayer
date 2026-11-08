@@ -9,6 +9,7 @@ import type { DeploymentAdmissions } from "@craftlayer/minecraft-control";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { requestToken } from "./auth-routes.js";
 export type DeploymentApi = Pick<
   DeploymentAdmissions,
   "admit" | "get" | "job" | "operation"
@@ -49,7 +50,7 @@ export async function registerDeployments(
         );
       return v.data;
     },
-    token = (r: FastifyRequest) => r.cookies.craftlayer_session ?? "",
+    token = requestToken,
     org = (r: FastifyRequest) => selector(r, "x-craftlayer-organization"),
     params = z.strictObject({ id: z.uuid() }),
     headers = z.object({ "x-craftlayer-organization": z.uuid() }),

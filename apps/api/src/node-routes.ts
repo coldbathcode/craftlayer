@@ -15,6 +15,7 @@ import type { NodeControl } from "@craftlayer/minecraft-control";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { requestToken } from "./auth-routes.js";
 export type NodeApi = Pick<
   NodeControl,
   | "enroll"
@@ -62,7 +63,7 @@ export async function registerNodes(
       );
     return value.data;
   }
-  const token = (r: FastifyRequest) => r.cookies.craftlayer_session ?? "",
+  const token = requestToken,
     org = (r: FastifyRequest) => selector(r, "x-craftlayer-organization"),
     key = (r: FastifyRequest) => z.uuid().parse(r.headers["idempotency-key"]),
     params = z.strictObject({ id: z.uuid() }),

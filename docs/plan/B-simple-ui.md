@@ -38,7 +38,7 @@ The current `/servers` and `/nodes` consoles (about 2,000 lines) were built to p
 
 ## Steps
 
-- **B1 — Design and copy.** Wireframes for the five screens, plain-language glossary, error messages. Review with the owner before building. No code.
+- **B1 — Design and copy.** *Drafted 2026-11-08:* [screens, words and error messages](design/family-ui.md). Review with the owner before building. No code.
 - **B2 — Build Home, Server and How to join** on the existing Next.js app and typed SDK, wired to Milestone A actions. Old consoles move to `/advanced`.
 - **B3 — Family and AI helpers screens.**
 - **B4 — Usability check.** The owner (and ideally a non-technical adult) does five tasks unaided: check who's on, let a new player in, turn the server off and on, back up now, find join instructions. Record time and confusion points; fix and repeat.
