@@ -30,7 +30,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm build
 RUN pnpm --filter @craftlayer/api deploy --prod /prod/api \
  && pnpm --filter @craftlayer/worker deploy --prod /prod/worker \
- && pnpm --filter @craftlayer/db deploy --prod /prod/db
+ && pnpm --filter @craftlayer/db deploy --prod /prod/db \
+ && pnpm --filter @craftlayer/minecraft-node deploy --prod /prod/node
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS api
 ENV NODE_ENV=production
@@ -45,6 +46,14 @@ WORKDIR /app
 COPY --from=build --chown=node:node /prod/worker .
 USER node
 CMD ["node", "dist/main.js"]
+
+# Node agent: the only privileged piece (Docker socket). Runs outbound-only against the gateway.
+FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS node
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build --chown=node:node /prod/node .
+USER node
+CMD ["node", "dist/main.js", "run", "/run/craftlayer-node/config.json"]
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS migrate
 ENV NODE_ENV=production

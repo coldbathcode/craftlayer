@@ -7,8 +7,20 @@ import {
   certificateHash,
   generateNodeKey,
 } from "../../packages/node-protocol/src/index.js";
-/** Local certificate fixture only. Never overwrites a directory or installs host trust. */
+/** Private CA and leaf certificates for one node transport. Never overwrites a directory or
+ * installs host trust. Defaults are a two-day local test fixture; an operator may set
+ * CRAFTLAYER_NODE_PKI_DAYS (max 400) and CRAFTLAYER_NODE_PKI_SERVER_SANS for a single-host
+ * private deployment, where the gateway and agent share the host (ADR 0043). */
 export async function createNodeFixture(directory: string) {
+  const days = String(
+    Math.min(
+      400,
+      Math.max(1, Number(process.env.CRAFTLAYER_NODE_PKI_DAYS ?? 2)),
+    ),
+  );
+  const serverSans = (
+    process.env.CRAFTLAYER_NODE_PKI_SERVER_SANS ?? "IP:127.0.0.1,DNS:localhost"
+  ).replace(/[^A-Za-z0-9:.,_-]/g, "");
   await mkdir(directory, { mode: 0o700 });
   const run = (args: string[]) =>
     execFileSync("openssl", args, {
@@ -29,7 +41,7 @@ export async function createNodeFixture(directory: string) {
     "-nodes",
     "-sha256",
     "-days",
-    "2",
+    days,
     "-subj",
     "/CN=CraftLayer local test CA",
     "-config",
@@ -62,7 +74,7 @@ export async function createNodeFixture(directory: string) {
     ]);
     await writeFile(
       join(directory, `${name}.ext`),
-      `basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=${name === "server" ? "serverAuth" : "clientAuth"}\n${name === "server" ? "subjectAltName=IP:127.0.0.1,DNS:localhost\n" : ""}`,
+      `basicConstraints=critical,CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\nextendedKeyUsage=${name === "server" ? "serverAuth" : "clientAuth"}\n${name === "server" ? `subjectAltName=${serverSans}\n` : ""}`,
       { mode: 0o600, flag: "wx" },
     );
     run([
@@ -77,7 +89,7 @@ export async function createNodeFixture(directory: string) {
       "-set_serial",
       `0x${randomBytes(16).toString("hex")}`,
       "-days",
-      "2",
+      days,
       "-sha256",
       "-extfile",
       `${name}.ext`,

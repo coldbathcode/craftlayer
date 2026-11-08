@@ -1,0 +1,30 @@
+# Optional node agent on the same host as the gateway (single-VPS family deployment).
+# It shares the gateway's network namespace, so it reaches the private mTLS listener on
+# 127.0.0.1:9443 with no interface of its own. The Docker socket makes this the one
+# privileged container (ADR 0016); nothing else mounts it. Outbound only; no published ports.
+services:
+  node-agent:
+    build: { context: ., dockerfile: infra/images/Dockerfile, target: node }
+    network_mode: "service:node-control"
+    user: "${CRAFTLAYER_HOST_UID:?Set agent owner UID}:${CRAFTLAYER_HOST_GID:?Set agent owner GID}"
+    group_add: ["${CRAFTLAYER_DOCKER_GID:?Set the docker group id}"]
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 128
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 256m
+    restart: unless-stopped
+    depends_on: { node-control: { condition: service_healthy } }
+    volumes:
+      - type: bind
+        source: ${CRAFTLAYER_NODE_AGENT_DIR:?Choose the protected agent config directory}
+        target: /run/craftlayer-node
+        read_only: true
+      - type: bind
+        source: ${CRAFTLAYER_NODE_JOURNAL_DIR:?Choose the agent journal directory}
+        target: /var/lib/craftlayer-node
+      - type: bind
+        source: /var/run/docker.sock
+        target: /var/run/docker.sock

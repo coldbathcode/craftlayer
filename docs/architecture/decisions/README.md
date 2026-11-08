@@ -71,3 +71,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0040 — Typed server actions as durable requests](0040-server-action-intake.md).
 - [0041 — Agents ask, adults approve](0041-agent-requests.md).
 - [0042 — Two-factor sign-in for adults](0042-two-factor-sign-in.md).
+- [0043 — Single-host node transport for the family VPS](0043-single-host-node-transport.md).
