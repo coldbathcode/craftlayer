@@ -48,7 +48,7 @@ Archives are not encrypted yet and stay on the VPS until D2; free space is check
 
 ## Remote MCP (master plan C4)
 
-Status 2026-11-12: built and verified locally ([ADR 0048](../architecture/decisions/0048-remote-mcp.md)). **Nothing below has been done on the VPS.** These are the steps for later; each VPS write needs the owner's approval first. Configuration reference: [agent access](../development/agent-access.md#remote-mcp-c4).
+Status 2026-11-12: built and verified locally ([ADR 0048](../architecture/decisions/0048-remote-mcp.md)). Steps 1 and 2 were done on 2026-11-12 with the owner's approval; step 3 onwards waits for the owner. Configuration reference: [agent access](../development/agent-access.md#remote-mcp-c4).
 
 1. **Owner approval, then operator:** update the checkout. Add to `.env`: `CRAFTLAYER_MCP_ORGANIZATION` (the family organization ID) and `CRAFTLAYER_MCP_ALLOWED_HOSTS=vmi2954874.taile167a3.ts.net`. Add `infra/compose/mcp.yml` to the Compose files in use, then build and start only the new service (`docker compose … up -d --build --wait mcp`). No migration, no change to the other services, and the game server is not touched. The container holds no token, database password or key.
 2. **Operator:** confirm the service is healthy and listening on `127.0.0.1:3900` only, and that the public interface shows no new port (check from outside, as for the dashboard).
