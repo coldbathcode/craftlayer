@@ -83,6 +83,8 @@ export const minecraftBackupOccurrences = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
+    // SQL 0034: the node the occurrence was handed to, set once when it starts.
+    nodeId: uuid("node_id"),
   },
   (t) => [
     unique().on(t.organizationId, t.id),

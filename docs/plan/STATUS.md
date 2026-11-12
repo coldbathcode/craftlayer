@@ -7,7 +7,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-12. Stat
 - **Family server:** running on the VPS (Paper 26.3 with Geyser/Floodgate). iPads join on port 19133; Java ports stay private. Allowlist enforced.
 - **Players:** Alex and Charlie joined from iPads on 2026-11-08. George's account could not be looked up publicly; a temporary server plugin is waiting to record his account on his next attempt so he can be added.
 - **Original world:** the old `minecraft-java` server is stopped and untouched, with one encrypted archive on the owner's Mac.
-- **Backups:** the new family world has **no backup yet**. The record layer and the archive library (pause saving → flush → archive → re-hash → resume; verify; restore) are built; the archive was proven on a disposable local Paper server including a boot from the restored files. The nightly loop that runs it on the VPS is next (D1).
+- **Backups:** the new family world has **no backup yet**. Everything needed to take one is now built and tested locally (2026-11-12): the server helper takes the nightly backup and "Back up now", checks the archive and reports it. It starts on the VPS once the helper is live (A2) and a backup folder is approved.
 - **Dashboard:** runs only on the owner's Mac; read-only snapshot of the real server; no controls (Milestone A).
 - **AI agents:** read-only access works end to end (C1, C2), and agents can now *ask* for typed actions that an adult approves or declines (C3, built 2026-11-08); an approved request becomes a pending server action that waits for the node (A2). Only from the owner's machine until A1.
 - **Server helper (node agent):** the dashboard on the VPS can now hand approved actions to a helper next to the game (built 2026-11-12). The helper is installed but not running: it starts when the owner approves the host, and it can reach the game only after a short approved restart turns on the private control channel.
@@ -19,7 +19,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-12. Stat
 | [A — Live connection](A-live-connection.md) | In progress | Tailscale on the VPS, two-factor built; deploy the stack next (A1), then A2–A4 go live |
 | [B — Simple family UI](B-simple-ui.md) | In progress | Owner reviews the B1 draft; then B2 |
 | [C — AI agent access](C-ai-agent-access.md) | In progress | C1–C3 built; owner connects Claude Desktop (decision 6); C4 needs A1 |
-| [D — Backups](D-backups.md) | In progress | D1: scheduler loop on the node (needs A2 on the VPS) |
+| [D — Backups](D-backups.md) | In progress | D1: switch the nightly loop on for the VPS (needs A2 live and a backup folder), then D2 |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F1 after C3 and B2; F2 needs Chapter 04 authorization |
 
@@ -39,7 +39,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-12. Stat
 | C2 | MCP server with read tools (stdio) | C1 | Built | 2026-11-08: `apps/mcp`, SDK 1.32.2, ten read tools; in-memory tests plus a real stdio run against the prototype reading the VPS playtest server, with environment scope and revocation proven; [how to connect](../development/agent-access.md#connect-claude-mcp-read-only). Not yet connected from Claude Desktop itself |
 | C3 | Approval-gated agent actions | C2, A3 | Built | 2026-11-08: tokens carry requestable kinds; agents create requests via MCP; adults approve/decline; approval creates the A3 action as the adult; 230/230 database cases ([ADR 0041](../architecture/decisions/0041-agent-requests.md), [runbook](../development/agent-access.md)). Dashboard card is B3; effect waits for node dispatch |
 | C4 | Remote MCP on the VPS | C3, A1 | Not started | — |
-| D1 | Nightly consistent backup and Back up now | A2 | In progress | 2026-11-08: rules (ADR 0033) and durable records, permissions, routes and MCP `list_backups` built and verified ([ADR 0038](../architecture/decisions/0038-backup-records.md), [runbook](../development/backups.md)); the archive/verify/restore library is proven on a real local server ([ADR 0039](../architecture/decisions/0039-backup-archive-consistency.md)); the scheduler loop on the node remains |
+| D1 | Nightly consistent backup and Back up now | A2 | In progress | 2026-11-08: rules (ADR 0033) and durable records, permissions, routes and MCP `list_backups` built and verified ([ADR 0038](../architecture/decisions/0038-backup-records.md), [runbook](../development/backups.md)); the archive/verify/restore library is proven on a real local server ([ADR 0039](../architecture/decisions/0039-backup-archive-consistency.md)). 2026-11-12: nightly loop built and verified locally over real mTLS with real archives (243/243 database cases; [ADR 0045](../architecture/decisions/0045-node-backups.md)): the bound helper takes the due backup or "Back up now", verifies it and reports the hashes; never twice, nothing under an emergency stop. Not on the VPS yet: needs A2 live, an approved backup folder and a policy. Remaining after that: deleting expired archives; the button is B2 |
 | D2 | Encrypted off-server copy | D1, Decision 4 | Needs decision | — |
 | D3 | Weekly automatic isolated restore test | D1 | Not started | One manual isolated restore of the old world passed (P3) |
 | D4 | Adult-approved real restore | D3 | Not started | — |
@@ -81,4 +81,5 @@ Decided on 2026-11-08 unless noted.
 - 2026-11-08 — Dashboard stack deployed on the VPS behind loopback with MFA required; awaiting the owner's Tailscale HTTPS step and first-run.
 - 2026-11-08 — Owner signed in over Tailscale with two-factor; QR setup shipped; family server adopted in the VPS instance (A1 essentially complete). A2 transport prepared.
 - 2026-11-12 — VPS stack updated to the A2 build; helper staged and waiting for the owner's host approval; private RCON change staged, not run.
+- 2026-11-12 — D1 nightly loop built: the helper takes the due backup or "Back up now", reads the archive back and reports its hashes; a cut-short backup turns saving back on and is recorded as interrupted. Not switched on for the VPS yet.
 - 2026-11-12 — A2 dispatch built: server-to-host binding, signed action polling and results over the private link, a node journal that prevents repeats, operator-set credential lifetime. Two deployment defects found and fixed before the host was ever approved.

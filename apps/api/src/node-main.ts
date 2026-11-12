@@ -4,6 +4,8 @@ import { connect, createServer } from "node:net";
 import { networkInterfaces } from "node:os";
 import {
   ActionDispatch,
+  BackupDispatch,
+  BackupRecords,
   NodeControl,
   ServerActions,
 } from "@craftlayer/minecraft-control";
@@ -34,10 +36,16 @@ try {
   // Server-action dispatch is off unless the operator turns it on for this gateway.
   const dispatching = process.env.CRAFTLAYER_NODE_ACTIONS === "enabled";
   const actions = dispatching ? new ServerActions({ databaseUrl: url }) : null;
+  // Backups by a bound node are a separate switch: they read the whole world.
+  const backingUp = process.env.CRAFTLAYER_NODE_BACKUPS === "enabled";
+  const backups = backingUp ? new BackupRecords({ databaseUrl: url }) : null;
   const app = await buildNodeAgentApp({
     control,
     ...(actions
       ? { actions: new ActionDispatch({ nodes: control, actions }) }
+      : {}),
+    ...(backups
+      ? { backups: new BackupDispatch({ nodes: control, backups }) }
       : {}),
     key,
     cert,
@@ -46,6 +54,7 @@ try {
   close = async () => {
     await app.close();
     await actions?.close();
+    await backups?.close();
     await control.close();
   };
   let host = process.env.CRAFTLAYER_NODE_BIND_HOST ?? "127.0.0.1";
@@ -98,9 +107,7 @@ try {
     };
   }
   console.log(
-    dispatching
-      ? "NODE_CONTROL_READY: private mTLS inventory transport with typed server actions"
-      : "NODE_CONTROL_READY: private mTLS inventory transport",
+    `NODE_CONTROL_READY: private mTLS inventory transport${dispatching ? " with typed server actions" : ""}${backingUp ? " and node backups" : ""}`,
   );
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {

@@ -1,5 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
@@ -12,12 +12,17 @@ import {
   runServerAction,
 } from "../../apps/minecraft-node/src/action-runner.js";
 import { ActionWorker } from "../../apps/minecraft-node/src/action-worker.js";
+import { BackupJournal } from "../../apps/minecraft-node/src/backup-journal.js";
+import { runBackup } from "../../apps/minecraft-node/src/backup-runner.js";
+import { BackupWorker } from "../../apps/minecraft-node/src/backup-worker.js";
 import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
 import { MemoryWhitelistStore } from "../../apps/minecraft-node/src/game-control/index.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import type { NodeActionOffer } from "../../packages/contracts/src/index.js";
 import {
   ActionDispatch,
+  BackupDispatch,
+  BackupRecords,
   MinecraftControl,
   NodeControl,
   ServerActions,
@@ -514,6 +519,21 @@ describe("node dispatch of server actions", () => {
   let pki: Awaited<ReturnType<typeof createNodeFixture>>;
   let nodes: NodeControl;
   let gatewayActions: ServerActions;
+  // Backups keep their own clock: the schedule is tested at a fixed local time while
+  // the transport proofs around it use the real one.
+  let backupNow = Date.parse("2026-11-12T04:30:00Z");
+  const backups = new BackupRecords({
+    databaseUrl: runtimeUrl,
+    auth,
+    clock: () => backupNow,
+  });
+  const gatewayBackups = new BackupRecords({
+    databaseUrl: runtimeUrl,
+    clock: () => backupNow,
+  });
+  let backupJournal: BackupJournal;
+  let backupWorker: BackupWorker;
+  let backupRuns: string[] = [];
   let gateway: Awaited<ReturnType<typeof buildNodeAgentApp>>;
   let transport: NodeTransport;
   let journal: ActionJournal;
@@ -561,6 +581,34 @@ describe("node dispatch of server actions", () => {
   const ask = async (input: unknown) =>
     (await actions.request(adult, org, dispatchServer, input, randomUUID()))
       .action_id;
+  const backupPoll = (server_ids: string[]) =>
+    transport.backupPoll({
+      ...base(),
+      purpose: "node.backups.poll.v1",
+      sequence: ++sequence,
+      server_ids,
+    });
+  const occurrences = async () =>
+    (
+      await tx(runtime, (c) =>
+        c.query<{
+          id: string;
+          kind: string;
+          state: string;
+          failure_code: string;
+          node_id: string | null;
+        }>(
+          "select id,kind,state,failure_code,node_id from minecraft_backup_occurrences where organization_id=$1 and server_id=$2 order by created_at,id",
+          [org, dispatchServer],
+        ),
+      )
+    ).rows;
+  /** One full backup through the worker: accept, archive in the background, deliver. */
+  const backUp = async () => {
+    await backupWorker.tick();
+    await backupWorker.settle();
+    await backupWorker.tick();
+  };
   beforeAll(async () => {
     // The transport proofs use the real clock, so the action clock joins it here.
     now = Date.now();
@@ -581,6 +629,7 @@ describe("node dispatch of server actions", () => {
     gateway = await buildNodeAgentApp({
       control: nodes,
       actions: new ActionDispatch({ nodes, actions: gatewayActions }),
+      backups: new BackupDispatch({ nodes, backups: gatewayBackups }),
       key: await file("server.key"),
       cert: await file("server.crt"),
       ca: await file("ca.crt"),
@@ -639,10 +688,43 @@ describe("node dispatch of server actions", () => {
         return runServerAction(offer, channel);
       },
     });
+    await mkdir(join(root, "data/world"), { recursive: true });
+    await mkdir(join(root, "data/logs"), { recursive: true });
+    await writeFile(join(root, "data/world/level.dat"), "level");
+    await writeFile(join(root, "data/whitelist.json"), "[]");
+    await writeFile(join(root, "data/logs/latest.log"), "noise");
+    backupJournal = new BackupJournal(join(root, "pki"), nodeId);
+    backupWorker = new BackupWorker({
+      serverIds: [dispatchServer],
+      journal: backupJournal,
+      poll: backupPoll,
+      report: (result) =>
+        transport.backupResult({
+          ...base(),
+          purpose: "node.backups.result.v1",
+          sequence: ++sequence,
+          ...result,
+        }),
+      run: (offer) => {
+        backupRuns.push(offer.occurrence_id);
+        return runBackup(
+          offer,
+          {
+            channel,
+            dataDirectory: join(root, "data"),
+            backupDirectory: join(root, "archives"),
+          },
+          { now: () => backupNow },
+        );
+      },
+      resume: async () => true,
+    });
   }, 30000);
   afterAll(async () => {
     await gateway?.close();
     await gatewayActions?.close();
+    await gatewayBackups.close();
+    await backups.close();
     await nodes?.close();
     if (root) await rm(root, { recursive: true, force: true });
   });
@@ -875,6 +957,225 @@ describe("node dispatch of server actions", () => {
       state: "cancelled",
       failure_code: "cancelled",
     });
+  });
+  it("takes the nightly backup on the bound node when it is due and records it verified", async () => {
+    // No policy yet: the node asks and nothing is scheduled.
+    expect(await backupPoll([dispatchServer])).toBeNull();
+    expect(await occurrences()).toEqual([]);
+    await backups.setPolicy(
+      adult,
+      org,
+      dispatchServer,
+      {
+        timezone: "Europe/London",
+        local_time: "04:00",
+        retention_days: 30,
+        offhost_weekday: 0,
+      },
+      randomUUID(),
+    );
+    // A server this node is not bound to is never scheduled by its question.
+    expect(await backupPoll([server])).toBeNull();
+    await backUp();
+    const [night] = await occurrences();
+    expect(night).toMatchObject({
+      kind: "scheduled",
+      state: "complete",
+      failure_code: "none",
+      node_id: nodeId,
+    });
+    expect(backupRuns).toEqual([night?.id]);
+    expect(sent.slice(-3)).toEqual(["save-off", "save-all flush", "save-on"]);
+    const archive = await readFile(
+      join(root, "archives", dispatchServer, `${night?.id}.tar.gz`),
+    );
+    const list = await backups.list(adult, org, dispatchServer);
+    expect(list.items).toHaveLength(1);
+    expect(list.items[0]).toMatchObject({
+      state: "complete",
+      archive_sha256: createHash("sha256").update(archive).digest("hex"),
+      size_bytes: archive.length,
+      occurrence: { id: night?.id, kind: "scheduled", state: "complete" },
+    });
+    expect(list.items[0]?.verified_at).toBeTruthy();
+    const status = await backups.status(adult, org, dispatchServer);
+    expect(status.open_occurrence).toBeNull();
+    expect(status.policy).toMatchObject({
+      schedule: { status: "current" },
+      health: { local: "healthy", offhost: "none", restore: "none" },
+    });
+    // The same night is never backed up twice.
+    await backUp();
+    expect(await occurrences()).toHaveLength(1);
+    const audit = await tx(runtime, (c) =>
+      c.query<{ action: string; details: { service_actor: string } }>(
+        "select action,details from audit_events where organization_id=$1 and target_id=$2 and action like 'server.backup\\_%' and actor_id is null order by action",
+        [org, dispatchServer],
+      ),
+    );
+    expect(audit.rows.map((a) => a.action)).toEqual([
+      "server.backup_finished",
+      "server.backup_started",
+    ]);
+    expect(audit.rows[0]?.details.service_actor).toBe(nodeId);
+    await expect(
+      tx(runtime, (c) =>
+        c.query(
+          "update minecraft_backup_occurrences set node_id=null where organization_id=$1 and id=$2",
+          [org, night?.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+  });
+  it("carries out Back up now, offers a lost backup again and lets only its node answer", async () => {
+    backupRuns = [];
+    const asked = await backups.requestBackup(
+      adult,
+      org,
+      dispatchServer,
+      randomUUID(),
+    );
+    // The offer is claimed but its reply is "lost": the node never saw it.
+    const lost = await backupPoll([dispatchServer]);
+    expect(lost).toMatchObject({
+      occurrence_id: asked.occurrence_id,
+      kind: "manual",
+    });
+    expect(
+      (await backups.status(adult, org, dispatchServer)).open_occurrence,
+    ).toBe(asked.occurrence_id);
+    await backUp();
+    expect(backupRuns).toEqual([asked.occurrence_id]);
+    expect(
+      (await occurrences()).find((o) => o.id === asked.occurrence_id),
+    ).toMatchObject({
+      id: asked.occurrence_id,
+      kind: "manual",
+      state: "complete",
+    });
+    expect((await backups.list(adult, org, dispatchServer)).items).toHaveLength(
+      2,
+    );
+    const answer = {
+      occurrence_id: asked.occurrence_id,
+      server_id: dispatchServer,
+      outcome: { ok: false, failure: "archive_failed" },
+    };
+    await expect(
+      gatewayBackups.recordNodeResult(org, randomUUID(), answer),
+    ).rejects.toMatchObject({ code: "BACKUP_RESULT_DENIED" });
+    await expect(
+      gatewayBackups.recordNodeResult(org, nodeId, {
+        ...answer,
+        server_id: server,
+      }),
+    ).rejects.toMatchObject({ code: "BACKUP_RESULT_DENIED" });
+    // A contradicting repeat changes nothing; it is only written down.
+    expect(await gatewayBackups.recordNodeResult(org, nodeId, answer)).toBe(
+      "complete",
+    );
+    const late = await tx(runtime, (c) =>
+      c.query(
+        "select 1 from audit_events where organization_id=$1 and action='server.backup_late_result'",
+        [org],
+      ),
+    );
+    expect(late.rowCount).toBe(1);
+    await expect(
+      backups.requestBackup(viewer, org, dispatchServer, randomUUID()),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("schedules nothing under an emergency stop and closes backups nobody finished", async () => {
+    backupRuns = [];
+    backupNow += 86400000;
+    const latch = (latched: boolean) =>
+      tx(runtime, (c) =>
+        latched
+          ? c.query(
+              "insert into runtime_stop_latches(kind,scope_id,organization_id,epoch,latched,operation_id,reason) values('organization',$1,$1,1,true,$2,'Backup test stop')",
+              [org, randomUUID()],
+            )
+          : c.query(
+              "update runtime_stop_latches set latched=false,epoch=epoch+1 where kind='organization' and scope_id=$1",
+              [org],
+            ),
+      );
+    await latch(true);
+    try {
+      expect(await backupPoll([dispatchServer])).toBeNull();
+      expect(await occurrences()).toHaveLength(2);
+    } finally {
+      await latch(false);
+    }
+    // The node accepts tonight's backup and is never heard from again.
+    const stuck = await backupPoll([dispatchServer]);
+    expect(stuck?.kind).toBe("scheduled");
+    backupNow += 2 * 3600_000 + 1;
+    expect(await backupPoll([dispatchServer])).toBeNull();
+    expect(
+      (await occurrences()).find((o) => o.id === String(stuck?.occurrence_id)),
+    ).toMatchObject({
+      id: stuck?.occurrence_id,
+      state: "failed",
+      failure_code: "interrupted",
+    });
+    // Its answer arrives too late to count.
+    expect(
+      await gatewayBackups.recordNodeResult(org, nodeId, {
+        occurrence_id: String(stuck?.occurrence_id),
+        server_id: dispatchServer,
+        outcome: {
+          ok: true,
+          archive_sha256: "a".repeat(64),
+          size_bytes: 1,
+          manifest_hash: "b".repeat(64),
+          file_count: 1,
+          total_bytes: 1,
+        },
+      }),
+    ).toBe("failed");
+    expect((await backups.list(adult, org, dispatchServer)).items).toHaveLength(
+      2,
+    );
+    // "Back up now" from someone who has since left is cancelled, not run.
+    const leaver = await member("org_admin");
+    const orphan = await backups.requestBackup(
+      leaver.token,
+      org,
+      dispatchServer,
+      randomUUID(),
+    );
+    await tx(identity, (c) =>
+      c.query("update memberships set disabled_at=now() where id=$1", [
+        leaver.membership,
+      ]),
+    );
+    expect(await backupPoll([dispatchServer])).toBeNull();
+    expect(
+      (await occurrences()).find((o) => o.id === orphan.occurrence_id),
+    ).toMatchObject({
+      id: orphan.occurrence_id,
+      state: "failed",
+      failure_code: "cancelled",
+    });
+    // "Back up now" that no host picks up within the hour is closed honestly.
+    const waiting = await backups.requestBackup(
+      adult,
+      org,
+      dispatchServer,
+      randomUUID(),
+    );
+    backupNow += 3600_000 + 1;
+    await gatewayBackups.expireStale(org);
+    expect(
+      (await occurrences()).find((o) => o.id === waiting.occurrence_id),
+    ).toMatchObject({
+      id: waiting.occurrence_id,
+      state: "failed",
+      failure_code: "node_unavailable",
+    });
+    expect(backupRuns).toEqual([]);
+    expect((await backupJournal.read()).open).toBeNull();
   });
   it("answers a power action truthfully and stops serving a released server", async () => {
     runs = [];

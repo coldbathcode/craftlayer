@@ -1040,6 +1040,7 @@ export class MinecraftControl {
 
 export { ActionDispatch } from "./action-dispatch.js";
 export { AgentRequests } from "./agent-requests.js";
+export { BackupDispatch } from "./backup-dispatch.js";
 export { BackupRecords } from "./backup-records.js";
 export {
   backupHealth,

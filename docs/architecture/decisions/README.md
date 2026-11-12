@@ -73,3 +73,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0042 — Two-factor sign-in for adults](0042-two-factor-sign-in.md).
 - [0043 — Single-host node transport for the family VPS](0043-single-host-node-transport.md).
 - [0044 — Server actions travel to a bound node over the private transport](0044-server-action-dispatch.md).
+- [0045 — The bound node takes the nightly backup](0045-node-backups.md).

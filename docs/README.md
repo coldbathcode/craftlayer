@@ -108,6 +108,6 @@ Read the current status before choosing a task. Specifications are proposed impl
 
 - [Remote execution-authority decision](architecture/decisions/0025-remote-execution-authority.md) — API identity proof without sharing node-control keys or identity secrets.
 
-[Connect an AI agent](development/agent-access.md) records the read-only agent token credential and the MCP server (master plan C1–C2). [Game control library](development/game-control.md) records the private RCON control channel, typed actions and the knock plugin (master plan A2/A4). [Backup records](development/backups.md) records the durable backup policy, schedule, evidence and archive layer (master plan D1). [Server actions](development/server-actions.md) records the typed action intake (master plan A3).
+[Connect an AI agent](development/agent-access.md) records the read-only agent token credential and the MCP server (master plan C1–C2). [Game control library](development/game-control.md) records the private RCON control channel, typed actions and the knock plugin (master plan A2/A4). [Backup records](development/backups.md) records the durable backup policy, schedule, evidence, archive layer and the nightly loop on the node (master plan D1). [Server actions](development/server-actions.md) records the typed action intake (master plan A3).
 
 [Playable VPS test preparation](development/minecraft-playtest.md) is the current immediate priority: a separate owner-playable test instance, then dashboard observation/management; actual VPS deployment and game acceptance are pending.

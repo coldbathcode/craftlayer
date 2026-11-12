@@ -15,6 +15,14 @@ import {
   runServerAction,
 } from "./action-runner.js";
 import { ActionWorker } from "./action-worker.js";
+import { BackupJournal } from "./backup-journal.js";
+import {
+  assertBackupDirectories,
+  type BackupTarget,
+  resumeSaving,
+  runBackup,
+} from "./backup-runner.js";
+import { BackupWorker } from "./backup-worker.js";
 import { NodeTransport, NodeTransportFailure } from "./client.js";
 import { DockerInventory } from "./docker.js";
 import { NodeJournal } from "./journal.js";
@@ -131,10 +139,56 @@ try {
           log: (code) => console.error(`${code}; values omitted`),
         })
       : null;
+    // Backups only for servers whose world and archive directories the operator named.
+    const targets = new Map<string, BackupTarget>();
+    for (const g of games) {
+      if (!g.data_directory !== !g.backup_directory)
+        throw new Error("NODE_BACKUP_DIRECTORIES_INCOMPLETE");
+      const channel = channels.get(g.server_id);
+      if (!g.data_directory || !g.backup_directory || !channel) continue;
+      assertBackupDirectories(g.data_directory, g.backup_directory);
+      targets.set(g.server_id, {
+        channel,
+        dataDirectory: g.data_directory,
+        backupDirectory: g.backup_directory,
+      });
+    }
+    const log = (code: string) => console.error(`${code}; values omitted`);
+    const backups = targets.size
+      ? new BackupWorker({
+          serverIds: [...targets.keys()],
+          journal: new BackupJournal(config.journal_directory, config.node_id),
+          poll: async (server_ids) =>
+            transport.backupPoll({
+              ...base(),
+              purpose: "node.backups.poll.v1",
+              sequence: await journal.next(),
+              server_ids,
+            }),
+          report: async (result) =>
+            transport.backupResult({
+              ...base(),
+              purpose: "node.backups.result.v1",
+              sequence: await journal.next(),
+              ...result,
+            }),
+          run: (offer) => {
+            const target = targets.get(offer.server_id);
+            if (!target) throw new Error("NODE_GAME_SERVER_UNKNOWN");
+            return runBackup(offer, target, { log });
+          },
+          resume: async (serverId) => {
+            const target = targets.get(serverId);
+            return target ? resumeSaving(target.channel) : false;
+          },
+          log,
+        })
+      : null;
     let enrolled = false,
       backoff = 1000,
       heartbeatDue = 0,
-      actionsDue = 0;
+      actionsDue = 0,
+      backupsDue = 0;
     const wait = async (ms: number) => {
       for (let elapsed = 0; elapsed < ms && !stopped; elapsed += 100)
         await new Promise((done) => setTimeout(done, 100));
@@ -159,7 +213,7 @@ try {
             enrolled = true;
             console.log(
               worker
-                ? "NODE_ACTIVE: inventory and typed game actions for configured servers; no Docker mutation capability"
+                ? `NODE_ACTIVE: inventory${backups ? ", backups" : ""} and typed game actions for configured servers; no Docker mutation capability`
                 : "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
             );
           }
@@ -191,6 +245,17 @@ try {
               actionsDue = Date.now() + 60000;
             }
           }
+          if (backups && Date.now() >= backupsDue) {
+            backupsDue = Date.now() + 15000;
+            try {
+              await backups.tick();
+            } catch (e) {
+              if (!(e instanceof NodeTransportFailure) || e.status !== 404)
+                throw e;
+              console.error("NODE_BACKUPS_NOT_OFFERED; asking again later");
+              backupsDue = Date.now() + 60000;
+            }
+          }
           backoff = 1000;
           await wait(worker ? 2000 : 10000);
         } catch (e) {
@@ -202,6 +267,8 @@ try {
         }
       }
     } finally {
+      // Let a backup in flight resume saving and record its outcome before leaving.
+      await backups?.settle();
       await journal.close();
     }
   } else

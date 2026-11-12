@@ -7,6 +7,10 @@ import {
   signedNodeActionPollResponse,
   signedNodeActionResultRequest,
   signedNodeActionResultResponse,
+  signedNodeBackupPollRequest,
+  signedNodeBackupPollResponse,
+  signedNodeBackupResultRequest,
+  signedNodeBackupResultResponse,
   signedNodeCommand,
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
@@ -18,6 +22,7 @@ import {
 } from "@craftlayer/contracts";
 import type {
   ActionDispatch,
+  BackupDispatch,
   DeploymentJobs,
   NodeControl,
 } from "@craftlayer/minecraft-control";
@@ -34,6 +39,8 @@ export async function buildNodeAgentApp(options: {
   jobs?: Pick<DeploymentJobs, "exchange" | "recordReceipt" | "poll">;
   /** Typed server-action dispatch; absent unless the operator enables it. */
   actions?: Pick<ActionDispatch, "poll" | "result">;
+  /** Backups taken by a bound node; absent unless the operator enables it. */
+  backups?: Pick<BackupDispatch, "poll" | "result">;
   key: Buffer | string;
   cert: Buffer | string;
   ca: Buffer | string;
@@ -157,6 +164,29 @@ export async function buildNodeAgentApp(options: {
         },
       },
       (r) => actions.result(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+  }
+  const backups = options.backups;
+  if (backups) {
+    app.post(
+      "/node/v1/backups/poll",
+      {
+        schema: {
+          body: signedNodeBackupPollRequest,
+          response: { 200: signedNodeBackupPollResponse },
+        },
+      },
+      (r) => backups.poll(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+    app.post(
+      "/node/v1/backups/result",
+      {
+        schema: {
+          body: signedNodeBackupResultRequest,
+          response: { 200: signedNodeBackupResultResponse },
+        },
+      },
+      (r) => backups.result(r.body, peer(r.raw.socket, r.headers.cookie)),
     );
   }
   for (const [path, purpose] of [

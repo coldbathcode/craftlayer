@@ -28,6 +28,10 @@ export const gameServerConfig = z.strictObject({
   whitelist_file: z.string().startsWith("/").endsWith("/whitelist.json"),
   floodgate_prefix: z.string().max(4).optional(),
   replace_spaces: z.boolean().optional(),
+  /** Backups (ADR 0045): set both, or neither. The server's data directory as this
+   * agent sees it, and a separate protected directory that receives the archives. */
+  data_directory: z.string().startsWith("/").optional(),
+  backup_directory: z.string().startsWith("/").optional(),
 });
 export type GameServerConfig = z.infer<typeof gameServerConfig>;
 export interface GameChannel {

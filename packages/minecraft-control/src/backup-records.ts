@@ -13,6 +13,8 @@ import {
   backupRequestAccepted,
   backupStatusView,
   legalHoldRequest,
+  nodeBackupOffer,
+  nodeBackupOutcome,
 } from "@craftlayer/contracts";
 import { type Authority, canAccess } from "@craftlayer/core";
 import pg from "pg";
@@ -28,9 +30,21 @@ import {
  * Master plan D1 / CL-F2-03 checkpoint B. Durable backup policy revisions, schedule
  * occurrences and backup records with adult-scoped permissions. This service stores and
  * decides; it never saves, archives, copies, restores or deletes anything. The effect
- * side (node agent) will write its evidence through the `record*` methods, which are
- * composition-trusted and deliberately not reachable over HTTP.
+ * side (node agent) writes its evidence through the `record*` methods and the node
+ * dispatch methods at the end, which are composition-trusted and deliberately not
+ * reachable over the public API (ADR 0045).
  */
+/** How long a node may hold a started backup before it is recorded as interrupted. */
+const RUNNING_LEASE_MS = 2 * 3600_000;
+/** How long "Back up now" waits for a host before it is recorded as not carried out. */
+const MANUAL_WAIT_MS = 3600_000;
+type FailureCode =
+  | "node_unavailable"
+  | "save_failed"
+  | "archive_failed"
+  | "verification_failed"
+  | "cancelled"
+  | "interrupted";
 function denied(code = "BACKUP_CONFLICT", status = 409): never {
   throw new AuthError(
     status,
@@ -90,11 +104,12 @@ interface BackupRow {
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 export class BackupRecords {
   #pool: pg.Pool;
-  #auth: IdentityService;
+  #identity: IdentityService | undefined;
   #now: () => number;
   constructor(options: {
     databaseUrl: string;
-    auth: IdentityService;
+    /** Absent on the private node gateway, which holds no identity service. */
+    auth?: IdentityService;
     clock?: () => number;
   }) {
     if (new URL(options.databaseUrl).username !== "craftlayer_runtime")
@@ -106,8 +121,12 @@ export class BackupRecords {
       idleTimeoutMillis: 10000,
       statement_timeout: 5000,
     });
-    this.#auth = options.auth;
+    this.#identity = options.auth;
     this.#now = options.clock ?? Date.now;
+  }
+  get #auth() {
+    if (!this.#identity) denied("BACKUP_USER_API_UNAVAILABLE", 503);
+    return this.#identity;
   }
   async close() {
     await this.#pool.end();
@@ -615,7 +634,10 @@ export class BackupRecords {
   /** Create today's scheduled occurrence when it is due. At most one per call. */
   async scheduleDue(org: string, serverId: string) {
     z.uuid().parse(serverId);
-    return this.#tx(org, async (c) => {
+    return this.#tx(org, (c) => this.#scheduleDue(c, org, serverId));
+  }
+  async #scheduleDue(c: pg.PoolClient, org: string, serverId: string) {
+    {
       await this.#server(c, org, serverId);
       const row = await this.#latestPolicy(c, org, serverId);
       if (!row?.enabled) return { status: "disabled" as const, created: null };
@@ -656,7 +678,7 @@ export class BackupRecords {
         [randomUUID(), org, id],
       );
       return { status: reconciled.status, created: id };
-    });
+    }
   }
   async recordStarted(org: string, occurrenceId: string) {
     z.uuid().parse(occurrenceId);
@@ -686,7 +708,16 @@ export class BackupRecords {
       })
       .parse(evidence);
     z.uuid().parse(occurrenceId);
-    return this.#tx(org, async (c) => {
+    return this.#tx(org, (c) => this.#complete(c, org, occurrenceId, v, false));
+  }
+  async #complete(
+    c: pg.PoolClient,
+    org: string,
+    occurrenceId: string,
+    v: { archive_sha256: string; size_bytes: number; manifest_hash: string },
+    verified: boolean,
+  ) {
+    {
       const now = new Date(this.#now());
       const o = (
         await c.query<{
@@ -702,7 +733,7 @@ export class BackupRecords {
       if (!o) denied("OCCURRENCE_NOT_RUNNING");
       const id = randomUUID();
       await c.query(
-        "insert into minecraft_backups(id,organization_id,project_id,environment_id,server_id,occurrence_id,state,archive_sha256,size_bytes,manifest_hash,created_at,completed_at) values($1,$2,$3,$4,$5,$6,'complete',$7,$8,$9,$10,$10)",
+        "insert into minecraft_backups(id,organization_id,project_id,environment_id,server_id,occurrence_id,state,archive_sha256,size_bytes,manifest_hash,created_at,completed_at,verified_at) values($1,$2,$3,$4,$5,$6,'complete',$7,$8,$9,$10,$10,$11)",
         [
           id,
           org,
@@ -714,6 +745,7 @@ export class BackupRecords {
           v.size_bytes,
           v.manifest_hash,
           now,
+          verified ? now : null,
         ],
       );
       if (o.operation_id)
@@ -726,21 +758,19 @@ export class BackupRecords {
         [randomUUID(), org, occurrenceId],
       );
       return { backup_id: id };
-    });
+    }
   }
-  async recordFailed(
+  async recordFailed(org: string, occurrenceId: string, code: FailureCode) {
+    z.uuid().parse(occurrenceId);
+    return this.#tx(org, (c) => this.#fail(c, org, occurrenceId, code));
+  }
+  async #fail(
+    c: pg.PoolClient,
     org: string,
     occurrenceId: string,
-    code:
-      | "node_unavailable"
-      | "save_failed"
-      | "archive_failed"
-      | "verification_failed"
-      | "cancelled"
-      | "interrupted",
+    code: FailureCode,
   ) {
-    z.uuid().parse(occurrenceId);
-    return this.#tx(org, async (c) => {
+    {
       const now = new Date(this.#now());
       const o = (
         await c.query<{ operation_id: string | null }>(
@@ -758,7 +788,7 @@ export class BackupRecords {
         "insert into minecraft_backup_outbox(id,organization_id,occurrence_id,event,schema_version) values($1,$2,$3,'backup_failed',1)",
         [randomUUID(), org, occurrenceId],
       );
-    });
+    }
   }
   /** Verification evidence is set once per kind; later proof never overwrites earlier proof. */
   async recordEvidence(
@@ -778,6 +808,226 @@ export class BackupRecords {
         [org, backupId, new Date(this.#now())],
       );
       if (!r.rowCount) denied("EVIDENCE_NOT_RECORDABLE");
+    });
+  }
+
+  // Node dispatch (master plan D1, ADR 0045). Called only by the private gateway after
+  // it has authenticated the node. No public API surface.
+
+  async #latched(c: pg.PoolClient, org: string, environmentId: string) {
+    await c.query("select set_config('app.runtime_internal','enabled',true)");
+    try {
+      return !!(
+        await c.query(
+          "select 1 from runtime_stop_latches where latched and (kind='instance' or (kind='organization' and scope_id=$1) or (kind='environment' and scope_id=$2)) limit 1",
+          [org, environmentId],
+        )
+      ).rowCount;
+    } finally {
+      await c.query(
+        "select set_config('app.runtime_internal','disabled',true)",
+      );
+    }
+  }
+  async #nodeEvent(
+    c: pg.PoolClient,
+    org: string,
+    action: string,
+    serverId: string,
+    details: Record<string, string>,
+  ) {
+    await c.query(
+      "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,null,$2,$3,'allowed',$4)",
+      [org, action, serverId, details],
+    );
+  }
+  /**
+   * The next backup for one of the servers this node is bound to, marked running on it.
+   * The node's question is also the schedule's clock: when a bound server's policy says
+   * a backup is due, the occurrence is created here and handed over in the same step, so
+   * nothing is scheduled for a server no host can back up. A backup already running on
+   * this node is offered again; the node answers from its journal and never archives
+   * twice. Nothing is scheduled or handed out under an emergency stop, and a manual
+   * request whose author is no longer a member is cancelled instead of run.
+   */
+  async claimForNode(org: string, nodeId: string, serverIds: string[]) {
+    const ids = z.array(z.uuid()).min(1).max(8).parse(serverIds);
+    z.uuid().parse(nodeId);
+    return this.#tx(org, async (c) => {
+      const servers = (
+        await c.query<{ server_id: string; environment_id: string }>(
+          "select b.server_id,b.environment_id from minecraft_server_nodes b join minecraft_nodes n on n.organization_id=b.organization_id and n.id=b.node_id join minecraft_servers s on s.organization_id=b.organization_id and s.id=b.server_id where b.organization_id=$1 and b.node_id=$2 and b.released_at is null and n.state='active' and s.registered and b.server_id=any($3::uuid[]) order by b.server_id",
+          [org, nodeId, ids],
+        )
+      ).rows;
+      for (const server of servers) {
+        let open = (
+          await c.query<{
+            id: string;
+            kind: "scheduled" | "manual";
+            state: "pending" | "running";
+            node_id: string | null;
+            requested_by: string | null;
+            started_at: Date | null;
+          }>(
+            "select id,kind,state,node_id,requested_by,started_at from minecraft_backup_occurrences where organization_id=$1 and server_id=$2 and state in ('pending','running') order by created_at limit 1 for update",
+            [org, server.server_id],
+          )
+        ).rows[0];
+        if (open?.state === "running") {
+          if (open.node_id === nodeId && open.started_at)
+            return nodeBackupOffer.parse({
+              occurrence_id: open.id,
+              server_id: server.server_id,
+              kind: open.kind,
+              expires_at: new Date(
+                open.started_at.getTime() + RUNNING_LEASE_MS,
+              ).toISOString(),
+            });
+          continue;
+        }
+        if (await this.#latched(c, org, server.environment_id)) continue;
+        if (!open) {
+          const due = await this.#scheduleDue(c, org, server.server_id);
+          if (!due.created) continue;
+          open = {
+            id: due.created,
+            kind: "scheduled",
+            state: "pending",
+            node_id: null,
+            requested_by: null,
+            started_at: null,
+          };
+        }
+        if (open.requested_by) {
+          const member = (
+            await c.query(
+              "select 1 from memberships where organization_id=$1 and user_id=$2 and disabled_at is null",
+              [org, open.requested_by],
+            )
+          ).rowCount;
+          if (!member) {
+            await this.#fail(c, org, open.id, "cancelled");
+            continue;
+          }
+        }
+        const started = new Date(this.#now());
+        await c.query(
+          "update minecraft_backup_occurrences set state='running',started_at=$3,node_id=$4 where organization_id=$1 and id=$2 and state='pending'",
+          [org, open.id, started, nodeId],
+        );
+        await this.#nodeEvent(
+          c,
+          org,
+          "server.backup_started",
+          server.server_id,
+          {
+            occurrence_id: open.id,
+            kind: open.kind,
+            service_actor: nodeId,
+          },
+        );
+        return nodeBackupOffer.parse({
+          occurrence_id: open.id,
+          server_id: server.server_id,
+          kind: open.kind,
+          expires_at: new Date(
+            started.getTime() + RUNNING_LEASE_MS,
+          ).toISOString(),
+        });
+      }
+      return null;
+    });
+  }
+  /**
+   * The node's answer. Only the node the occurrence was handed to may settle it, and
+   * only for the same server. A success carries the archive's hashes and is recorded as
+   * verified, because the node reports success only after re-reading the archive
+   * against its manifest. A repeat, or an answer after the occurrence was closed,
+   * changes nothing and returns the recorded state; a late answer is still audited.
+   */
+  async recordNodeResult(
+    org: string,
+    nodeId: string,
+    input: { occurrence_id: string; server_id: string; outcome: unknown },
+  ) {
+    const outcome = nodeBackupOutcome.parse(input.outcome);
+    z.uuid().parse(input.occurrence_id);
+    return this.#tx(org, async (c) => {
+      const row = (
+        await c.query<{
+          id: string;
+          server_id: string;
+          state: "pending" | "running" | "complete" | "failed";
+          node_id: string | null;
+        }>(
+          "select id,server_id,state,node_id from minecraft_backup_occurrences where organization_id=$1 and id=$2 for update",
+          [org, input.occurrence_id],
+        )
+      ).rows[0];
+      if (!row || row.node_id !== nodeId || row.server_id !== input.server_id)
+        denied("BACKUP_RESULT_DENIED", 403);
+      const reported = outcome.ok ? "complete" : "failed";
+      if (row.state !== "running") {
+        if (row.state !== reported)
+          await this.#nodeEvent(
+            c,
+            org,
+            "server.backup_late_result",
+            row.server_id,
+            { occurrence_id: row.id, reported, service_actor: nodeId },
+          );
+        return row.state;
+      }
+      if (outcome.ok)
+        await this.#complete(
+          c,
+          org,
+          row.id,
+          {
+            archive_sha256: outcome.archive_sha256,
+            size_bytes: outcome.size_bytes,
+            manifest_hash: outcome.manifest_hash,
+          },
+          true,
+        );
+      else await this.#fail(c, org, row.id, outcome.failure);
+      await this.#nodeEvent(c, org, "server.backup_finished", row.server_id, {
+        occurrence_id: row.id,
+        state: reported,
+        ...(outcome.ok ? {} : { failure: outcome.failure }),
+        service_actor: nodeId,
+      });
+      return reported;
+    });
+  }
+  /**
+   * A backup a node started and never answered is recorded as interrupted after its
+   * lease; "Back up now" that no host picked up within the hour is recorded as not
+   * carried out. Nothing is retried: the next scheduled day, or a new request, starts
+   * a fresh occurrence. A scheduled occurrence waiting out an emergency stop is kept.
+   */
+  async expireStale(org: string) {
+    return this.#tx(org, async (c) => {
+      const now = this.#now();
+      const rows = (
+        await c.query<{ id: string; state: "pending" | "running" }>(
+          "select id,state from minecraft_backup_occurrences where organization_id=$1 and ((state='running' and started_at<=$2) or (state='pending' and kind='manual' and created_at<=$3)) order by created_at for update",
+          [
+            org,
+            new Date(now - RUNNING_LEASE_MS),
+            new Date(now - MANUAL_WAIT_MS),
+          ],
+        )
+      ).rows;
+      for (const r of rows)
+        await this.#fail(
+          c,
+          org,
+          r.id,
+          r.state === "running" ? "interrupted" : "node_unavailable",
+        );
+      return rows.length;
     });
   }
 }

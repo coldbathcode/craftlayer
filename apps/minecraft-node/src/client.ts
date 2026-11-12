@@ -5,16 +5,22 @@ import {
   type NodeActionPollRequest,
   type NodeActionResultRequest,
   type NodeAgentRequest,
+  type NodeBackupPollRequest,
+  type NodeBackupResultRequest,
   type NodeJobRequest,
   type NodePollRequest,
   nodeActionPollRequest,
   nodeActionResultRequest,
   nodeAgentRequest,
+  nodeBackupPollRequest,
+  nodeBackupResultRequest,
   nodeJobRequest,
   nodePollRequest,
   type SignedNodeCommandReceipt,
   signedNodeActionPollResponse,
   signedNodeActionResultResponse,
+  signedNodeBackupPollResponse,
+  signedNodeBackupResultResponse,
   signedNodeCommand,
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
@@ -104,6 +110,8 @@ export class NodeTransport {
       | "/node/v1/heartbeat"
       | "/node/v1/actions/poll"
       | "/node/v1/actions/result"
+      | "/node/v1/backups/poll"
+      | "/node/v1/backups/result"
       | "/node/v1/commands/exchange"
       | "/node/v1/commands/receipt"
       | "/node/v1/commands/poll",
@@ -257,6 +265,39 @@ export class NodeTransport {
       response = signedNodeActionResultResponse.parse(raw);
     this.#assertReply(response.payload, response.signature, payload);
     if (response.payload.action_id !== payload.action_id)
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return response.payload.state;
+  }
+  /** Asks for at most one backup to take for the servers this node can back up. */
+  async backupPoll(input: NodeBackupPollRequest) {
+    const payload = nodeBackupPollRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/backups/poll",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeBackupPollResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    const backup = response.payload.backup;
+    if (backup && !payload.server_ids.includes(backup.server_id))
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return backup;
+  }
+  /** Reports the archive's hashes or why there is none; returns the recorded state. */
+  async backupResult(input: NodeBackupResultRequest) {
+    const payload = nodeBackupResultRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/backups/result",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeBackupResultResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    if (response.payload.occurrence_id !== payload.occurrence_id)
       throw new Error("NODE_RESPONSE_BINDING_DENIED");
     return response.payload.state;
   }

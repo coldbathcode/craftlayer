@@ -164,6 +164,7 @@ try {
   rmSync(join(previousManagement, "0031_agent_requests.sql"));
   rmSync(join(previousManagement, "0032_two_factor.sql"));
   rmSync(join(previousManagement, "0033_action_dispatch.sql"));
+  rmSync(join(previousManagement, "0034_backup_dispatch.sql"));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),

@@ -36,6 +36,16 @@ Status 2026-11-12: stack updated to the dispatch build ([ADR 0044](../architectu
 
 To roll back the stack update: retag the `pre-a2` images as `latest`, restore the saved `.env`, and `up -d` the four services. Migration 0033 is additive and can stay.
 
+## Nightly backups (master plan D1)
+
+Status 2026-11-12: built and verified locally ([ADR 0045](../architecture/decisions/0045-node-backups.md)); **not deployed**. Needs the helper live (steps 2–4 above) and the owner's approval for one more CraftLayer-only stack update.
+
+1. **Owner approval, then operator:** create a backup folder on the VPS outside the game data directory (owner-only, mode `0700`), update the checkout, add `infra/compose/game-backups.yml` and `CRAFTLAYER_GAME_BACKUP_DIR` to `.env`, add `data_directory` and `backup_directory` to the helper's private configuration, rebuild and `up -d`. Migration 0034 is additive. The game server is not restarted.
+2. **Owner:** choose the backup time (the policy). Until the dashboard has the control (B2) the operator sets it through the API on the owner's behalf.
+3. Verify with one "Back up now": the record shows complete and verified, the archive and manifest exist in the folder, and the server log shows saving turned off and on again. Record the evidence.
+
+Archives are not encrypted yet and stay on the VPS until D2; free space is checked before every backup.
+
 ## Rollback
 
 `docker compose -p craftlayer down` for this project only; the Minecraft containers are separate projects and are untouched. Data volumes are retained; removing them is a separate explicit step.

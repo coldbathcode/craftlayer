@@ -1,0 +1,15 @@
+# Optional node backups (ADR 0045), layered on node-agent.yml and game-control.yml. The
+# gateway hands the bound agent one backup at a time; the agent pauses saving over the
+# private control channel, archives the mounted world and writes the archive to a
+# separate protected directory on this host. Nothing here publishes a port.
+# The archive directory must be outside the game data directory, owned by the agent's
+# user with mode 0700: archives contain plugin secrets and are not encrypted yet.
+services:
+  node-control:
+    environment:
+      CRAFTLAYER_NODE_BACKUPS: ${CRAFTLAYER_NODE_BACKUPS:-enabled}
+  node-agent:
+    volumes:
+      - type: bind
+        source: ${CRAFTLAYER_GAME_BACKUP_DIR:?Choose the protected backup archive directory}
+        target: /srv/game/backups
