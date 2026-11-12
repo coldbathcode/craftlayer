@@ -81,5 +81,6 @@ Decided on 2026-11-08 unless noted.
 - 2026-11-08 — Dashboard stack deployed on the VPS behind loopback with MFA required; awaiting the owner's Tailscale HTTPS step and first-run.
 - 2026-11-08 — Owner signed in over Tailscale with two-factor; QR setup shipped; family server adopted in the VPS instance (A1 essentially complete). A2 transport prepared.
 - 2026-11-12 — VPS stack updated to the A2 build; helper staged and waiting for the owner's host approval; private RCON change staged, not run.
+- 2026-11-12 — Defect found when the owner tried to approve the host: the Hosts page was still refused on the VPS ("Remote administration requires qualified private entry and MFA") because host routes never received the A1 private-HTTPS-plus-MFA allowance that server routes got. Fixed and tested locally; the VPS needs a stack update before the host can be approved.
 - 2026-11-12 — D1 nightly loop built: the helper takes the due backup or "Back up now", reads the archive back and reports its hashes; a cut-short backup turns saving back on and is recorded as interrupted. Not switched on for the VPS yet.
 - 2026-11-12 — A2 dispatch built: server-to-host binding, signed action polling and results over the private link, a node journal that prevents repeats, operator-set credential lifetime. Two deployment defects found and fixed before the host was ever approved.

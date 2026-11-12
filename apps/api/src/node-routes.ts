@@ -30,11 +30,14 @@ export async function registerNodes(
   app: FastifyInstance,
   nodes: NodeApi,
   publicUrl: string,
+  remoteQualified = false,
 ) {
+  // Host management is local-only unless the deployment is private HTTPS with
+  // required two-factor sign-in (ADR 0042), which the entry point attests.
   const api = app.withTypeProvider<ZodTypeProvider>(),
-    local = ["localhost", "127.0.0.1", "[::1]"].includes(
-      new URL(publicUrl).hostname,
-    );
+    local =
+      remoteQualified ||
+      ["localhost", "127.0.0.1", "[::1]"].includes(new URL(publicUrl).hostname);
   app.addHook("onRequest", async (r, reply) => {
     const path = r.routeOptions.url ?? r.url.split("?")[0] ?? "";
     if (

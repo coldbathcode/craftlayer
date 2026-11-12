@@ -181,6 +181,7 @@ export async function buildApp(options: {
       app,
       options.nodes,
       options.publicUrl ?? "http://127.0.0.1:3000",
+      options.remoteManagement ?? false,
     );
   if (options.deployments && options.auth)
     await registerDeployments(
