@@ -639,13 +639,15 @@ function Backups({ family, server }: { family: Family; server: ServerView }) {
                   {b.size_bytes !== null ? ` · ${size(b.size_bytes)}` : ""}
                   <span className="fam-quiet">
                     {" · "}
-                    {b.state === "complete"
-                      ? b.verified_at
-                        ? "✓ checked"
-                        : "finished, not checked"
-                      : b.state === "failed"
-                        ? `⚠ didn't finish: ${backupProblem(b.occurrence.failure_code)}`
-                        : "in progress"}
+                    {b.archive_removed_at
+                      ? "no longer kept (older backups are cleared automatically)"
+                      : b.state === "complete"
+                        ? b.verified_at
+                          ? "✓ checked"
+                          : "finished, not checked"
+                        : b.state === "failed"
+                          ? `⚠ didn't finish: ${backupProblem(b.occurrence.failure_code)}`
+                          : "in progress"}
                   </span>
                 </span>
               </li>

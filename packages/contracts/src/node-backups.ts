@@ -78,6 +78,54 @@ export const nodeBackupResultResponse = z.strictObject({
   occurrence_id: z.uuid(),
   state: z.enum(["pending", "running", "complete", "failed"]),
 });
+/** Expiry of old archives (ADR 0049). The node asks which archives it may delete; the
+ * controller names them by occurrence, never by path; the node reports each removal. */
+export const nodeBackupPruneRequest = z.strictObject({
+  ...proof,
+  purpose: z.literal("node.backups.prune.poll.v1"),
+  server_ids: z.array(z.uuid()).min(1).max(8),
+});
+export const nodeBackupExpired = z.strictObject({
+  backup_id: z.uuid(),
+  server_id: z.uuid(),
+  occurrence_id: z.uuid(),
+});
+export const nodeBackupPruneResponse = z.strictObject({
+  ...reply,
+  purpose: z.literal("node.backups.prune.offer.v1"),
+  expired: z.array(nodeBackupExpired).max(20),
+});
+export const nodeBackupPrunedRequest = z.strictObject({
+  ...proof,
+  purpose: z.literal("node.backups.prune.result.v1"),
+  backup_id: z.uuid(),
+  server_id: z.uuid(),
+  occurrence_id: z.uuid(),
+});
+export const nodeBackupPrunedResponse = z.strictObject({
+  ...reply,
+  purpose: z.literal("node.backups.prune.ack.v1"),
+  backup_id: z.uuid(),
+});
+export const signedNodeBackupPruneRequest = z.strictObject({
+  payload: nodeBackupPruneRequest,
+  signature,
+});
+export const signedNodeBackupPruneResponse = z.strictObject({
+  payload: nodeBackupPruneResponse,
+  signature,
+});
+export const signedNodeBackupPrunedRequest = z.strictObject({
+  payload: nodeBackupPrunedRequest,
+  signature,
+});
+export const signedNodeBackupPrunedResponse = z.strictObject({
+  payload: nodeBackupPrunedResponse,
+  signature,
+});
+export type NodeBackupPruneRequest = z.infer<typeof nodeBackupPruneRequest>;
+export type NodeBackupPrunedRequest = z.infer<typeof nodeBackupPrunedRequest>;
+export type NodeBackupExpired = z.infer<typeof nodeBackupExpired>;
 export const signedNodeBackupPollRequest = z.strictObject({
   payload: nodeBackupPollRequest,
   signature,

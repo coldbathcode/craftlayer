@@ -77,3 +77,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0046 — The bound node reports who is playing and who is asking to join](0046-live-status-and-knocks.md).
 - [0047 — Turning a server on and off: one container, chosen by the operator](0047-node-power.md).
 - [0048 — Remote MCP over Streamable HTTP](0048-remote-mcp.md).
+- [0049 — Old backup archives are deleted by the bound node, only as the retention rules allow](0049-backup-archive-expiry.md).

@@ -100,6 +100,7 @@ interface BackupRow {
   offhost_verified_at: Date | null;
   restore_tested_at: Date | null;
   legal_hold: boolean;
+  archive_removed_at: Date | null;
 }
 const iso = (d: Date | null) => d?.toISOString() ?? null;
 export class BackupRecords {
@@ -217,7 +218,7 @@ export class BackupRecords {
   async #records(c: pg.PoolClient, org: string, serverId: string) {
     return (
       await c.query<BackupRow>(
-        "select id,occurrence_id,state,archive_sha256,size_bytes::text,manifest_hash,created_at,completed_at,verified_at,offhost_verified_at,restore_tested_at,legal_hold from minecraft_backups where organization_id=$1 and server_id=$2 order by created_at desc,id limit 200",
+        "select id,occurrence_id,state,archive_sha256,size_bytes::text,manifest_hash,created_at,completed_at,verified_at,offhost_verified_at,restore_tested_at,legal_hold,archive_removed_at from minecraft_backups where organization_id=$1 and server_id=$2 order by created_at desc,id limit 200",
         [org, serverId],
       )
     ).rows;
@@ -250,9 +251,10 @@ export class BackupRecords {
   ) {
     const policy = this.#policy(row),
       now = this.#now(),
-      records = (await this.#records(c, org, serverId)).map((r) =>
-        this.#record(r),
-      );
+      // A backup whose archive is gone is history, not a recovery point.
+      records = (await this.#records(c, org, serverId))
+        .filter((r) => !r.archive_removed_at)
+        .map((r) => this.#record(r));
     const reconciled = row.enabled
       ? reconcileBackupSchedule(
           policy,
@@ -560,7 +562,9 @@ export class BackupRecords {
           ).rows.map((o) => [o.id, o] as const),
         ),
         policy = await this.#latestPolicy(c, org, serverId),
-        records = rows.map((r) => this.#record(r));
+        records = rows
+          .filter((r) => !r.archive_removed_at)
+          .map((r) => this.#record(r));
       const retention = policy
         ? planBackupRetention(this.#policy(policy), records, this.#now())
         : {
@@ -577,6 +581,7 @@ export class BackupRecords {
             archive_sha256: r.archive_sha256,
             size_bytes: r.size_bytes === null ? null : Number(r.size_bytes),
             completed_at: iso(r.completed_at),
+            archive_removed_at: iso(r.archive_removed_at),
             occurrence: {
               id: o.id,
               kind: o.kind,
@@ -840,6 +845,105 @@ export class BackupRecords {
       "insert into audit_events(organization_id,actor_id,action,target_id,outcome,details) values($1,null,$2,$3,'allowed',$4)",
       [org, action, serverId, details],
     );
+  }
+  async #boundServers(
+    c: pg.PoolClient,
+    org: string,
+    nodeId: string,
+    ids: string[],
+  ) {
+    return (
+      await c.query<{ server_id: string; environment_id: string }>(
+        "select b.server_id,b.environment_id from minecraft_server_nodes b join minecraft_nodes n on n.organization_id=b.organization_id and n.id=b.node_id join minecraft_servers s on s.organization_id=b.organization_id and s.id=b.server_id where b.organization_id=$1 and b.node_id=$2 and b.released_at is null and n.state='active' and s.registered and b.server_id=any($3::uuid[]) order by b.server_id",
+        [org, nodeId, ids],
+      )
+    ).rows;
+  }
+  /**
+   * Archives the bound node may delete now (ADR 0049): exactly what the retention rules
+   * (ADR 0033) propose for a server with a policy, and only complete backups whose
+   * archive still exists. Legal holds, the newest verified, off-server-verified and
+   * restore-tested backups, anything inside the retention window, and everything while
+   * no backup is verified are never offered. Nothing is offered under an emergency stop.
+   */
+  async expiredForNode(org: string, nodeId: string, serverIds: string[]) {
+    const ids = z.array(z.uuid()).min(1).max(8).parse(serverIds);
+    z.uuid().parse(nodeId);
+    return this.#tx(org, async (c) => {
+      const out: {
+        backup_id: string;
+        server_id: string;
+        occurrence_id: string;
+      }[] = [];
+      for (const server of await this.#boundServers(c, org, nodeId, ids)) {
+        if (await this.#latched(c, org, server.environment_id)) continue;
+        const policy = await this.#latestPolicy(c, org, server.server_id);
+        if (!policy) continue;
+        const rows = (await this.#records(c, org, server.server_id)).filter(
+          (r) => !r.archive_removed_at,
+        );
+        const expire = new Set(
+          planBackupRetention(
+            this.#policy(policy),
+            rows.map((r) => this.#record(r)),
+            this.#now(),
+          ).expire,
+        );
+        for (const r of rows)
+          if (expire.has(r.id) && r.state === "complete" && out.length < 20)
+            out.push({
+              backup_id: r.id,
+              server_id: server.server_id,
+              occurrence_id: r.occurrence_id,
+            });
+      }
+      return out;
+    });
+  }
+  /**
+   * The bound node deleted an archive it was offered. The record is kept and marked,
+   * once; a repeat changes nothing. The removal is written to the audit log either way,
+   * because the file is gone whatever the record says.
+   */
+  async recordArchiveRemoved(
+    org: string,
+    nodeId: string,
+    input: { backup_id: string; server_id: string; occurrence_id: string },
+  ) {
+    for (const v of [
+      nodeId,
+      input.backup_id,
+      input.server_id,
+      input.occurrence_id,
+    ])
+      z.uuid().parse(v);
+    return this.#tx(org, async (c) => {
+      const bound = await this.#boundServers(c, org, nodeId, [input.server_id]);
+      const row = (
+        await c.query<{ state: string; archive_removed_at: Date | null }>(
+          "select state,archive_removed_at from minecraft_backups where organization_id=$1 and id=$2 and server_id=$3 and occurrence_id=$4 for update",
+          [org, input.backup_id, input.server_id, input.occurrence_id],
+        )
+      ).rows[0];
+      if (!bound.length || !row || row.state !== "complete")
+        denied("BACKUP_RESULT_DENIED", 403);
+      if (row.archive_removed_at) return;
+      await c.query(
+        "update minecraft_backups set archive_removed_at=$3 where organization_id=$1 and id=$2",
+        [org, input.backup_id, new Date(this.#now())],
+      );
+      await this.#nodeEvent(
+        c,
+        org,
+        "server.backup_archive_expired",
+        input.server_id,
+        {
+          backup_id: input.backup_id,
+          node_id: nodeId,
+          service_actor: "node-gateway",
+        },
+      );
+    });
   }
   /**
    * The next backup for one of the servers this node is bound to, marked running on it.

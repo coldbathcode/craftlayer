@@ -6,6 +6,8 @@ import {
   type NodeActionResultRequest,
   type NodeAgentRequest,
   type NodeBackupPollRequest,
+  type NodeBackupPrunedRequest,
+  type NodeBackupPruneRequest,
   type NodeBackupResultRequest,
   type NodeJobRequest,
   type NodePollRequest,
@@ -14,6 +16,8 @@ import {
   nodeActionResultRequest,
   nodeAgentRequest,
   nodeBackupPollRequest,
+  nodeBackupPrunedRequest,
+  nodeBackupPruneRequest,
   nodeBackupResultRequest,
   nodeJobRequest,
   nodePollRequest,
@@ -22,6 +26,8 @@ import {
   signedNodeActionPollResponse,
   signedNodeActionResultResponse,
   signedNodeBackupPollResponse,
+  signedNodeBackupPrunedResponse,
+  signedNodeBackupPruneResponse,
   signedNodeBackupResultResponse,
   signedNodeCommand,
   signedNodeCommandPermit,
@@ -115,6 +121,8 @@ export class NodeTransport {
       | "/node/v1/actions/result"
       | "/node/v1/backups/poll"
       | "/node/v1/backups/result"
+      | "/node/v1/backups/prune"
+      | "/node/v1/backups/pruned"
       | "/node/v1/status/report"
       | "/node/v1/commands/exchange"
       | "/node/v1/commands/receipt"
@@ -271,6 +279,40 @@ export class NodeTransport {
     if (response.payload.action_id !== payload.action_id)
       throw new Error("NODE_RESPONSE_BINDING_DENIED");
     return response.payload.state;
+  }
+  /** Asks which old archives this node may delete. */
+  async backupPrune(input: NodeBackupPruneRequest) {
+    const payload = nodeBackupPruneRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/backups/prune",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeBackupPruneResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    if (
+      response.payload.expired.some(
+        (e) => !payload.server_ids.includes(e.server_id),
+      )
+    )
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return response.payload.expired;
+  }
+  async backupPruned(input: NodeBackupPrunedRequest) {
+    const payload = nodeBackupPrunedRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/backups/pruned",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeBackupPrunedResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    if (response.payload.backup_id !== payload.backup_id)
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
   }
   /** Tells the controller what this node sees of one server it controls. */
   async statusReport(input: NodeStatusReportRequest) {

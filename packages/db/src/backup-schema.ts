@@ -115,6 +115,8 @@ export const minecraftBackups = pgTable(
     offhostVerifiedAt: timestamp("offhost_verified_at", { withTimezone: true }),
     restoreTestedAt: timestamp("restore_tested_at", { withTimezone: true }),
     legalHold: boolean("legal_hold").notNull().default(false),
+    // SQL 0037: set once when the bound node deleted the archive under retention.
+    archiveRemovedAt: timestamp("archive_removed_at", { withTimezone: true }),
     legalHoldChangedBy: uuid("legal_hold_changed_by"),
     legalHoldChangedAt: timestamp("legal_hold_changed_at", {
       withTimezone: true,

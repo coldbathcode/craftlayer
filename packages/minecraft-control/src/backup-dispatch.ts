@@ -1,6 +1,10 @@
 import {
   signedNodeBackupPollRequest,
   signedNodeBackupPollResponse,
+  signedNodeBackupPrunedRequest,
+  signedNodeBackupPrunedResponse,
+  signedNodeBackupPruneRequest,
+  signedNodeBackupPruneResponse,
   signedNodeBackupResultRequest,
   signedNodeBackupResultResponse,
 } from "@craftlayer/contracts";
@@ -19,14 +23,22 @@ export class BackupDispatch {
   #nodes: Pick<NodeControl, "admit" | "sign">;
   #backups: Pick<
     BackupRecords,
-    "claimForNode" | "recordNodeResult" | "expireStale"
+    | "claimForNode"
+    | "recordNodeResult"
+    | "expireStale"
+    | "expiredForNode"
+    | "recordArchiveRemoved"
   >;
   #now: () => number;
   constructor(options: {
     nodes: Pick<NodeControl, "admit" | "sign">;
     backups: Pick<
       BackupRecords,
-      "claimForNode" | "recordNodeResult" | "expireStale"
+      | "claimForNode"
+      | "recordNodeResult"
+      | "expireStale"
+      | "expiredForNode"
+      | "recordArchiveRemoved"
     >;
     clock?: () => number;
   }) {
@@ -95,6 +107,45 @@ export class BackupDispatch {
         purpose: "node.backups.ack.v1" as const,
         occurrence_id: v.occurrence_id,
         state,
+      }),
+    );
+  }
+  /** Which old archives this node may delete now. */
+  async prune(
+    input: unknown,
+    peer: { certificate_sha256: string; certificate_expires_at: number },
+  ) {
+    const signed = signedNodeBackupPruneRequest.parse(input),
+      v = signed.payload;
+    await this.#nodes.admit(v, signed.signature, peer);
+    const expired = await this.#backups.expiredForNode(
+      v.organization_id,
+      v.node_id,
+      v.server_ids,
+    );
+    return signedNodeBackupPruneResponse.parse(
+      this.#reply(v, {
+        purpose: "node.backups.prune.offer.v1" as const,
+        expired,
+      }),
+    );
+  }
+  async pruned(
+    input: unknown,
+    peer: { certificate_sha256: string; certificate_expires_at: number },
+  ) {
+    const signed = signedNodeBackupPrunedRequest.parse(input),
+      v = signed.payload;
+    await this.#nodes.admit(v, signed.signature, peer);
+    await this.#backups.recordArchiveRemoved(v.organization_id, v.node_id, {
+      backup_id: v.backup_id,
+      server_id: v.server_id,
+      occurrence_id: v.occurrence_id,
+    });
+    return signedNodeBackupPrunedResponse.parse(
+      this.#reply(v, {
+        purpose: "node.backups.prune.ack.v1" as const,
+        backup_id: v.backup_id,
       }),
     );
   }

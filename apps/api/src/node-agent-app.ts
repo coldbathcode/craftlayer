@@ -9,6 +9,10 @@ import {
   signedNodeActionResultResponse,
   signedNodeBackupPollRequest,
   signedNodeBackupPollResponse,
+  signedNodeBackupPrunedRequest,
+  signedNodeBackupPrunedResponse,
+  signedNodeBackupPruneRequest,
+  signedNodeBackupPruneResponse,
   signedNodeBackupResultRequest,
   signedNodeBackupResultResponse,
   signedNodeCommand,
@@ -43,7 +47,7 @@ export async function buildNodeAgentApp(options: {
   /** Typed server-action dispatch; absent unless the operator enables it. */
   actions?: Pick<ActionDispatch, "poll" | "result">;
   /** Backups taken by a bound node; absent unless the operator enables it. */
-  backups?: Pick<BackupDispatch, "poll" | "result">;
+  backups?: Pick<BackupDispatch, "poll" | "result" | "prune" | "pruned">;
   /** Live status and knocks reported by a bound node; follows the actions switch. */
   status?: Pick<StatusDispatch, "report">;
   key: Buffer | string;
@@ -204,6 +208,26 @@ export async function buildNodeAgentApp(options: {
         },
       },
       (r) => backups.result(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+    app.post(
+      "/node/v1/backups/prune",
+      {
+        schema: {
+          body: signedNodeBackupPruneRequest,
+          response: { 200: signedNodeBackupPruneResponse },
+        },
+      },
+      (r) => backups.prune(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+    app.post(
+      "/node/v1/backups/pruned",
+      {
+        schema: {
+          body: signedNodeBackupPrunedRequest,
+          response: { 200: signedNodeBackupPrunedResponse },
+        },
+      },
+      (r) => backups.pruned(r.body, peer(r.raw.socket, r.headers.cookie)),
     );
   }
   for (const [path, purpose] of [

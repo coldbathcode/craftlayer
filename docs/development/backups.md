@@ -67,6 +67,10 @@ Agent log codes worth acting on: `NODE_BACKUP_OPERATOR_CHECK_SAVING` and `NODE_B
 
 Checks: `pnpm test` covers the worker, journal and runner (`apps/minecraft-node/src/backup-worker.test.ts`); `pnpm test:db` runs three cases in `tests/integration/server-actions.integration.test.ts` over real mTLS with real archives: a due nightly backup recorded verified and never repeated, "Back up now" with a lost offer and answers refused from any other node, and nothing scheduled under an emergency stop with stuck, orphaned and unclaimed work closed honestly.
 
+## Expiry of old archives
+
+Built 2026-11-12 ([ADR 0049](../architecture/decisions/0049-backup-archive-expiry.md)). Once an hour the helper asks which archives it may delete and removes exactly those: complete backups older than the policy's retention that are not under legal hold and are not the newest verified, off-server-verified or restore-tested backup. While no backup is verified, nothing is deleted. The record stays, with `archive_removed_at` set, and the list and health ignore it as a recovery point.
+
 ## Not yet
 
-Running on the family VPS, expiry of old archives (nothing is deleted; the minimum retention is 14 days), encryption and the off-site copy (D2), periodic restore tests against stored archives (D3), and the dashboard line and button (B2). Archives contain plugin secrets (for example Floodgate's `key.pem`) and must stay on protected storage until the encryption step. A switched-off server is not backed up yet.
+A first real backup on the family VPS, encryption and the off-site copy (D2), and periodic restore tests against stored archives (D3). Archives contain plugin secrets (for example Floodgate's `key.pem`) and must stay on protected storage until the encryption step. A switched-off server is not backed up yet.

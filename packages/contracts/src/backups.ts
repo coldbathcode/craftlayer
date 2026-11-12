@@ -97,6 +97,8 @@ export const backupItemView = backupRecord.extend({
     .nullable(),
   size_bytes: z.number().int().min(0).nullable(),
   completed_at: z.iso.datetime().nullable(),
+  /** Set once the host deleted the archive under the retention rules; the record stays. */
+  archive_removed_at: z.iso.datetime().nullable(),
 });
 export const backupListView = z.strictObject({
   server_id: id,

@@ -16,6 +16,7 @@ import {
 } from "./action-runner.js";
 import { ActionWorker } from "./action-worker.js";
 import { BackupJournal } from "./backup-journal.js";
+import { pruneBackups } from "./backup-pruner.js";
 import {
   assertBackupDirectories,
   type BackupTarget,
@@ -193,6 +194,7 @@ try {
       heartbeatDue = 0,
       actionsDue = 0,
       statusDue = 0,
+      pruneDue = 0,
       backupsDue = 0;
     const wait = async (ms: number) => {
       for (let elapsed = 0; elapsed < ms && !stopped; elapsed += 100)
@@ -285,6 +287,40 @@ try {
                 throw e;
               console.error("NODE_BACKUPS_NOT_OFFERED; asking again later");
               backupsDue = Date.now() + 60000;
+            }
+          }
+          // Old archives: once an hour, and never while a backup is being written.
+          if (backups && !backups.busy && Date.now() >= pruneDue) {
+            pruneDue = Date.now() + 3600000;
+            try {
+              await pruneBackups({
+                serverIds: [...targets.keys()],
+                directory: (id) => targets.get(id)?.backupDirectory,
+                poll: async (server_ids) =>
+                  transport.backupPrune({
+                    ...base(),
+                    purpose: "node.backups.prune.poll.v1",
+                    sequence: await journal.next(),
+                    server_ids,
+                  }),
+                report: async (expired) =>
+                  transport.backupPruned({
+                    ...base(),
+                    purpose: "node.backups.prune.result.v1",
+                    sequence: await journal.next(),
+                    ...expired,
+                  }),
+                log,
+              });
+            } catch (e) {
+              if (
+                !(e instanceof NodeTransportFailure) ||
+                (e.status !== 404 && e.status !== 403)
+              )
+                throw e;
+              console.error(
+                "NODE_BACKUP_EXPIRY_NOT_OFFERED; asking again later",
+              );
             }
           }
           backoff = 1000;

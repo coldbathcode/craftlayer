@@ -1,5 +1,12 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import pg from "pg";
@@ -13,6 +20,7 @@ import {
 } from "../../apps/minecraft-node/src/action-runner.js";
 import { ActionWorker } from "../../apps/minecraft-node/src/action-worker.js";
 import { BackupJournal } from "../../apps/minecraft-node/src/backup-journal.js";
+import { pruneBackups } from "../../apps/minecraft-node/src/backup-pruner.js";
 import { runBackup } from "../../apps/minecraft-node/src/backup-runner.js";
 import { BackupWorker } from "../../apps/minecraft-node/src/backup-worker.js";
 import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
@@ -1204,6 +1212,108 @@ describe("node dispatch of server actions", () => {
     });
     expect(backupRuns).toEqual([]);
     expect((await backupJournal.read()).open).toBeNull();
+  });
+  it("deletes archives only when the retention rules allow it, and keeps the record", async () => {
+    const folder = join(root, "archives", dispatchServer);
+    const prune = () =>
+      pruneBackups({
+        serverIds: [dispatchServer],
+        directory: () => join(root, "archives"),
+        poll: (server_ids) =>
+          transport.backupPrune({
+            ...base(),
+            purpose: "node.backups.prune.poll.v1",
+            sequence: ++sequence,
+            server_ids,
+          }),
+        report: (expired) =>
+          transport.backupPruned({
+            ...base(),
+            purpose: "node.backups.prune.result.v1",
+            sequence: ++sequence,
+            ...expired,
+          }),
+      });
+    const complete = async () =>
+      (await backups.list(adult, org, dispatchServer)).items.filter(
+        (b) => b.state === "complete" && !b.archive_removed_at,
+      );
+    const before = await complete();
+    expect(before.length).toBeGreaterThanOrEqual(2);
+    // Nothing is old enough yet: every archive is inside the retention window.
+    expect(await prune()).toBe(0);
+    backupNow += 40 * 86400000;
+    // Old now, but they are still the only verified backups... until a new one exists.
+    for (let i = 0; i < 4; i++) await backUp();
+    const fresh = (await complete()).filter(
+      (b) => !before.some((o) => o.id === b.id),
+    );
+    expect(fresh.length).toBeGreaterThanOrEqual(1);
+    const [held, ...old] = before;
+    if (!held || !old.length) throw new Error("Fixture backups missing");
+    await backups.setLegalHold(adult, org, dispatchServer, held.id, {
+      legal_hold: true,
+    });
+    const files = async () => (await readdir(folder)).sort();
+    const had = await files();
+    expect(await prune()).toBe(old.length);
+    const after = await backups.list(adult, org, dispatchServer),
+      gone = after.items.filter((b) => b.archive_removed_at);
+    expect(gone.map((b) => b.id).sort()).toEqual(old.map((b) => b.id).sort());
+    // The held backup and the fresh ones still have their archive and manifest.
+    const left = await files();
+    expect(had.length - left.length).toBe(old.length * 2);
+    for (const b of [held, ...fresh]) {
+      expect(left).toContain(`${b.occurrence.id}.tar.gz`);
+      expect(left).toContain(`${b.occurrence.id}.manifest.json`);
+    }
+    for (const b of old)
+      expect(left).not.toContain(`${b.occurrence.id}.tar.gz`);
+    // A second pass finds nothing; a repeated report changes nothing.
+    expect(await prune()).toBe(0);
+    const first = old[0];
+    if (!first) throw new Error("Fixture backup missing");
+    await transport.backupPruned({
+      ...base(),
+      purpose: "node.backups.prune.result.v1",
+      sequence: ++sequence,
+      backup_id: first.id,
+      server_id: dispatchServer,
+      occurrence_id: first.occurrence.id,
+    });
+    // A node cannot mark a backup of a server it is not bound to, or a made-up one.
+    await expect(
+      transport.backupPruned({
+        ...base(),
+        purpose: "node.backups.prune.result.v1",
+        sequence: ++sequence,
+        backup_id: randomUUID(),
+        server_id: dispatchServer,
+        occurrence_id: randomUUID(),
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    // The database itself refuses to un-remove, and to mark a held backup removed.
+    await expect(
+      tx(runtime, (c) =>
+        c.query(
+          "update minecraft_backups set archive_removed_at=null where id=$1",
+          [first.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    await expect(
+      tx(runtime, (c) =>
+        c.query(
+          "update minecraft_backups set archive_removed_at=now() where id=$1",
+          [held.id],
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const audit = await auth.listAudit(adult, org);
+    expect(
+      audit.filter((a) => a.action === "server.backup_archive_expired"),
+    ).toHaveLength(old.length);
+    backupNow -= 40 * 86400000;
   });
   const report = async (serverId = dispatchServer, knockFile?: string) =>
     transport.statusReport({
