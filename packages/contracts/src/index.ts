@@ -28,6 +28,7 @@ export * from "./node-backups.js";
 export * from "./node-execution.js";
 export * from "./node-poll.js";
 export * from "./node-reservations.js";
+export * from "./node-status.js";
 export * from "./nodes.js";
 export * from "./providers.js";
 export * from "./provisioning.js";

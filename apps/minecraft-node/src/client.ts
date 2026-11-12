@@ -9,6 +9,7 @@ import {
   type NodeBackupResultRequest,
   type NodeJobRequest,
   type NodePollRequest,
+  type NodeStatusReportRequest,
   nodeActionPollRequest,
   nodeActionResultRequest,
   nodeAgentRequest,
@@ -16,6 +17,7 @@ import {
   nodeBackupResultRequest,
   nodeJobRequest,
   nodePollRequest,
+  nodeStatusReportRequest,
   type SignedNodeCommandReceipt,
   signedNodeActionPollResponse,
   signedNodeActionResultResponse,
@@ -26,6 +28,7 @@ import {
   signedNodeCommandReceipt,
   signedNodePollResponse,
   signedNodeResponse,
+  signedNodeStatusReportResponse,
 } from "@craftlayer/contracts";
 import {
   assertNodeTime,
@@ -112,6 +115,7 @@ export class NodeTransport {
       | "/node/v1/actions/result"
       | "/node/v1/backups/poll"
       | "/node/v1/backups/result"
+      | "/node/v1/status/report"
       | "/node/v1/commands/exchange"
       | "/node/v1/commands/receipt"
       | "/node/v1/commands/poll",
@@ -267,6 +271,21 @@ export class NodeTransport {
     if (response.payload.action_id !== payload.action_id)
       throw new Error("NODE_RESPONSE_BINDING_DENIED");
     return response.payload.state;
+  }
+  /** Tells the controller what this node sees of one server it controls. */
+  async statusReport(input: NodeStatusReportRequest) {
+    const payload = nodeStatusReportRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/status/report",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeStatusReportResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    if (response.payload.server_id !== payload.server_id)
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
   }
   /** Asks for at most one backup to take for the servers this node can back up. */
   async backupPoll(input: NodeBackupPollRequest) {

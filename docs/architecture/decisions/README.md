@@ -74,3 +74,6 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0043 — Single-host node transport for the family VPS](0043-single-host-node-transport.md).
 - [0044 — Server actions travel to a bound node over the private transport](0044-server-action-dispatch.md).
 - [0045 — The bound node takes the nightly backup](0045-node-backups.md).
+- [0046 — The bound node reports who is playing and who is asking to join](0046-live-status-and-knocks.md).
+- [0047 — Turning a server on and off: one container, chosen by the operator](0047-node-power.md).
+- [0048 — Remote MCP over Streamable HTTP](0048-remote-mcp.md).

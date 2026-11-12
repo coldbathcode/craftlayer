@@ -16,7 +16,12 @@ import { BackupJournal } from "../../apps/minecraft-node/src/backup-journal.js";
 import { runBackup } from "../../apps/minecraft-node/src/backup-runner.js";
 import { BackupWorker } from "../../apps/minecraft-node/src/backup-worker.js";
 import { NodeTransport } from "../../apps/minecraft-node/src/client.js";
-import { MemoryWhitelistStore } from "../../apps/minecraft-node/src/game-control/index.js";
+import {
+  floodgateUuid,
+  MemoryWhitelistStore,
+  RconError,
+} from "../../apps/minecraft-node/src/game-control/index.js";
+import { readStatus } from "../../apps/minecraft-node/src/status-reporter.js";
 import { AuthService } from "../../packages/auth/src/index.js";
 import type { NodeActionOffer } from "../../packages/contracts/src/index.js";
 import {
@@ -26,6 +31,8 @@ import {
   MinecraftControl,
   NodeControl,
   ServerActions,
+  ServerLive,
+  StatusDispatch,
 } from "../../packages/minecraft-control/src/index.js";
 import {
   nodeDigest,
@@ -540,11 +547,24 @@ describe("node dispatch of server actions", () => {
   let worker: ActionWorker;
   let agentKey = "";
   const whitelist = new MemoryWhitelistStore();
+  const live = new ServerLive({
+    databaseUrl: runtimeUrl,
+    auth,
+    actions,
+    clock: () => now,
+  });
+  const gatewayLive = new ServerLive({
+    databaseUrl: runtimeUrl,
+    clock: () => now,
+  });
+  /** The scripted server is off while this is false: its console refuses connections. */
+  let serverUp = true;
   /** A scripted private console standing in for the real server's RCON. */
   const channel: GameChannel = {
     whitelist,
     options: {},
     async open() {
+      if (!serverUp) throw new RconError("RCON_UNREACHABLE");
       return {
         async command(text) {
           sent.push(text);
@@ -556,7 +576,9 @@ describe("node dispatch of server actions", () => {
                 ? `There are ${whitelist.entries.length} whitelisted player(s): ${whitelist.entries.map((e) => e.name).join(", ")}`
                 : text === "save-all flush"
                   ? "Saved the game"
-                  : "Unknown command";
+                  : text === "list"
+                    ? "There are 2 of a max of 5 players online: Alex, .Charlie"
+                    : "Unknown command";
           return { body, truncated: false };
         },
         async close() {},
@@ -630,6 +652,7 @@ describe("node dispatch of server actions", () => {
       control: nodes,
       actions: new ActionDispatch({ nodes, actions: gatewayActions }),
       backups: new BackupDispatch({ nodes, backups: gatewayBackups }),
+      status: new StatusDispatch({ nodes, live: gatewayLive }),
       key: await file("server.key"),
       cert: await file("server.crt"),
       ca: await file("ca.crt"),
@@ -685,7 +708,10 @@ describe("node dispatch of server actions", () => {
         }),
       run: (offer: NodeActionOffer) => {
         runs.push(offer.id);
-        return runServerAction(offer, channel);
+        return runServerAction(offer, channel, Date.now(), {
+          pollMs: 1,
+          sleep: async () => {},
+        });
       },
     });
     await mkdir(join(root, "data/world"), { recursive: true });
@@ -725,6 +751,8 @@ describe("node dispatch of server actions", () => {
     await gatewayActions?.close();
     await gatewayBackups.close();
     await backups.close();
+    await gatewayLive.close();
+    await live.close();
     await nodes?.close();
     if (root) await rm(root, { recursive: true, force: true });
   });
@@ -1176,6 +1204,195 @@ describe("node dispatch of server actions", () => {
     });
     expect(backupRuns).toEqual([]);
     expect((await backupJournal.read()).open).toBeNull();
+  });
+  const report = async (serverId = dispatchServer, knockFile?: string) =>
+    transport.statusReport({
+      ...base(),
+      purpose: "node.status.report.v1",
+      sequence: ++sequence,
+      server_id: serverId,
+      ...(await readStatus(channel, knockFile)),
+    });
+  it("shows who is playing and who is asking, and lets in exactly the account that knocked", async () => {
+    now = Date.now();
+    expect(await live.live(adult, org, dispatchServer)).toMatchObject({
+      host_bound: true,
+      power: "unknown",
+      fresh: false,
+      players: null,
+    });
+    const xuid = "2535412345678901",
+      knockFile = join(root, "data/knocks.jsonl"),
+      at = new Date(now - 120000).toISOString(),
+      line = (name: string, uuid: string, edition: string) =>
+        JSON.stringify({
+          v: 1,
+          at,
+          result: "KICK_WHITELIST",
+          edition,
+          name,
+          uuid,
+          ...(edition === "bedrock" ? { xuid: "1" } : {}),
+        });
+    const javaUuid = randomUUID();
+    await writeFile(
+      knockFile,
+      [
+        line(".Big_Crazy_Pickle", floodgateUuid(xuid), "bedrock"),
+        line(".Big_Crazy_Pickle", floodgateUuid(xuid), "bedrock"),
+        "not json",
+        line("Stranger_1", javaUuid, "java"),
+        "",
+      ].join("\n"),
+    );
+    await report(dispatchServer, knockFile);
+    expect(await live.live(viewer, org, dispatchServer)).toMatchObject({
+      power: "on",
+      fresh: true,
+      online: 2,
+      max_players: 5,
+      players: ["Alex", ".Charlie"],
+    });
+    // A node may report only for a server bound to it.
+    await expect(report(otherServer)).rejects.toMatchObject({ status: 403 });
+    const asking = (await live.knocks(adult, org, dispatchServer)).items;
+    expect(asking.map((k) => [k.name, k.edition, k.attempts])).toEqual(
+      expect.arrayContaining([
+        [".Big_Crazy_Pickle", "bedrock", 2],
+        ["Stranger_1", "java", 1],
+      ]),
+    );
+    expect(asking.every((k) => k.can_decide)).toBe(true);
+    expect(JSON.stringify(asking)).not.toContain(xuid);
+    const seen = (await live.knocks(viewer, org, dispatchServer)).items;
+    expect(seen).toHaveLength(2);
+    expect(seen.some((k) => k.can_decide)).toBe(false);
+    const pickle = asking.find((k) => k.edition === "bedrock"),
+      stranger = asking.find((k) => k.edition === "java");
+    if (!pickle || !stranger) throw new Error("Knocks missing");
+    for (const who of [viewer, child, agentToken])
+      await expect(
+        live.allowKnock(who, org, pickle.id, randomUUID()),
+      ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      live.ignoreKnock(viewer, org, stranger.id),
+    ).rejects.toMatchObject({ status: 403 });
+    const key = randomUUID(),
+      allowed = await live.allowKnock(adult, org, pickle.id, key);
+    expect(allowed.knock).toMatchObject({
+      state: "allowed",
+      can_decide: false,
+    });
+    // The same tap again is the same action, not a second one.
+    expect(
+      (await live.allowKnock(adult, org, pickle.id, key)).action.action_id,
+    ).toBe(allowed.action.action_id);
+    expect(await worker.tick()).toBe(true);
+    expect(
+      await actions.get(adult, org, allowed.action.action_id),
+    ).toMatchObject({
+      state: "succeeded",
+      request: {
+        kind: "allow_player",
+        player: { edition: "bedrock", gamertag: "Big Crazy Pickle", xuid },
+      },
+    });
+    // The proven account, derived from the account id itself, is what was let in.
+    expect(whitelist.entries.map((e) => e.uuid)).toContain(floodgateUuid(xuid));
+    expect(await live.ignoreKnock(adult, org, stranger.id)).toMatchObject({
+      state: "ignored",
+    });
+    await expect(
+      live.allowKnock(adult, org, stranger.id, randomUUID()),
+    ).rejects.toMatchObject({ code: "KNOCK_DECIDED" });
+    // The same refusals reported again reopen nothing.
+    await report(dispatchServer, knockFile);
+    expect((await live.knocks(adult, org, dispatchServer)).items).toEqual([]);
+    // Knocks are kept: the runtime role can neither delete nor re-identify one.
+    await expect(
+      tx(runtime, (c) => c.query("delete from minecraft_server_knocks")),
+    ).rejects.toMatchObject({ code: "42501" });
+    await expect(
+      tx(runtime, (c) =>
+        c.query("update minecraft_server_knocks set xuid='1' where id=$1", [
+          pickle.id,
+        ]),
+      ),
+    ).rejects.toMatchObject({ code: "23514" });
+    const audit = await auth.listAudit(adult, org);
+    expect(audit.map((a) => a.action)).toEqual(
+      expect.arrayContaining(["server.knock_allowed", "server.knock_ignored"]),
+    );
+    // Without a recent report the last known state is marked as not current.
+    now += 60000;
+    expect(await live.live(adult, org, dispatchServer)).toMatchObject({
+      power: "on",
+      fresh: false,
+    });
+    now = Date.now();
+  });
+  it("turns the server off and on through the host and says only what it saw", async () => {
+    const engine: string[] = [];
+    channel.power = {
+      running: async () => serverUp,
+      start: async () => {
+        engine.push("start");
+        serverUp = true;
+      },
+      stop: async () => {
+        engine.push("stop");
+        serverUp = false;
+      },
+    };
+    try {
+      sent = [];
+      const stop = await ask({ kind: "stop" });
+      expect(await worker.tick()).toBe(true);
+      expect(await actions.get(adult, org, stop)).toMatchObject({
+        state: "succeeded",
+        evidence: { ok: true, evidence: "Saved the world. Stopped." },
+      });
+      expect(sent).toEqual(["save-all flush"]);
+      await report();
+      expect(await live.live(adult, org, dispatchServer)).toMatchObject({
+        power: "off",
+        players: null,
+        online: null,
+      });
+      const again = await ask({ kind: "stop" });
+      await worker.tick();
+      expect((await actions.get(adult, org, again)).evidence?.evidence).toBe(
+        "Already off.",
+      );
+      const start = await ask({ kind: "start" });
+      await worker.tick();
+      const started = await actions.get(adult, org, start);
+      expect(started.state).toBe("succeeded");
+      expect(started.evidence?.evidence).toMatch(
+        /^Started; the server answered/,
+      );
+      const restart = await ask({ kind: "restart" });
+      await worker.tick();
+      expect(
+        (await actions.get(adult, org, restart)).evidence?.evidence,
+      ).toMatch(/^Saved the world\. Stopped\. Started; /);
+      expect(engine).toEqual(["stop", "start", "stop", "start"]);
+      // A server that starts but never answers is not called on.
+      channel.power.start = async () => {
+        engine.push("start");
+      };
+      serverUp = false;
+      const stuck = await ask({ kind: "start" });
+      await worker.tick();
+      expect(await actions.get(adult, org, stuck)).toMatchObject({
+        state: "failed",
+        failure_code: "not_verified",
+        evidence: { evidence: "The server did not stay on." },
+      });
+    } finally {
+      delete channel.power;
+      serverUp = true;
+    }
   });
   it("answers a power action truthfully and stops serving a released server", async () => {
     runs = [];

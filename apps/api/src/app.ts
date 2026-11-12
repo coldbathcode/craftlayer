@@ -28,6 +28,10 @@ import {
   registerServerActions,
   type ServerActionApi,
 } from "./server-action-routes.js";
+import {
+  registerServerLive,
+  type ServerLiveApi,
+} from "./server-live-routes.js";
 export async function buildApp(options: {
   readiness: () => Promise<boolean>;
   logger?: FastifyBaseLogger;
@@ -37,6 +41,7 @@ export async function buildApp(options: {
   minecraft?: MinecraftApi;
   backups?: BackupApi;
   actions?: ServerActionApi;
+  live?: ServerLiveApi;
   agentRequests?: AgentRequestApi;
   nodes?: NodeApi;
   deployments?: DeploymentApi;
@@ -193,6 +198,7 @@ export async function buildApp(options: {
     await registerBackups(app, options.backups);
   if (options.actions && options.auth)
     await registerServerActions(app, options.actions);
+  if (options.live && options.auth) await registerServerLive(app, options.live);
   if (options.agentRequests && options.auth)
     await registerAgentRequests(app, options.agentRequests);
   if (options.minecraft && options.auth)

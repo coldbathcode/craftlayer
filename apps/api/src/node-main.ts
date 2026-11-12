@@ -8,6 +8,8 @@ import {
   BackupRecords,
   NodeControl,
   ServerActions,
+  ServerLive,
+  StatusDispatch,
 } from "@craftlayer/minecraft-control";
 import {
   privateNodeAddress,
@@ -36,6 +38,8 @@ try {
   // Server-action dispatch is off unless the operator turns it on for this gateway.
   const dispatching = process.env.CRAFTLAYER_NODE_ACTIONS === "enabled";
   const actions = dispatching ? new ServerActions({ databaseUrl: url }) : null;
+  // A node that may act on a server may also say what it sees of it.
+  const live = dispatching ? new ServerLive({ databaseUrl: url }) : null;
   // Backups by a bound node are a separate switch: they read the whole world.
   const backingUp = process.env.CRAFTLAYER_NODE_BACKUPS === "enabled";
   const backups = backingUp ? new BackupRecords({ databaseUrl: url }) : null;
@@ -44,6 +48,7 @@ try {
     ...(actions
       ? { actions: new ActionDispatch({ nodes: control, actions }) }
       : {}),
+    ...(live ? { status: new StatusDispatch({ nodes: control, live }) } : {}),
     ...(backups
       ? { backups: new BackupDispatch({ nodes: control, backups }) }
       : {}),
@@ -54,6 +59,7 @@ try {
   close = async () => {
     await app.close();
     await actions?.close();
+    await live?.close();
     await backups?.close();
     await control.close();
   };

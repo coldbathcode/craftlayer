@@ -50,9 +50,13 @@ The gateway serves the node's `POST /node/v1/actions/poll` and `/node/v1/actions
   "rcon_host": "<private address or name on the internal control network>",
   "rcon_port": 25575,
   "rcon_password_file": "/run/craftlayer-node/rcon.password",
-  "whitelist_file": "/srv/game/data/whitelist.json"
+  "whitelist_file": "/srv/game/data/whitelist.json",
+  "knock_file": "/srv/game/data/plugins/CraftLayerKnock/knocks.jsonl",
+  "container": { "compose_project": "<project>", "compose_service": "<service>" }
 }]
 ```
+
+`knock_file` and `container` are optional. Without `knock_file` nobody is ever shown as asking to join; without `container` the host cannot turn the server on or off and cannot tell "off" from "not answering".
 
 `infra/compose/game-control.yml` joins the gateway to an internal Docker network the game server also joins and mounts the server's data directory into the agent. The agent asks for work every two seconds, journals each action before running it and reports the server's own words.
 
@@ -64,13 +68,33 @@ What a failed action means:
 | `not_verified` | The server answered but the expected result was not seen afterwards; check the listing |
 | `refused_by_server` | The server rejected the request |
 | `interrupted` | The host restarted mid-action, the allowlist changed underneath it, or the offer was stale; the outcome may be unknown |
-| `node_unavailable` | This host cannot do that yet (turning the server on, off or restarting) |
+| `node_unavailable` | This host has no `container` configured for the server, or could not reach its container engine |
 
 ```bash
 pnpm exec vitest run apps/minecraft-node/src/action-worker.test.ts   # journal, worker, runner
 pnpm test:db                                                          # binding, dispatch over real mTLS, refusals
 ```
 
+## Live status and asking to join
+
+Built 2026-11-12 ([ADR 0046](../architecture/decisions/0046-live-status-and-knocks.md)). The host reports each configured server every ten seconds.
+
+| Call | Effect |
+| --- | --- |
+| `GET /api/v1/servers/{id}/live` | `power` (`on`, `off`, `starting`, `unknown`), player names and counts as the server itself reported them, `reported_at`, and `fresh` (false when the last report is older than 45 seconds or no host is bound) (`server:read`) |
+| `GET /api/v1/servers/{id}/knocks` | Accounts refused in the last 24 hours that nobody has decided; no account numbers (`server:read`) |
+| `POST /api/v1/server-knocks/{id}/allow` | Adults with `player:manage`; needs an `Idempotency-Key`. Creates the ordinary `allow_player` action for exactly the refused account |
+| `POST /api/v1/server-knocks/{id}/ignore` | Adults with `player:manage`. The account asks again only if refused again more than a day later |
+
+## Turning on, off and restarting
+
+Built 2026-11-12 ([ADR 0047](../architecture/decisions/0047-node-power.md)). `start`, `stop` and `restart` are ordinary actions (`server:control`). The host saves the world, stops the one configured container and checks that it stopped; on start it waits up to three minutes for the server to answer. The evidence lists only what the host observed. A power action is refused while other actions are open for the server.
+
+```bash
+pnpm exec vitest run apps/minecraft-node/src/lifecycle.test.ts apps/minecraft-node/src/status-reporter.test.ts
+pnpm test:db   # live status, knocks and power over real mTLS with a scripted server
+```
+
 ## Not yet
 
-Turning the server on, off and restarting from the host (A3), live player lists from the host, route aliases (`/allowlist`, `/kick`, `/start`) and the family dashboard buttons (B2).
+Route aliases (`/allowlist`, `/kick`, `/start`) and a phone notification when someone asks to join. None of this is switched on for the family VPS until the owner steps on the [status board](../plan/STATUS.md) are done.

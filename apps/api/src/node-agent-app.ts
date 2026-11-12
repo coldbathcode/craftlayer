@@ -19,12 +19,15 @@ import {
   signedNodePollResponse,
   signedNodeRequest,
   signedNodeResponse,
+  signedNodeStatusReportRequest,
+  signedNodeStatusReportResponse,
 } from "@craftlayer/contracts";
 import type {
   ActionDispatch,
   BackupDispatch,
   DeploymentJobs,
   NodeControl,
+  StatusDispatch,
 } from "@craftlayer/minecraft-control";
 import { certificateHash } from "@craftlayer/node-protocol";
 import Fastify from "fastify";
@@ -41,6 +44,8 @@ export async function buildNodeAgentApp(options: {
   actions?: Pick<ActionDispatch, "poll" | "result">;
   /** Backups taken by a bound node; absent unless the operator enables it. */
   backups?: Pick<BackupDispatch, "poll" | "result">;
+  /** Live status and knocks reported by a bound node; follows the actions switch. */
+  status?: Pick<StatusDispatch, "report">;
   key: Buffer | string;
   cert: Buffer | string;
   ca: Buffer | string;
@@ -100,6 +105,18 @@ export async function buildNodeAgentApp(options: {
       certificate_expires_at: Date.parse(new X509Certificate(cert.raw).validTo),
     };
   }
+  const status = options.status;
+  if (status)
+    app.post(
+      "/node/v1/status/report",
+      {
+        schema: {
+          body: signedNodeStatusReportRequest,
+          response: { 200: signedNodeStatusReportResponse },
+        },
+      },
+      (r) => status.report(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
   const jobs = options.jobs;
   if (jobs) {
     app.post(

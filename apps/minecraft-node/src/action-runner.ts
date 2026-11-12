@@ -14,6 +14,11 @@ import {
   type RconSession,
   type WhitelistStore,
 } from "./game-control/index.js";
+import {
+  containerTarget,
+  DockerPower,
+  type PowerControl,
+} from "./lifecycle.js";
 
 /** One game server this node holds a private control channel for. Written by the
  * operator into the agent's read-only configuration; callers never choose any of it. */
@@ -32,16 +37,28 @@ export const gameServerConfig = z.strictObject({
    * agent sees it, and a separate protected directory that receives the archives. */
   data_directory: z.string().startsWith("/").optional(),
   backup_directory: z.string().startsWith("/").optional(),
+  /** Asking to join (ADR 0037): the Knock plugin's file as this agent sees it. */
+  knock_file: z.string().startsWith("/").endsWith("/knocks.jsonl").optional(),
+  /** Turning on and off (ADR 0047): the one container that is this server. */
+  container: containerTarget.optional(),
 });
 export type GameServerConfig = z.infer<typeof gameServerConfig>;
 export interface GameChannel {
   open(): Promise<RconSession>;
   whitelist: WhitelistStore;
   options: { floodgatePrefix?: string; replaceSpaces?: boolean };
+  /** Present only when the operator named this server's container. */
+  power?: PowerControl;
 }
 /** The real channel: RCON on a private address only, password read at use and never kept. */
-export function gameChannel(config: GameServerConfig): GameChannel {
+export function gameChannel(
+  config: GameServerConfig,
+  dockerSocket?: string,
+): GameChannel {
   return {
+    ...(config.container && dockerSocket
+      ? { power: new DockerPower(dockerSocket, config.container) }
+      : {}),
     async open() {
       const { address } = await lookup(config.rcon_host).catch(() => {
         throw new RconError("RCON_UNREACHABLE");
@@ -73,6 +90,136 @@ const flat = (detail: Record<string, unknown>) =>
         ["string", "number", "boolean"].includes(typeof entry[1]),
     ),
   );
+export interface LifecycleTiming {
+  /** How long a started server may take to answer. */
+  readyMs?: number;
+  pollMs?: number;
+  sleep?(ms: number): Promise<void>;
+}
+async function answers(channel: GameChannel) {
+  let session: RconSession | undefined;
+  try {
+    session = await channel.open();
+    await new GameActions(
+      session,
+      channel.whitelist,
+      channel.options,
+    ).players();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await session?.close().catch(() => {});
+  }
+}
+/**
+ * Turning the server on, off, or off and on again (master plan A3, ADR 0047). Off
+ * saves the world through the control channel first, then asks the engine to stop the
+ * container and checks that it stopped. On starts it and waits until the server itself
+ * answers. Each claim in the evidence is something this function observed.
+ */
+async function runLifecycle(
+  kind: "start" | "stop" | "restart",
+  channel: GameChannel,
+  timing: LifecycleTiming,
+): Promise<ActionSettlement> {
+  const power = channel.power;
+  if (!power)
+    return {
+      outcome: {
+        ok: false,
+        evidence: "This host cannot turn the server on or off yet.",
+      },
+      failure: "node_unavailable",
+    };
+  const sleep =
+      timing.sleep ??
+      ((ms: number) => new Promise<void>((r) => setTimeout(r, ms))),
+    readyMs = timing.readyMs ?? 180_000,
+    pollMs = timing.pollMs ?? 3000,
+    steps: string[] = [];
+  const fail = (
+    evidence: string,
+    failure: ActionSettlement["failure"],
+  ): ActionSettlement => ({
+    outcome: { ok: false, evidence: [...steps, evidence].join(" ") },
+    failure,
+  });
+  try {
+    if (kind !== "start") {
+      if (await power.running()) {
+        let session: RconSession | undefined;
+        try {
+          session = await channel.open();
+          const saved = await new GameActions(
+            session,
+            channel.whitelist,
+            channel.options,
+          ).saveAll();
+          steps.push(
+            saved.ok
+              ? "Saved the world."
+              : "The server did not confirm a save.",
+          );
+        } catch {
+          steps.push(
+            "The control channel did not answer; no save was confirmed.",
+          );
+        } finally {
+          await session?.close().catch(() => {});
+        }
+        await power.stop();
+        if (await power.running())
+          return fail("The server is still on.", "not_verified");
+        steps.push("Stopped.");
+      } else steps.push("Already off.");
+      if (kind === "stop")
+        return {
+          outcome: {
+            ok: true,
+            evidence: steps.join(" "),
+            detail: { power: "off" },
+          },
+          failure: null,
+        };
+    }
+    if ((await power.running()) && (await answers(channel)))
+      steps.push("Already on.");
+    else {
+      await power.start();
+      const started = Date.now();
+      let waited = 0,
+        ready = false;
+      while (waited <= readyMs) {
+        if (await answers(channel)) {
+          ready = true;
+          break;
+        }
+        await sleep(pollMs);
+        waited += pollMs;
+      }
+      if (!ready)
+        return fail(
+          (await power.running())
+            ? "Started, but the server has not answered yet."
+            : "The server did not stay on.",
+          "not_verified",
+        );
+      steps.push(
+        `Started; the server answered after ${Math.max(1, Math.round((Date.now() - started) / 1000))} seconds.`,
+      );
+    }
+    return {
+      outcome: { ok: true, evidence: steps.join(" "), detail: { power: "on" } },
+      failure: null,
+    };
+  } catch {
+    return fail(
+      "The host could not reach its container engine; check the server before trying again.",
+      "node_unavailable",
+    );
+  }
+}
 /**
  * Runs exactly one offered action through the typed game-control library and returns
  * the server's own words. Nothing here builds console text from caller input: the
@@ -83,6 +230,7 @@ export async function runServerAction(
   offer: NodeActionOffer,
   channel: GameChannel,
   now = Date.now(),
+  timing: LifecycleTiming = {},
 ): Promise<ActionSettlement> {
   const request = offer.request;
   if (Date.parse(offer.expires_at) <= now)
@@ -95,13 +243,7 @@ export async function runServerAction(
     request.kind === "stop" ||
     request.kind === "restart"
   )
-    return {
-      outcome: {
-        ok: false,
-        evidence: "This host cannot turn the server on or off yet.",
-      },
-      failure: "node_unavailable",
-    };
+    return runLifecycle(request.kind, channel, timing);
   let session: RconSession | undefined;
   try {
     session = await channel.open();

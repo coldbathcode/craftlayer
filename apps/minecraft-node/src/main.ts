@@ -26,6 +26,7 @@ import { BackupWorker } from "./backup-worker.js";
 import { NodeTransport, NodeTransportFailure } from "./client.js";
 import { DockerInventory } from "./docker.js";
 import { NodeJournal } from "./journal.js";
+import { readStatus } from "./status-reporter.js";
 
 const [command, path, certificate, ...extra] = process.argv.slice(2);
 try {
@@ -112,7 +113,10 @@ try {
     const games = config.game_servers ?? [];
     if (new Set(games.map((g) => g.server_id)).size !== games.length)
       throw new Error("NODE_GAME_SERVERS_DUPLICATED");
-    const channels = new Map(games.map((g) => [g.server_id, gameChannel(g)]));
+    const channels = new Map(
+      games.map((g) => [g.server_id, gameChannel(g, config.docker_socket)]),
+    );
+    const power = games.some((g) => g.container);
     const worker = games.length
       ? new ActionWorker({
           serverIds: games.map((g) => g.server_id),
@@ -188,6 +192,7 @@ try {
       backoff = 1000,
       heartbeatDue = 0,
       actionsDue = 0,
+      statusDue = 0,
       backupsDue = 0;
     const wait = async (ms: number) => {
       for (let elapsed = 0; elapsed < ms && !stopped; elapsed += 100)
@@ -213,7 +218,7 @@ try {
             enrolled = true;
             console.log(
               worker
-                ? `NODE_ACTIVE: inventory${backups ? ", backups" : ""} and typed game actions for configured servers; no Docker mutation capability`
+                ? `NODE_ACTIVE: inventory${backups ? ", backups" : ""} and typed game actions for configured servers; ${power ? "start and stop of the configured game container only" : "no Docker mutation capability"}`
                 : "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
             );
           }
@@ -243,6 +248,32 @@ try {
                 throw e;
               console.error("NODE_ACTIONS_NOT_OFFERED; asking again later");
               actionsDue = Date.now() + 60000;
+            }
+          }
+          if (games.length && Date.now() >= statusDue) {
+            statusDue = Date.now() + 10000;
+            try {
+              for (const g of games) {
+                const channel = channels.get(g.server_id);
+                if (!channel || stopped) continue;
+                await transport.statusReport({
+                  ...base(),
+                  purpose: "node.status.report.v1",
+                  sequence: await journal.next(),
+                  server_id: g.server_id,
+                  ...(await readStatus(channel, g.knock_file)),
+                });
+              }
+            } catch (e) {
+              // 404: a gateway without live status. 403: this server is not bound to
+              // this node yet. Either way keep working and say so again later.
+              if (
+                !(e instanceof NodeTransportFailure) ||
+                (e.status !== 404 && e.status !== 403)
+              )
+                throw e;
+              console.error("NODE_STATUS_NOT_ACCEPTED; reporting again later");
+              statusDue = Date.now() + 60000;
             }
           }
           if (backups && Date.now() >= backupsDue) {

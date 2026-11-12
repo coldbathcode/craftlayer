@@ -14,6 +14,7 @@ import {
   MinecraftControl,
   NodeControl,
   ServerActions,
+  ServerLive,
 } from "@craftlayer/minecraft-control";
 import { ProviderFiles, ProviderGateway } from "@craftlayer/providers";
 import { RuntimeService, redisPublisher } from "@craftlayer/runtime";
@@ -82,6 +83,11 @@ try {
   });
   const backups = new BackupRecords({ databaseUrl: config.DATABASE_URL, auth });
   const actions = new ServerActions({ databaseUrl: config.DATABASE_URL, auth });
+  const live = new ServerLive({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    actions,
+  });
   const agentRequests = new AgentRequests({
     databaseUrl: config.DATABASE_URL,
     auth,
@@ -167,6 +173,7 @@ try {
     minecraft,
     backups,
     actions,
+    live,
     agentRequests,
     nodes,
     deployments,
