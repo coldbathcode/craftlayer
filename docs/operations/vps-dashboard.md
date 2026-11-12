@@ -38,7 +38,7 @@ To roll back the stack update: retag the `pre-a2` images as `latest`, restore th
 
 ## Nightly backups (master plan D1)
 
-Status 2026-11-12: built and verified locally ([ADR 0045](../architecture/decisions/0045-node-backups.md)); **not deployed**. Needs the helper live (steps 2–4 above) and the owner's approval for one more CraftLayer-only stack update.
+Status 2026-11-12: built and verified locally ([ADR 0045](../architecture/decisions/0045-node-backups.md)); the code and migration 0034 are on the VPS at `d7bbb6d` but backups are **off** (no backup folder, switch unset). Needs the helper live (steps 2–4 above) and the owner's approval for one more CraftLayer-only stack update.
 
 1. **Owner approval, then operator:** create a backup folder on the VPS outside the game data directory (owner-only, mode `0700`), update the checkout, add `infra/compose/game-backups.yml` and `CRAFTLAYER_GAME_BACKUP_DIR` to `.env`, add `data_directory` and `backup_directory` to the helper's private configuration, rebuild and `up -d`. Migration 0034 is additive. The game server is not restarted.
 2. **Owner:** choose the backup time (the policy). Until the dashboard has the control (B2) the operator sets it through the API on the owner's behalf.
