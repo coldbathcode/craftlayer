@@ -8,6 +8,13 @@ import {
   protectedNodeFile,
 } from "@craftlayer/node-protocol";
 import { z } from "zod";
+import { ActionJournal } from "./action-journal.js";
+import {
+  gameChannel,
+  gameServerConfig,
+  runServerAction,
+} from "./action-runner.js";
+import { ActionWorker } from "./action-worker.js";
 import { NodeTransport, NodeTransportFailure } from "./client.js";
 import { DockerInventory } from "./docker.js";
 import { NodeJournal } from "./journal.js";
@@ -49,6 +56,8 @@ try {
         signing_key_file: z.string(),
         journal_directory: z.string().startsWith("/"),
         docker_socket: z.string().startsWith("/"),
+        /** Game servers this node may act on through a private control channel. */
+        game_servers: z.array(gameServerConfig).max(8).optional(),
       })
       .parse(JSON.parse(await protectedNodeFile(path)));
     const [ca, cert, key, privateKey] = await Promise.all(
@@ -92,8 +101,40 @@ try {
         ...nodeTimeWindow(),
       };
     };
+    const games = config.game_servers ?? [];
+    if (new Set(games.map((g) => g.server_id)).size !== games.length)
+      throw new Error("NODE_GAME_SERVERS_DUPLICATED");
+    const channels = new Map(games.map((g) => [g.server_id, gameChannel(g)]));
+    const worker = games.length
+      ? new ActionWorker({
+          serverIds: games.map((g) => g.server_id),
+          journal: new ActionJournal(config.journal_directory, config.node_id),
+          poll: async (server_ids) =>
+            transport.actionPoll({
+              ...base(),
+              purpose: "node.actions.poll.v1",
+              sequence: await journal.next(),
+              server_ids,
+            }),
+          report: async (result) =>
+            transport.actionResult({
+              ...base(),
+              purpose: "node.actions.result.v1",
+              sequence: await journal.next(),
+              ...result,
+            }),
+          run: (offer) => {
+            const channel = channels.get(offer.server_id);
+            if (!channel) throw new Error("NODE_GAME_SERVER_UNKNOWN");
+            return runServerAction(offer, channel);
+          },
+          log: (code) => console.error(`${code}; values omitted`),
+        })
+      : null;
     let enrolled = false,
-      backoff = 1000;
+      backoff = 1000,
+      heartbeatDue = 0,
+      actionsDue = 0;
     const wait = async (ms: number) => {
       for (let elapsed = 0; elapsed < ms && !stopped; elapsed += 100)
         await new Promise((done) => setTimeout(done, 100));
@@ -117,23 +158,41 @@ try {
             }
             enrolled = true;
             console.log(
-              "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
+              worker
+                ? "NODE_ACTIVE: inventory and typed game actions for configured servers; no Docker mutation capability"
+                : "NODE_ACTIVE: inventory-only; no game or Docker mutation capability",
             );
           }
-          let capacity = null;
-          try {
-            capacity = await inventory.read();
-          } catch {
-            console.error("NODE_INVENTORY_UNAVAILABLE; values omitted");
+          if (Date.now() >= heartbeatDue) {
+            let capacity = null;
+            try {
+              capacity = await inventory.read();
+            } catch {
+              console.error("NODE_INVENTORY_UNAVAILABLE; values omitted");
+            }
+            await transport.send({
+              ...base(),
+              purpose: "node.heartbeat.v1",
+              sequence: await journal.next(),
+              capacity,
+            });
+            heartbeatDue = Date.now() + 10000;
           }
-          await transport.send({
-            ...base(),
-            purpose: "node.heartbeat.v1",
-            sequence: await journal.next(),
-            capacity,
-          });
+          if (worker && Date.now() >= actionsDue) {
+            try {
+              // Work through a short burst, then yield to the heartbeat.
+              for (let i = 0; i < 4 && !stopped && (await worker.tick()); i++);
+            } catch (e) {
+              // A gateway without action dispatch answers 404: keep the inventory link
+              // and ask again later rather than stopping the agent.
+              if (!(e instanceof NodeTransportFailure) || e.status !== 404)
+                throw e;
+              console.error("NODE_ACTIONS_NOT_OFFERED; asking again later");
+              actionsDue = Date.now() + 60000;
+            }
+          }
           backoff = 1000;
-          await wait(10000);
+          await wait(worker ? 2000 : 10000);
         } catch (e) {
           if (!(e instanceof NodeTransportFailure) || !e.retryable) throw e;
           console.error("NODE_LINK_UNAVAILABLE: bounded retry; values omitted");

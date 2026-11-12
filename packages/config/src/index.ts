@@ -41,6 +41,12 @@ const schema = z
       .string()
       .regex(/^[A-Za-z0-9_-]{59}$/)
       .optional(),
+    CRAFTLAYER_NODE_CREDENTIAL_DAYS: z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(400)
+      .optional(),
     CRAFTLAYER_MINECRAFT_INVENTORY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_KEY_FILE: z.string().startsWith("/").optional(),
     CRAFTLAYER_PROVIDER_POLICY_FILE: z.string().startsWith("/").optional(),

@@ -1,0 +1,21 @@
+# Optional private game-control channel for the node agent (ADR 0044). The gateway joins an
+# internal, operator-created Docker network that the game server also joins; the agent
+# shares the gateway's network namespace, so it alone can reach the server's RCON port.
+# Nothing here publishes a port. The network must already exist:
+#   docker network create --internal craftlayer-game-control
+services:
+  node-control:
+    networks: [game-control]
+    environment:
+      CRAFTLAYER_NODE_ACTIONS: ${CRAFTLAYER_NODE_ACTIONS:-enabled}
+  node-agent:
+    volumes:
+      # The server's data directory: the agent edits whitelist.json in place (atomic
+      # rename), so it needs the directory, not just the file.
+      - type: bind
+        source: ${CRAFTLAYER_GAME_DATA_DIR:?Choose the game server data directory}
+        target: /srv/game/data
+networks:
+  game-control:
+    external: true
+    name: ${CRAFTLAYER_GAME_CONTROL_NETWORK:-craftlayer-game-control}

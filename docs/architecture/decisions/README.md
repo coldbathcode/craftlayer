@@ -72,3 +72,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0041 — Agents ask, adults approve](0041-agent-requests.md).
 - [0042 — Two-factor sign-in for adults](0042-two-factor-sign-in.md).
 - [0043 — Single-host node transport for the family VPS](0043-single-host-node-transport.md).
+- [0044 — Server actions travel to a bound node over the private transport](0044-server-action-dispatch.md).

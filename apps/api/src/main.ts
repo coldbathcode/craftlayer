@@ -93,6 +93,9 @@ try {
     ...(config.CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY
       ? { controlPublicKey: config.CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY }
       : {}),
+    ...(config.CRAFTLAYER_NODE_CREDENTIAL_DAYS
+      ? { credentialDays: config.CRAFTLAYER_NODE_CREDENTIAL_DAYS }
+      : {}),
   });
   let scheduling = false;
   const publish = redisPublisher(config.REDIS_URL);

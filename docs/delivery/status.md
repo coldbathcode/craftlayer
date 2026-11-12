@@ -1,8 +1,12 @@
 # Current delivery status
 
-Last updated: 2026-11-08.
+Last updated: 2026-11-12.
 
 **The [master plan](../MASTER_PLAN.md) now sets order and user outcome; its [status board](../plan/STATUS.md) is the quick view of where everything stands.** This file keeps the detailed engineering checkpoint history.
+
+## Master plan A2 (dispatch) — 2026-11-12
+
+Added migration 0033 (`minecraft_server_nodes` bindings, `node_id` on server actions set once at dispatch, node credential ceiling 400 days), signed action poll/result purposes on the node transport, `NodeControl.admit`, `ServerActions.bindNode`/`claimForNode`/`recordNodeResult`, the gateway `ActionDispatch` service (off unless `CRAFTLAYER_NODE_ACTIONS=enabled`), `/api/v1/servers/{id}/node`, a Hosts-page binding panel, and the agent's action journal, runner and worker. `pnpm check` PASS/0 (459 cases); `pnpm test:db` PASS/0 (240 cases/10 files). Allow, remove, kick, message and save now reach a bound node and return the server's own words; power actions are answered as unavailable; nothing is dispatched under an emergency stop. Not yet: a real server through this path, live player lists from the node, lifecycle actions. See [ADR 0044](../architecture/decisions/0044-server-action-dispatch.md) and the [runbook](../development/server-actions.md).
 
 ## Master plan A1 (two-factor) — 2026-11-08
 

@@ -1038,6 +1038,7 @@ export class MinecraftControl {
   }
 }
 
+export { ActionDispatch } from "./action-dispatch.js";
 export { AgentRequests } from "./agent-requests.js";
 export { BackupRecords } from "./backup-records.js";
 export {
@@ -1064,7 +1065,7 @@ export {
   normalizeAuthenticatedIdentity,
 } from "./identity-policy.js";
 export { InventoryFileSource } from "./inventory.js";
-export { NodeControl } from "./nodes.js";
+export { NodeControl, type NodeProof } from "./nodes.js";
 export { calculateProvisionPlan, familyTemplate } from "./provisioning.js";
 export { RemoteDeploymentAuthorizer } from "./remote-authorizer.js";
 export {

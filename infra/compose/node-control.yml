@@ -3,6 +3,7 @@ services:
   api:
     environment:
       CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY: ${CRAFTLAYER_NODE_CONTROL_PUBLIC_KEY:?Configure the control signing public key}
+      CRAFTLAYER_NODE_CREDENTIAL_DAYS: ${CRAFTLAYER_NODE_CREDENTIAL_DAYS:-1}
   node-control:
     networks: [default, edge]
     build: { context: ., dockerfile: infra/images/Dockerfile, target: api }
@@ -20,6 +21,7 @@ services:
       DATABASE_URL: postgres://craftlayer_runtime:${RUNTIME_PASSWORD:?Configure local credentials}@postgres:5432/craftlayer
       CRAFTLAYER_NODE_TLS_DIRECTORY: /run/secrets/node-control
       CRAFTLAYER_NODE_BIND_HOST: container-private
+      CRAFTLAYER_NODE_ACTIONS: ${CRAFTLAYER_NODE_ACTIONS:-disabled}
     ports: ["127.0.0.1:${CRAFTLAYER_NODE_HTTP_PORT:-9443}:9443"]
     volumes:
       - type: bind
@@ -45,7 +47,7 @@ services:
           CMD,
           node,
           -e,
-          'const s=require("net").connect(9443,require("os").hostname());s.setTimeout(2000);s.once("connect",()=>{s.end();process.exit(0)});s.once("error",()=>process.exit(1));s.once("timeout",()=>process.exit(1));',
+          'const s=require("net").connect(9443,"127.0.0.1");s.setTimeout(2000);s.once("connect",()=>{s.end();process.exit(0)});s.once("error",()=>process.exit(1));s.once("timeout",()=>process.exit(1));',
         ]
       interval: 5s
       timeout: 3s

@@ -3,6 +3,10 @@ import { TLSSocket } from "node:tls";
 import { AuthError } from "@craftlayer/auth";
 import {
   deploymentJobView,
+  signedNodeActionPollRequest,
+  signedNodeActionPollResponse,
+  signedNodeActionResultRequest,
+  signedNodeActionResultResponse,
   signedNodeCommand,
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
@@ -13,6 +17,7 @@ import {
   signedNodeResponse,
 } from "@craftlayer/contracts";
 import type {
+  ActionDispatch,
   DeploymentJobs,
   NodeControl,
 } from "@craftlayer/minecraft-control";
@@ -27,6 +32,8 @@ import {
 export async function buildNodeAgentApp(options: {
   control: Pick<NodeControl, "exchange">;
   jobs?: Pick<DeploymentJobs, "exchange" | "recordReceipt" | "poll">;
+  /** Typed server-action dispatch; absent unless the operator enables it. */
+  actions?: Pick<ActionDispatch, "poll" | "result">;
   key: Buffer | string;
   cert: Buffer | string;
   ca: Buffer | string;
@@ -127,6 +134,29 @@ export async function buildNodeAgentApp(options: {
         },
       },
       (r) => jobs.recordReceipt(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+  }
+  const actions = options.actions;
+  if (actions) {
+    app.post(
+      "/node/v1/actions/poll",
+      {
+        schema: {
+          body: signedNodeActionPollRequest,
+          response: { 200: signedNodeActionPollResponse },
+        },
+      },
+      (r) => actions.poll(r.body, peer(r.raw.socket, r.headers.cookie)),
+    );
+    app.post(
+      "/node/v1/actions/result",
+      {
+        schema: {
+          body: signedNodeActionResultRequest,
+          response: { 200: signedNodeActionResultResponse },
+        },
+      },
+      (r) => actions.result(r.body, peer(r.raw.socket, r.headers.cookie)),
     );
   }
   for (const [path, purpose] of [

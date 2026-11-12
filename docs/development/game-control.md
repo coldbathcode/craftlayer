@@ -1,6 +1,6 @@
 # Game control library (node agent)
 
-Status: built and verified locally against a real pinned Paper server on 2026-11-08 (master plan [A2](../plan/A-live-connection.md), library part). Not installed on the VPS; no API, UI or MCP action calls it yet. Design: [ADR 0036](../architecture/decisions/0036-game-control-channel.md).
+Status: built and verified locally against a real pinned Paper server on 2026-11-08 (master plan [A2](../plan/A-live-connection.md), library part). Server actions now reach it through node dispatch ([ADR 0044](../architecture/decisions/0044-server-action-dispatch.md)). Design: [ADR 0036](../architecture/decisions/0036-game-control-channel.md).
 
 ## What it is
 

@@ -5,6 +5,8 @@ import {
   serverActionPage,
   serverActionRequest,
   serverActionView,
+  serverNodeBinding,
+  serverNodeBindingRequest,
 } from "@craftlayer/contracts";
 import type { ServerActions } from "@craftlayer/minecraft-control";
 import type { FastifyInstance, FastifyRequest } from "fastify";
@@ -12,11 +14,17 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requestToken } from "./auth-routes.js";
 
-/** Only request, read and cancel are routed. Dispatch and result recording belong to
- * the node path and have no HTTP surface by design. */
+/** Request, read, cancel and the choice of executing host are routed. Dispatch and
+ * result recording belong to the node path and have no HTTP surface by design. */
 export type ServerActionApi = Pick<
   ServerActions,
-  "request" | "list" | "get" | "cancel"
+  | "request"
+  | "list"
+  | "get"
+  | "cancel"
+  | "nodeBinding"
+  | "bindNode"
+  | "unbindNode"
 >;
 export async function registerServerActions(
   app: FastifyInstance,
@@ -75,6 +83,27 @@ export async function registerServerActions(
     "/api/v1/servers/:id/actions",
     { schema: { params, response: { 200: serverActionPage, ...errors } } },
     (r) => actions.list(token(r), org(r), r.params.id),
+  );
+  api.get(
+    "/api/v1/servers/:id/node",
+    { schema: { params, response: { 200: serverNodeBinding, ...errors } } },
+    (r) => actions.nodeBinding(token(r), org(r), r.params.id),
+  );
+  api.put(
+    "/api/v1/servers/:id/node",
+    {
+      schema: {
+        params,
+        body: serverNodeBindingRequest,
+        response: { 200: serverNodeBinding, ...errors },
+      },
+    },
+    (r) => actions.bindNode(token(r), org(r), r.params.id, r.body),
+  );
+  api.delete(
+    "/api/v1/servers/:id/node",
+    { schema: { params, response: { 200: serverNodeBinding, ...errors } } },
+    (r) => actions.unbindNode(token(r), org(r), r.params.id),
   );
   api.get(
     "/api/v1/server-actions/:id",

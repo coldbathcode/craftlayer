@@ -2,13 +2,19 @@ import { request } from "node:https";
 import { checkServerIdentity } from "node:tls";
 import {
   deploymentJobView,
+  type NodeActionPollRequest,
+  type NodeActionResultRequest,
   type NodeAgentRequest,
   type NodeJobRequest,
   type NodePollRequest,
+  nodeActionPollRequest,
+  nodeActionResultRequest,
   nodeAgentRequest,
   nodeJobRequest,
   nodePollRequest,
   type SignedNodeCommandReceipt,
+  signedNodeActionPollResponse,
+  signedNodeActionResultResponse,
   signedNodeCommand,
   signedNodeCommandPermit,
   signedNodeCommandReceipt,
@@ -51,6 +57,8 @@ export class NodeTransportFailure extends Error {
   constructor(
     message: string,
     readonly retryable: boolean,
+    /** HTTP status when the controller answered; absent for link failures. */
+    readonly status?: number,
   ) {
     super(message);
   }
@@ -94,6 +102,8 @@ export class NodeTransport {
     path:
       | "/node/v1/enroll"
       | "/node/v1/heartbeat"
+      | "/node/v1/actions/poll"
+      | "/node/v1/actions/result"
       | "/node/v1/commands/exchange"
       | "/node/v1/commands/receipt"
       | "/node/v1/commands/poll",
@@ -154,6 +164,7 @@ export class NodeTransport {
                     ? "NODE_ALREADY_ENROLLED"
                     : "NODE_REQUEST_DENIED",
                   res.statusCode === 429 || (res.statusCode ?? 500) >= 500,
+                  res.statusCode ?? 500,
                 );
                 reject(e);
               } else resolve(result);
@@ -183,6 +194,71 @@ export class NodeTransport {
       );
       req.end(body);
     });
+  }
+  /** A controller reply must be signed, fresh and bound to the exact request sent. */
+  #assertReply(
+    v: {
+      control_id: string;
+      organization_id: string;
+      node_id: string;
+      credential_version: number;
+      sequence: number;
+      request_hash: string;
+      issued_at: string;
+      expires_at: string;
+    },
+    signature: string,
+    payload: {
+      organization_id: string;
+      node_id: string;
+      credential_version: number;
+      sequence: number;
+    },
+  ) {
+    assertNodeTime(v.issued_at, v.expires_at, Date.now());
+    if (
+      !verifyNodeValue(v, signature, this.config.control_public_key) ||
+      v.control_id !== nodeDigest(this.config.control_public_key) ||
+      v.request_hash !== nodeDigest(payload) ||
+      v.organization_id !== payload.organization_id ||
+      v.node_id !== payload.node_id ||
+      v.credential_version !== payload.credential_version ||
+      v.sequence !== payload.sequence
+    )
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+  }
+  /** Asks for at most one typed server action for the servers this node controls. */
+  async actionPoll(input: NodeActionPollRequest) {
+    const payload = nodeActionPollRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/actions/poll",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeActionPollResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    const action = response.payload.action;
+    if (action && !payload.server_ids.includes(action.server_id))
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return action;
+  }
+  /** Reports what the server answered; returns the state the controller recorded. */
+  async actionResult(input: NodeActionResultRequest) {
+    const payload = nodeActionResultRequest.parse(input),
+      raw = await this.#post(
+        "/node/v1/actions/result",
+        JSON.stringify({
+          payload,
+          signature: signNodeValue(payload, this.config.private_key),
+        }),
+      ),
+      response = signedNodeActionResultResponse.parse(raw);
+    this.#assertReply(response.payload, response.signature, payload);
+    if (response.payload.action_id !== payload.action_id)
+      throw new Error("NODE_RESPONSE_BINDING_DENIED");
+    return response.payload.state;
   }
   async poll(input: NodePollRequest, signal?: AbortSignal) {
     const payload = nodePollRequest.parse(input);

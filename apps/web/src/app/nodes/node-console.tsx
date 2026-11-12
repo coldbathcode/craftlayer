@@ -15,6 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { HostServers } from "./host-servers";
 import { ProvisionPlanner } from "./provision-planner";
 
 type Project = { id: string; name: string };
@@ -632,6 +633,15 @@ export function NodeConsole() {
                         or stops a game server.
                       </p>
                     </article>
+                    {selected.state === "active" ? (
+                      <HostServers
+                        key={`${org}:${selected.id}`}
+                        node={selected}
+                        organization={org}
+                        csrf={me.csrf_token}
+                        onSessionFailure={failure}
+                      />
+                    ) : null}
                     {selected.can_plan ? (
                       <ProvisionPlanner
                         key={`${org}:${selected.id}:${selected.version}`}

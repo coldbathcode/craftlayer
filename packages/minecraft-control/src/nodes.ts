@@ -58,6 +58,16 @@ interface OpRow {
 }
 const selectNode =
   "select n.*,c.public_key,c.certificate_sha256,c.expires_at credential_expires_at from minecraft_nodes n join minecraft_node_credentials c on (c.organization_id,c.node_id,c.version)=(n.organization_id,n.id,n.credential_version) where n.organization_id=$1";
+/** The fields every signed node request carries, whatever its purpose. */
+export interface NodeProof {
+  control_id: string;
+  organization_id: string;
+  node_id: string;
+  credential_version: number;
+  sequence: number;
+  issued_at: string;
+  expires_at: string;
+}
 function deny(code = "NODE_DENIED", status = 409): never {
   throw new AuthError(
     status,
@@ -71,11 +81,14 @@ export class NodeControl {
   #public: string | null;
   #private: string | undefined;
   #now: () => number;
+  #credentialMs: number;
   constructor(options: {
     databaseUrl: string;
     auth?: IdentityService;
     controlPublicKey?: string;
     controlPrivateKey?: string;
+    /** Operator-chosen credential lifetime in days (1 to 400). One day unless set. */
+    credentialDays?: number;
     clock?: () => number;
   }) {
     if (new URL(options.databaseUrl).username !== "craftlayer_runtime")
@@ -88,6 +101,10 @@ export class NodeControl {
     this.#private = key?.private_key;
     this.#auth = options.auth;
     this.#now = options.clock ?? Date.now;
+    const days = options.credentialDays ?? 1;
+    if (!Number.isInteger(days) || days < 1 || days > 400)
+      throw new Error("Node credential lifetime must be 1 to 400 days");
+    this.#credentialMs = days * 86400000;
     this.#pool = new pg.Pool({
       connectionString: options.databaseUrl,
       max: 3,
@@ -299,7 +316,7 @@ export class NodeControl {
           key,
           fingerprint,
           now,
-          new Date(now.getTime() + 86400000),
+          new Date(now.getTime() + this.#credentialMs),
         ],
       );
     } catch (e) {
@@ -553,6 +570,71 @@ export class NodeControl {
     );
   }
 
+  /** The node's row, locked, after its certificate, credential and signature all match. */
+  async #verified(
+    c: pg.PoolClient,
+    v: NodeProof,
+    signature: string,
+    peer: { certificate_sha256: string; certificate_expires_at: number },
+  ) {
+    const row = await this.#row(c, v.organization_id, v.node_id).catch(() =>
+      deny("NODE_CREDENTIAL_DENIED", 401),
+    );
+    if (
+      row.certificate_sha256 !== peer.certificate_sha256 ||
+      row.credential_version !== v.credential_version ||
+      row.credential_expires_at.getTime() <= this.#now() ||
+      !verifyNodeValue(v, signature, row.public_key) ||
+      row.state === "revoked"
+    )
+      deny("NODE_CREDENTIAL_DENIED", 401);
+    return row;
+  }
+  /**
+   * Admit one signed request from an active node for another private service on the
+   * same mTLS listener (server actions). Applies the same certificate, credential,
+   * signature, time-window and strictly increasing sequence checks as a heartbeat,
+   * and consumes the sequence so the request cannot be replayed.
+   */
+  async admit(
+    payload: NodeProof,
+    signature: string,
+    peer: { certificate_sha256: string; certificate_expires_at: number },
+  ) {
+    if (!this.#private || !this.#public)
+      deny("NODE_CONTROL_NOT_CONFIGURED", 503);
+    try {
+      assertNodeTime(payload.issued_at, payload.expires_at, this.#now());
+    } catch {
+      deny("NODE_PROOF_EXPIRED", 401);
+    }
+    if (
+      payload.control_id !== nodeDigest(this.#public) ||
+      !Number.isFinite(peer.certificate_expires_at) ||
+      peer.certificate_expires_at <= this.#now()
+    )
+      deny("NODE_CREDENTIAL_DENIED", 401);
+    return this.#tx(payload.organization_id, async (c) => {
+      const row = await this.#verified(c, payload, signature, peer);
+      if (row.state !== "active" || payload.sequence <= row.last_sequence)
+        deny("NODE_REPLAY_DENIED", 401);
+      await c.query(
+        "update minecraft_nodes set last_sequence=$3,last_seen_at=$4 where organization_id=$1 and id=$2",
+        [
+          payload.organization_id,
+          payload.node_id,
+          payload.sequence,
+          new Date(this.#now()),
+        ],
+      );
+      return { node_id: row.id, project_id: row.project_id };
+    });
+  }
+  /** Signs a controller reply with the control key; callers build the bound payload. */
+  sign(payload: unknown) {
+    if (!this.#private) deny("NODE_CONTROL_NOT_CONFIGURED", 503);
+    return signNodeValue(payload, this.#private);
+  }
   /** Only a TLS adapter may supply peer identity; HTTP headers/cookies never do. */
   async exchange(
     input: unknown,
@@ -574,17 +656,7 @@ export class NodeControl {
     )
       deny("NODE_CREDENTIAL_DENIED", 401);
     return this.#tx(v.organization_id, async (c) => {
-      const row = await this.#row(c, v.organization_id, v.node_id).catch(() =>
-        deny("NODE_CREDENTIAL_DENIED", 401),
-      );
-      if (
-        row.certificate_sha256 !== peer.certificate_sha256 ||
-        row.credential_version !== v.credential_version ||
-        row.credential_expires_at.getTime() <= this.#now() ||
-        !verifyNodeValue(v, signed.signature, row.public_key) ||
-        row.state === "revoked"
-      )
-        deny("NODE_CREDENTIAL_DENIED", 401);
+      const row = await this.#verified(c, v, signed.signature, peer);
       if (v.purpose === "node.enroll.v1") {
         if (row.state === "active") deny("NODE_ALREADY_ENROLLED");
         if (

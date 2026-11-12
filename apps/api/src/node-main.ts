@@ -1,7 +1,12 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { connect, createServer } from "node:net";
 import { networkInterfaces } from "node:os";
-import { NodeControl } from "@craftlayer/minecraft-control";
+import {
+  ActionDispatch,
+  NodeControl,
+  ServerActions,
+} from "@craftlayer/minecraft-control";
 import {
   privateNodeAddress,
   protectedNodeFile,
@@ -26,13 +31,26 @@ try {
     controlPrivateKey: signer,
   });
   close = () => control.close();
-  const app = await buildNodeAgentApp({ control, key, cert, ca });
+  // Server-action dispatch is off unless the operator turns it on for this gateway.
+  const dispatching = process.env.CRAFTLAYER_NODE_ACTIONS === "enabled";
+  const actions = dispatching ? new ServerActions({ databaseUrl: url }) : null;
+  const app = await buildNodeAgentApp({
+    control,
+    ...(actions
+      ? { actions: new ActionDispatch({ nodes: control, actions }) }
+      : {}),
+    key,
+    cert,
+    ca,
+  });
   close = async () => {
     await app.close();
+    await actions?.close();
     await control.close();
   };
   let host = process.env.CRAFTLAYER_NODE_BIND_HOST ?? "127.0.0.1";
-  if (host === "container-private") {
+  const containerPrivate = host === "container-private";
+  if (containerPrivate) {
     if (!existsSync("/.dockerenv"))
       throw new Error("NODE_PRIVATE_CONTAINER_REQUIRED");
     // Published loopback traffic enters through the non-internal network.
@@ -52,7 +70,38 @@ try {
   }
   if (!privateNodeAddress(host)) throw new Error("NODE_PRIVATE_BIND_REQUIRED");
   await app.listen({ host, port: 9443 });
-  console.log("NODE_CONTROL_READY: private mTLS inventory transport");
+  if (containerPrivate) {
+    // An agent that shares this container's network namespace (ADR 0043) dials loopback.
+    // Relay those bytes to the private listener untouched: TLS and the client certificate
+    // still terminate at the gateway, and nothing outside this namespace can reach it.
+    const relay = createServer((socket) => {
+      const upstream = connect(9443, host);
+      const end = () => {
+        socket.destroy();
+        upstream.destroy();
+      };
+      socket.setTimeout(10000, end);
+      upstream.setTimeout(10000, end);
+      socket.once("error", end).once("close", end);
+      upstream.once("error", end).once("close", end);
+      socket.pipe(upstream).pipe(socket);
+    });
+    relay.maxConnections = 16;
+    await new Promise<void>((ready, failed) => {
+      relay.once("error", failed);
+      relay.listen(9443, "127.0.0.1", () => ready());
+    });
+    const closeGateway = close;
+    close = async () => {
+      relay.close();
+      await closeGateway();
+    };
+  }
+  console.log(
+    dispatching
+      ? "NODE_CONTROL_READY: private mTLS inventory transport with typed server actions"
+      : "NODE_CONTROL_READY: private mTLS inventory transport",
+  );
   for (const signal of ["SIGINT", "SIGTERM"] as const)
     process.once(signal, () => {
       void close().then(() => process.exit(0));

@@ -10,6 +10,7 @@ import {
   operationView,
   playersView,
   serverActivity,
+  serverNodeBinding,
   serverPage,
   serverView,
   targetView,
@@ -40,6 +41,25 @@ export function minecraftClient(
         `/api/v1/servers/${encodeURIComponent(id)}`,
         serverView,
         context,
+      ),
+    /** Which host, if any, carries out actions for this server. */
+    node: (id: string) =>
+      identityRequest(
+        `/api/v1/servers/${encodeURIComponent(id)}/node`,
+        serverNodeBinding,
+        context,
+      ),
+    bindNode: (id: string, node: string) =>
+      identityRequest(
+        `/api/v1/servers/${encodeURIComponent(id)}/node`,
+        serverNodeBinding,
+        { ...context, method: "PUT", json: { node_id: node } },
+      ),
+    unbindNode: (id: string) =>
+      identityRequest(
+        `/api/v1/servers/${encodeURIComponent(id)}/node`,
+        serverNodeBinding,
+        { ...context, method: "DELETE" },
       ),
     players: (id: string) =>
       identityRequest(
