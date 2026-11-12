@@ -1299,6 +1299,11 @@ describe("node dispatch of server actions", () => {
     });
     // The proven account, derived from the account id itself, is what was let in.
     expect(whitelist.entries.map((e) => e.uuid)).toContain(floodgateUuid(xuid));
+    // The next report carries the allowlist, so the screen can show who can join.
+    await report(dispatchServer, knockFile);
+    expect((await live.live(viewer, org, dispatchServer)).allowed).toContain(
+      ".Big_Crazy_Pickle",
+    );
     expect(await live.ignoreKnock(adult, org, stranger.id)).toMatchObject({
       state: "ignored",
     });

@@ -8,6 +8,7 @@ export interface ServerStatus {
   online: number | null;
   max_players: number | null;
   players: string[] | null;
+  allowed: string[] | null;
   knocks: NodeKnock[];
 }
 const NAME = /^\.?[A-Za-z0-9_]{1,16}$/,
@@ -57,6 +58,16 @@ export async function readStatus(
   now = Date.now(),
 ): Promise<ServerStatus> {
   const knocks = knockFile ? await readKnocks(knockFile, now) : [];
+  // The allowlist file is readable whether or not the server is on.
+  const allowed = await channel.whitelist
+    .read()
+    .then((entries) =>
+      entries
+        .map((e) => e.name)
+        .filter((n) => NAME.test(n))
+        .slice(0, 200),
+    )
+    .catch(() => null);
   let session: Awaited<ReturnType<GameChannel["open"]>> | undefined;
   try {
     session = await channel.open();
@@ -71,6 +82,7 @@ export async function readStatus(
       max_players: detail.max,
       // Only names the contract can carry; the count stays the server's own.
       players: detail.names.filter((n) => NAME.test(n)).slice(0, 100),
+      allowed,
       knocks,
     };
   } catch {
@@ -81,7 +93,14 @@ export async function readStatus(
     } catch {
       power = "unknown";
     }
-    return { power, online: null, max_players: null, players: null, knocks };
+    return {
+      power,
+      online: null,
+      max_players: null,
+      players: null,
+      allowed,
+      knocks,
+    };
   } finally {
     await session?.close().catch(() => {});
   }

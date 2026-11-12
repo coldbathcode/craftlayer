@@ -1,11 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
 
 const suite =
-  process.env.CRAFTLAYER_SERVER_E2E === "1"
-    ? "servers"
-    : process.env.CRAFTLAYER_IDENTITY_E2E === "1"
-      ? "identity"
-      : "foundation";
+  process.env.CRAFTLAYER_FAMILY_E2E === "1"
+    ? "family"
+    : process.env.CRAFTLAYER_SERVER_E2E === "1"
+      ? "servers"
+      : process.env.CRAFTLAYER_IDENTITY_E2E === "1"
+        ? "identity"
+        : "foundation";
 export default defineConfig({
   testDir: "tests/e2e",
   testMatch: `**/${suite}.spec.ts`,

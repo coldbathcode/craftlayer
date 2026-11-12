@@ -50,6 +50,7 @@ interface LiveRow {
   online: number | null;
   max_players: number | null;
   players: string[] | null;
+  allowed: string[] | null;
   reported_at: Date;
 }
 interface KnockRow {
@@ -219,7 +220,7 @@ export class ServerLive {
       ).rowCount;
       const row = (
         await c.query<LiveRow>(
-          "select power,online,max_players,players,reported_at from minecraft_server_live where organization_id=$1 and server_id=$2",
+          "select power,online,max_players,players,allowed,reported_at from minecraft_server_live where organization_id=$1 and server_id=$2",
           [org, serverId],
         )
       ).rows[0];
@@ -235,6 +236,7 @@ export class ServerLive {
         online: row?.online ?? null,
         max_players: row?.max_players ?? null,
         players: row?.players ?? null,
+        allowed: row?.allowed ?? null,
       });
     });
   }
@@ -371,6 +373,7 @@ export class ServerLive {
       online: number | null;
       max_players: number | null;
       players: string[] | null;
+      allowed: string[] | null;
       knocks: NodeKnock[];
     },
   ) {
@@ -381,6 +384,7 @@ export class ServerLive {
         online: true,
         max_players: true,
         players: true,
+        allowed: true,
         knocks: true,
       })
       .parse(input);
@@ -396,7 +400,7 @@ export class ServerLive {
       const now = new Date(this.#now()),
         on = v.power === "on";
       await c.query(
-        "insert into minecraft_server_live(organization_id,server_id,node_id,power,online,max_players,players,reported_at) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(organization_id,server_id) do update set node_id=excluded.node_id,power=excluded.power,online=excluded.online,max_players=excluded.max_players,players=excluded.players,reported_at=excluded.reported_at",
+        "insert into minecraft_server_live(organization_id,server_id,node_id,power,online,max_players,players,reported_at,allowed) values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(organization_id,server_id) do update set node_id=excluded.node_id,power=excluded.power,online=excluded.online,max_players=excluded.max_players,players=excluded.players,reported_at=excluded.reported_at,allowed=coalesce(excluded.allowed,minecraft_server_live.allowed)",
         [
           org,
           v.server_id,
@@ -406,6 +410,7 @@ export class ServerLive {
           v.max_players,
           on && v.players ? JSON.stringify(v.players) : null,
           now,
+          v.allowed ? JSON.stringify(v.allowed) : null,
         ],
       );
       for (const k of v.knocks) {

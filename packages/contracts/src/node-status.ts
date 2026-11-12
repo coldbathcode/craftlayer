@@ -45,6 +45,8 @@ export const nodeStatusReportRequest = z.strictObject({
   online: z.number().int().min(0).max(10000).nullable(),
   max_players: z.number().int().min(0).max(10000).nullable(),
   players: z.array(gamePlayerName).max(100).nullable(),
+  /** Names on the server's allowlist file, or null when the node could not read it. */
+  allowed: z.array(gamePlayerName).max(200).nullable(),
   knocks: z.array(nodeKnock).max(20),
 });
 export const nodeStatusReportResponse = z.strictObject({
@@ -80,6 +82,8 @@ export const serverLiveView = z.strictObject({
   online: z.number().int().min(0).max(10000).nullable(),
   max_players: z.number().int().min(0).max(10000).nullable(),
   players: z.array(gamePlayerName).max(100).nullable(),
+  /** Who can join, as the host last read the allowlist; null when it never has. */
+  allowed: z.array(gamePlayerName).max(200).nullable(),
 });
 /** Someone asking to join. Account numbers are never shown. */
 export const knockView = z.strictObject({

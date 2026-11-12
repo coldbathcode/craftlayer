@@ -1,0 +1,304 @@
+/* Family screens (master plan B2). Mobile first: one column, 44px targets, and the
+   state of a server is always a word and a shape as well as a colour. */
+.fam-shell {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 16px 48px;
+}
+.fam-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 0 12px;
+}
+.fam-brand {
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-weight: bold;
+  letter-spacing: -0.5px;
+}
+.fam-family {
+  color: var(--muted);
+  font-size: 15px;
+}
+.fam-nav,
+.fam-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 16px;
+}
+.fam-nav a,
+.fam-tab {
+  flex: none;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+.fam-nav a[aria-current="page"],
+.fam-tab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+  font-weight: bold;
+}
+.fam-main {
+  display: grid;
+  gap: 14px;
+}
+.fam-title {
+  margin: 4px 0 0;
+  font-family: Georgia, serif;
+  font-size: 28px;
+  letter-spacing: -0.5px;
+}
+.fam-back {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--muted);
+}
+.fam-card {
+  background: #fffdf6;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+}
+.fam-card-attention {
+  background: #fdf1d8;
+  border-color: #e3c37a;
+}
+.fam-card h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.fam-card p,
+.fam-dialog p {
+  margin: 0;
+  line-height: 1.45;
+}
+.fam-line {
+  font-size: 17px;
+}
+.fam-big {
+  font-size: 24px;
+}
+.fam-quiet {
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: normal;
+}
+.fam-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.fam-button {
+  min-height: 44px;
+  min-width: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+}
+.fam-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+.fam-primary {
+  background: var(--ink);
+  color: #fff;
+}
+.fam-danger {
+  background: #a3351a;
+  border-color: #a3351a;
+  color: #fff;
+}
+.fam-button:focus-visible,
+.fam-tab:focus-visible,
+.fam-nav a:focus-visible,
+.fam-input:focus-visible,
+.fam-link:focus-visible,
+.fam-back:focus-visible {
+  outline: 3px solid var(--orange);
+  outline-offset: 2px;
+}
+.fam-link {
+  text-decoration: underline;
+}
+.fam-power {
+  font-weight: bold;
+}
+.fam-power-on {
+  color: #1d6b3a;
+}
+.fam-power-off,
+.fam-power-unknown {
+  color: var(--muted);
+}
+.fam-power-starting {
+  color: #8a5a00;
+}
+.fam-power-unreachable {
+  color: #a3351a;
+}
+.fam-status {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border-left: 5px solid var(--muted);
+  background: #eef0e4;
+  font-size: 16px;
+}
+.fam-status-done {
+  border-left-color: #1d6b3a;
+}
+.fam-status-failed {
+  border-left-color: #a3351a;
+  background: #fbe9e2;
+}
+.fam-status-working {
+  border-left-color: #8a5a00;
+}
+.fam-list,
+.fam-steps {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.fam-list {
+  list-style: none;
+}
+.fam-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.fam-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.fam-steps {
+  padding-left: 22px;
+  font-size: 17px;
+}
+.fam-form {
+  display: grid;
+  gap: 10px;
+}
+.fam-form fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.fam-form legend,
+.fam-form label {
+  font-weight: bold;
+}
+.fam-choice {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fam-form label.fam-choice {
+  font-weight: normal;
+}
+.fam-input {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  font-size: 17px;
+  max-width: 320px;
+}
+.fam-dialog {
+  width: min(92vw, 420px);
+  border: 0;
+  border-radius: 16px;
+  padding: 20px;
+  color: var(--ink);
+  background: #fffdf6;
+}
+.fam-dialog::backdrop {
+  background: rgba(20, 61, 48, 0.45);
+}
+.fam-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+.fam-dialog .fam-row {
+  margin-top: 16px;
+  justify-content: flex-end;
+}
+.fam-footer {
+  margin-top: 28px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.fam-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.fam-key {
+  word-break: break-all;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 15px;
+  padding: 10px;
+  background: #eef0e4;
+  border-radius: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+/* The landing page styles bare nav, footer and h1 elements; undo what leaks in here. */
+.fam-nav a:first-child {
+  display: inline-flex;
+}
+.fam-nav {
+  gap: 4px;
+}
+.fam-title {
+  line-height: 1.15;
+}
+.fam-footer {
+  display: block;
+  padding: 0;
+  font-size: 14px;
+}

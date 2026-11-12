@@ -109,6 +109,7 @@ export function agentTokenClient(
   };
 }
 export { deploymentClient } from "./deployments.js";
+export { familyClient } from "./family.js";
 export { minecraftClient } from "./minecraft.js";
 export { nodeClient } from "./nodes.js";
 export * from "./runtime.js";

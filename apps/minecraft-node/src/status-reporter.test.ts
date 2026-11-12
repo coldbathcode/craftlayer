@@ -16,6 +16,7 @@ const report = nodeStatusReportRequest.pick({
   online: true,
   max_players: true,
   players: true,
+  allowed: true,
   knocks: true,
 });
 function channel(reply: string | null, running?: boolean): GameChannel {
@@ -51,6 +52,7 @@ it("says on only when the server answers, and tells off from starting by its con
     online: 3,
     max_players: 5,
     players: ["Alex", ".Charlie"],
+    allowed: [],
     knocks: [],
   });
   expect((await readStatus(channel(null))).power).toBe("unknown");

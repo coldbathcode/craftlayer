@@ -81,7 +81,7 @@ Built 2026-11-12 ([ADR 0046](../architecture/decisions/0046-live-status-and-knoc
 
 | Call | Effect |
 | --- | --- |
-| `GET /api/v1/servers/{id}/live` | `power` (`on`, `off`, `starting`, `unknown`), player names and counts as the server itself reported them, `reported_at`, and `fresh` (false when the last report is older than 45 seconds or no host is bound) (`server:read`) |
+| `GET /api/v1/servers/{id}/live` | `power` (`on`, `off`, `starting`, `unknown`), player names and counts as the server itself reported them, `allowed` (names on the allowlist file), `reported_at`, and `fresh` (false when the last report is older than 45 seconds or no host is bound) (`server:read`) |
 | `GET /api/v1/servers/{id}/knocks` | Accounts refused in the last 24 hours that nobody has decided; no account numbers (`server:read`) |
 | `POST /api/v1/server-knocks/{id}/allow` | Adults with `player:manage`; needs an `Idempotency-Key`. Creates the ordinary `allow_player` action for exactly the refused account |
 | `POST /api/v1/server-knocks/{id}/ignore` | Adults with `player:manage`. The account asks again only if refused again more than a day later |

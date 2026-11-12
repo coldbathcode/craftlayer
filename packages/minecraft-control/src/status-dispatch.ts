@@ -37,6 +37,7 @@ export class StatusDispatch {
       online: v.online,
       max_players: v.max_players,
       players: v.players,
+      allowed: v.allowed,
       knocks: v.knocks,
     });
     const payload = {

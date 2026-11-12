@@ -18,6 +18,7 @@ The dashboard showed a snapshot of the server taken from outside: stale within m
 
 ## Consequences
 
+- The report also carries the names on the server's allowlist file (migration 0036), so a screen can show who can join. It is kept from the last report that could read it.
 - Without a bound, connected host there is no live status; the older outside snapshot remains for that case.
 - The report costs one sequence number per server per ten seconds and one database write.
 - A Bedrock gamertag is reconstructed from the name the server shows; it is only the label on the allowlist, since the account number decides who gets in.
