@@ -31,7 +31,8 @@ RUN pnpm build
 RUN pnpm --filter @craftlayer/api deploy --prod /prod/api \
  && pnpm --filter @craftlayer/worker deploy --prod /prod/worker \
  && pnpm --filter @craftlayer/db deploy --prod /prod/db \
- && pnpm --filter @craftlayer/minecraft-node deploy --prod /prod/node
+ && pnpm --filter @craftlayer/minecraft-node deploy --prod /prod/node \
+ && pnpm --filter @craftlayer/mcp deploy --prod /prod/mcp
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS api
 ENV NODE_ENV=production
@@ -54,6 +55,14 @@ WORKDIR /app
 COPY --from=build --chown=node:node /prod/node .
 USER node
 CMD ["node", "dist/main.js", "run", "/run/craftlayer-node/config.json"]
+
+# Remote MCP: holds no token, database or key; every caller sends their own agent token.
+FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS mcp
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build --chown=node:node /prod/mcp .
+USER node
+CMD ["node", "dist/remote-main.js"]
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS migrate
 ENV NODE_ENV=production

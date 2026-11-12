@@ -617,3 +617,11 @@ Checks: `pnpm check` PASS/0 (482 unit cases/57 files, including the C4 cases bel
 
 Not done: nothing here is deployed; the VPS helper still runs the earlier build, has no control channel and no `container` or `knock_file` configured. No real Paper server or real Docker engine went through these paths. The agent's heartbeat pauses during a power action. The dashboard screens that use this are B2.
 
+## Master plan C4 — remote MCP over Streamable HTTP, 2026-11-12
+
+Added `apps/mcp/src/remote.ts` and `remote-main.ts` (a `node:http` server on `POST /mcp`, stateless, one fresh MCP server per request, official SDK 1.32.2 unchanged, no new dependency), an `mcp` image target and `infra/compose/mcp.yml` (read-only, no capabilities, 128 MB, published on host loopback only). The service holds no token: it requires a well-formed `Authorization: Bearer` agent token, forwards it to the internal API with the one configured organization, and the API decides scope, expiry and revocation on every tool call. Host and Origin allowlists, a per-token (hashed, 60/min) and global (300/min) limit with `Retry-After`, a 64 KiB body limit, a 30-second timeout, and logs that carry outcome codes only. See [ADR 0048](../architecture/decisions/0048-remote-mcp.md) and the [agent runbook](../development/agent-access.md).
+
+Checks: `pnpm exec vitest run apps/mcp` PASS (15 cases/2 files; ten new, over real loopback HTTP with the SDK's own client and a stand-in API: tools with a bearer, 401 without, a revoked token surfacing as a tool error, 429, 403 for a wrong Host or Origin, 413, 405, 404, 504). Included in the `pnpm check` run above. Compose renders with the overlay and placeholder values. The built entry point was started once locally: health 200, no bearer 401, `tools/list` 200, and it refused a non-loopback bind without the opt-in.
+
+Not done: the `mcp` image was not built; nothing is deployed; no OAuth, issuer or audience validation (accepted only behind the tailnet); a well-formed but unknown token can list tool names because listing does not call the API; that `tailscale serve` passes the tailnet name as `Host` is assumed, not verified; Claude Desktop's built-in connector cannot use this endpoint.
+

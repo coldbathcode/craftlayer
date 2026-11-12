@@ -1,0 +1,45 @@
+# Optional remote MCP (master plan C4, ADR 0048). It holds no agent token, database
+# credential or key: every caller sends their own token and the API decides. The port
+# is published on the host's loopback only; reach it through `tailscale serve`.
+services:
+  mcp:
+    networks: [default, edge]
+    build: { context: ., dockerfile: infra/images/Dockerfile, target: mcp }
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 64
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: 128m
+    environment:
+      NODE_ENV: production
+      CRAFTLAYER_URL: http://api:4000
+      CRAFTLAYER_MCP_INTERNAL_API_HTTP: "true"
+      CRAFTLAYER_ORGANIZATION: ${CRAFTLAYER_MCP_ORGANIZATION:?Set the family organization ID the remote MCP serves}
+      # Inside the container only; the host publishes it on 127.0.0.1 below.
+      CRAFTLAYER_MCP_BIND_HOST: 0.0.0.0
+      CRAFTLAYER_MCP_ALLOW_NON_LOOPBACK_BIND: "true"
+      CRAFTLAYER_MCP_PORT: 3900
+      CRAFTLAYER_MCP_ALLOWED_HOSTS: ${CRAFTLAYER_MCP_ALLOWED_HOSTS:?Set the private HTTPS host name callers use}
+      CRAFTLAYER_MCP_ALLOWED_ORIGINS: ${CRAFTLAYER_MCP_ALLOWED_ORIGINS:-}
+      CRAFTLAYER_MCP_RATE_PER_TOKEN: ${CRAFTLAYER_MCP_RATE_PER_TOKEN:-60}
+      CRAFTLAYER_MCP_RATE_GLOBAL: ${CRAFTLAYER_MCP_RATE_GLOBAL:-300}
+      CRAFTLAYER_MCP_MAX_BODY_BYTES: ${CRAFTLAYER_MCP_MAX_BODY_BYTES:-65536}
+      CRAFTLAYER_MCP_REQUEST_TIMEOUT_MS: ${CRAFTLAYER_MCP_REQUEST_TIMEOUT_MS:-30000}
+    ports: ["127.0.0.1:${CRAFTLAYER_MCP_HTTP_PORT:-3900}:3900"]
+    depends_on: { api: { condition: service_healthy } }
+    healthcheck:
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          'fetch("http://127.0.0.1:3900/health/live").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))',
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 12
+    stop_grace_period: 10s
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }

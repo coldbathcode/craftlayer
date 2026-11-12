@@ -46,6 +46,18 @@ Status 2026-11-12: built and verified locally ([ADR 0045](../architecture/decisi
 
 Archives are not encrypted yet and stay on the VPS until D2; free space is checked before every backup.
 
+## Remote MCP (master plan C4)
+
+Status 2026-11-12: built and verified locally ([ADR 0048](../architecture/decisions/0048-remote-mcp.md)). **Nothing below has been done on the VPS.** These are the steps for later; each VPS write needs the owner's approval first. Configuration reference: [agent access](../development/agent-access.md#remote-mcp-c4).
+
+1. **Owner approval, then operator:** update the checkout. Add to `.env`: `CRAFTLAYER_MCP_ORGANIZATION` (the family organization ID) and `CRAFTLAYER_MCP_ALLOWED_HOSTS=vmi2954874.taile167a3.ts.net`. Add `infra/compose/mcp.yml` to the Compose files in use, then build and start only the new service (`docker compose … up -d --build --wait mcp`). No migration, no change to the other services, and the game server is not touched. The container holds no token, database password or key.
+2. **Operator:** confirm the service is healthy and listening on `127.0.0.1:3900` only, and that the public interface shows no new port (check from outside, as for the dashboard).
+3. **Owner (needs sudo):** publish it on the tailnet on its own HTTPS port, leaving the dashboard on 443: `sudo tailscale serve --bg --https=8443 http://127.0.0.1:3900`. The address is then `https://vmi2954874.taile167a3.ts.net:8443/mcp`. Do not use `tailscale funnel`; that would make it public.
+4. **Operator:** from a tailnet device, check that `GET /health/live` answers, that a `POST /mcp` without a token answers `401`, and that the service log shows only codes. If every request answers `403 HOST_REJECTED`, the proxy is sending a different `Host`; read which one with a local request on the VPS and correct `CRAFTLAYER_MCP_ALLOWED_HOSTS`. Do not widen the list beyond the names actually used.
+5. **Owner:** create an agent token for one device, connect Claude Code with the bearer header, and ask "Who is on Family Survival?". Then revoke the token and confirm the next question fails. Record the evidence.
+
+To roll back: `sudo tailscale serve --https=8443 off`, then `docker compose … rm -sf mcp`. Nothing else depends on the service; the local stdio server keeps working.
+
 ## Rollback
 
 `docker compose -p craftlayer down` for this project only; the Minecraft containers are separate projects and are untouched. Data volumes are retained; removing them is a separate explicit step.
