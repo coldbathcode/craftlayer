@@ -24,6 +24,18 @@ Status: deployed on 2026-11-08 at commit `ca524ec` as Compose project `craftlaye
 4. Verify from a phone off the home network: HTTPS certificate for the tailnet name, sign-in requires a code, the server page loads. Record the evidence.
 5. Then A2: enrol the node agent on the VPS against this stack and enable the private RCON channel.
 
+## Server helper (master plan A2)
+
+Status 2026-11-12: stack updated to the dispatch build ([ADR 0044](../architecture/decisions/0044-server-action-dispatch.md)); the helper waits for the owner's approval; private RCON is staged, not enabled.
+
+1. *(Done.)* `.env` carries `CRAFTLAYER_NODE_CREDENTIAL_DAYS`, `CRAFTLAYER_NODE_ACTIONS=enabled`, `CRAFTLAYER_GAME_DATA_DIR` and the `infra/compose/game-control.yml` overlay; the internal network `craftlayer-game-control` exists.
+2. **Owner:** Hosts page, **Connect a host**, paste the helper's public key and certificate fingerprint (given to you privately), approve. A script waiting on the VPS then writes the helper's private configuration and starts it within seconds; the host shows as connected.
+3. **Owner approval, then operator:** run the staged private script that turns on RCON for the family server with a generated password, joins it to the internal network as `family-game` and restarts it once (about a minute). It refuses while anyone is playing, never publishes the port, and prints its own rollback.
+4. **Owner:** Hosts page, **Servers this host looks after**, **Use this host** for the family server.
+5. Verify with one harmless action (a message), then an allow and a removal of a test player. Record the evidence.
+
+To roll back the stack update: retag the `pre-a2` images as `latest`, restore the saved `.env`, and `up -d` the four services. Migration 0033 is additive and can stay.
+
 ## Rollback
 
 `docker compose -p craftlayer down` for this project only; the Minecraft containers are separate projects and are untouched. Data volumes are retained; removing them is a separate explicit step.
