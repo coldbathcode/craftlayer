@@ -7,7 +7,7 @@ Status: deployed on 2026-11-08 at commit `ca524ec` as Compose project `craftlaye
 - The same Compose stack as local development (postgres, redis, migrate, api, worker, web) runs as its own project on the VPS, with the web edge published on `127.0.0.1:3000` only.
 - `tailscale serve` on the host terminates HTTPS with a certificate for the machine's tailnet name and proxies to that loopback port. No firewall change, no public listener.
 - `CRAFTLAYER_PUBLIC_URL` is the tailnet HTTPS address, so cookies are `Secure` and the Origin check matches. `CRAFTLAYER_REQUIRE_MFA=true`, so every adult must enrol an authenticator at first sign-in.
-- The dashboard's own database is meant to get a nightly `pg_dump` kept on the VPS. The job is built but **not enabled yet** (see [Dashboard database backup](#dashboard-database-backup-master-plan-a1)); pulling the dumps to the owner's Mac waits for D2.
+- The dashboard's own database is meant to get a nightly `pg_dump` kept on the VPS. The job has run on the VPS since 2026-11-12 (see [Dashboard database backup](#dashboard-database-backup-master-plan-a1)); pulling the dumps to the owner's Mac waits for D2.
 - Memory limits stay as in Compose (postgres 512 MB, web 512 MB, api/worker 256 MB each, redis 128 MB) so the dashboard cannot starve the game server, which keeps its 3 GB.
 
 ## Owner steps (need your password or your Tailscale account)
@@ -38,10 +38,10 @@ To roll back the stack update: retag the `pre-a2` images as `latest`, restore th
 
 ## Nightly backups (master plan D1)
 
-Status 2026-11-12: built and verified locally ([ADR 0045](../architecture/decisions/0045-node-backups.md)); the code and migration 0034 are on the VPS at `d7bbb6d` but backups are **off** (no backup folder, switch unset). Needs the helper live (steps 2–4 above) and the owner's approval for one more CraftLayer-only stack update.
+Status 2026-11-12 evening: step 1 is done on the VPS with the owner's approval (folder `/home/oli/craftlayer-game-backups`, overlay, switch, helper settings). Steps 2 and 3 are the owner's, on the Backups tab of the family screens, after choosing **Use this host** on the Hosts page. No backup exists yet.
 
 1. **Owner approval, then operator:** create a backup folder on the VPS outside the game data directory (owner-only, mode `0700`), update the checkout, add `infra/compose/game-backups.yml` and `CRAFTLAYER_GAME_BACKUP_DIR` to `.env`, add `data_directory` and `backup_directory` to the helper's private configuration, rebuild and `up -d`. Migration 0034 is additive. The game server is not restarted.
-2. **Owner:** choose the backup time (the policy). Until the dashboard has the control (B2) the operator sets it through the API on the owner's behalf.
+2. **Owner:** choose the backup time under **Turn on nightly backups** on the server's Backups tab.
 3. Verify with one "Back up now": the record shows complete and verified, the archive and manifest exist in the folder, and the server log shows saving turned off and on again. Record the evidence.
 
 Archives are not encrypted yet and stay on the VPS until D2; free space is checked before every backup.
@@ -60,7 +60,7 @@ To roll back: `sudo tailscale serve --https=8443 off`, then `docker compose … 
 
 ## Dashboard database backup (master plan A1)
 
-Status 2026-11-12: built and checked locally with `pnpm test:db-backup`. **Not enabled on the VPS.** The steps below are for later; each VPS write needs the owner's approval first.
+Status 2026-11-12: enabled on the VPS the same evening with the owner's approval (folder `/home/oli/craftlayer-db-backups`, time zone `Europe/London`); the first verified dump was written at start. The steps below record how.
 
 This backs up the dashboard's own database (accounts, audit, records), not Minecraft worlds. An optional service, `database-backup`, takes one dump shortly after it starts and then one every day at a set time. It writes `craftlayer-db-<UTC time>.dump` plus a `.sha256` file next to it, keeps the newest 14 and deletes older ones. A file only gets its final name after `pg_restore --list` could read it, so every `.dump` in the folder is complete. The service publishes no port, runs as a non-root user with a read-only filesystem, and is limited to 128 MB and half a CPU.
 
