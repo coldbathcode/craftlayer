@@ -1,0 +1,52 @@
+# Optional nightly dump of the dashboard's own database (master plan A1): accounts, audit
+# and records, not Minecraft worlds. One dump shortly after start, then one a day at the
+# chosen local time; the newest CRAFTLAYER_DB_BACKUP_KEEP are kept. Publishes no port and
+# joins only the internal database network.
+# The dump directory must be outside this repository, owned by CRAFTLAYER_HOST_UID with
+# mode 0700: dumps hold account data and hashed credentials and are not encrypted.
+services:
+  database-backup:
+    # Same pinned image as infra/postgres/Dockerfile, so pg_dump matches the server.
+    image: postgres:18-alpine@sha256:10a5c69a83035ab5239f5620d708520e8b28f5aa1f2b20143e6024532edadfb5
+    entrypoint: [sh, /usr/local/share/craftlayer/backup.sh]
+    command: [loop]
+    user: "${CRAFTLAYER_HOST_UID:?Set the dump directory owner UID}:${CRAFTLAYER_HOST_GID:?Set the dump directory owner GID}"
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 32
+    read_only: true
+    mem_limit: 128m
+    cpus: 0.5
+    environment:
+      PGHOST: postgres
+      PGPORT: "5432"
+      PGDATABASE: craftlayer
+      PGUSER: craftlayer_admin
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Run pnpm setup:local}
+      PGCONNECT_TIMEOUT: "10"
+      TZ: ${CRAFTLAYER_DB_BACKUP_TZ:-UTC}
+      BACKUP_DIR: /backups
+      BACKUP_TIME: ${CRAFTLAYER_DB_BACKUP_TIME:-03:30}
+      BACKUP_KEEP: ${CRAFTLAYER_DB_BACKUP_KEEP:-14}
+    volumes:
+      - type: bind
+        source: ${CRAFTLAYER_DB_BACKUP_DIR:?Choose the protected database dump directory}
+        target: /backups
+      - type: bind
+        source: ./infra/postgres/backup.sh
+        target: /usr/local/share/craftlayer/backup.sh
+        read_only: true
+    depends_on: { postgres: { condition: service_healthy } }
+    healthcheck:
+      test: [CMD, sh, /usr/local/share/craftlayer/backup.sh, health]
+      interval: 5m
+      timeout: 10s
+      retries: 1
+      start_period: 5m
+      start_interval: 10s
+    # The postgres image defaults to SIGINT, which a shell waiting on sleep ignores.
+    stop_signal: SIGTERM
+    stop_grace_period: 10s
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }

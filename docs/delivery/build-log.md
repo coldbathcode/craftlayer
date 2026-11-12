@@ -625,3 +625,11 @@ Checks: `pnpm exec vitest run apps/mcp` PASS (15 cases/2 files; ten new, over re
 
 Not done: the `mcp` image was not built; nothing is deployed; no OAuth, issuer or audience validation (accepted only behind the tailnet); a well-formed but unknown token can list tool names because listing does not call the API; that `tailscale serve` passes the tailnet name as `Host` is assumed, not verified; Claude Desktop's built-in connector cannot use this endpoint.
 
+## Master plan A1 — dashboard database backup job, 2026-11-12
+
+Added `infra/compose/database-backup.yml` (one optional sidecar on the already pinned Postgres image: non-root, read-only, no capabilities, no port, database network only), `infra/postgres/backup.sh` (one dump shortly after start and one a day at a set local time; `pg_dump --format=custom` to a partial name, `pg_restore --list` to verify, a SHA-256 sidecar, then rename; keeps the newest 14 and deletes only files matching its own name pattern; health fails when the newest dump is older than 26 hours) and `scripts/test-database-backup.mjs` (`pnpm test:db-backup`, needs Docker, not part of `pnpm check`). The dump runs as the admin role because the runtime role is subject to row-level security. Runbook with a restore procedure: [VPS dashboard](../operations/vps-dashboard.md).
+
+Checks: `shellcheck` clean; `pnpm test:db-backup` PASS twice (21 checks: a dump restores its row into a second empty database; retention removes the oldest and leaves unrelated and near-miss names alone; a wrong host exits 1 and leaves no partial or final file; health passes and fails as expected; root and keep=0 are refused). The loop was run once with throwaway containers and a time 80 seconds ahead: start-up dump, then the scheduled dump, container healthy. The restore runbook was rehearsed on a throwaway database with the real roles. Compose resolves with the overlay.
+
+Not done: not enabled on the VPS; the overlay was resolved but never brought up as part of the full stack; the restore rehearsal used a probe table, not the migrated schema; dumps are not encrypted and stay on the same machine. If the first dump fails, `docker compose up --wait` reports the sidecar unhealthy after five minutes.
+

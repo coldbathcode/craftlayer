@@ -7,7 +7,7 @@ Status: deployed on 2026-11-08 at commit `ca524ec` as Compose project `craftlaye
 - The same Compose stack as local development (postgres, redis, migrate, api, worker, web) runs as its own project on the VPS, with the web edge published on `127.0.0.1:3000` only.
 - `tailscale serve` on the host terminates HTTPS with a certificate for the machine's tailnet name and proxies to that loopback port. No firewall change, no public listener.
 - `CRAFTLAYER_PUBLIC_URL` is the tailnet HTTPS address, so cookies are `Secure` and the Origin check matches. `CRAFTLAYER_REQUIRE_MFA=true`, so every adult must enrol an authenticator at first sign-in.
-- The dashboard's own database gets a nightly `pg_dump` kept on the VPS and pulled to the owner's Mac with the world backups (D2).
+- The dashboard's own database is meant to get a nightly `pg_dump` kept on the VPS. The job is built but **not enabled yet** (see [Dashboard database backup](#dashboard-database-backup-master-plan-a1)); pulling the dumps to the owner's Mac waits for D2.
 - Memory limits stay as in Compose (postgres 512 MB, web 512 MB, api/worker 256 MB each, redis 128 MB) so the dashboard cannot starve the game server, which keeps its 3 GB.
 
 ## Owner steps (need your password or your Tailscale account)
@@ -57,6 +57,61 @@ Status 2026-11-12: built and verified locally ([ADR 0048](../architecture/decisi
 5. **Owner:** create an agent token for one device, connect Claude Code with the bearer header, and ask "Who is on Family Survival?". Then revoke the token and confirm the next question fails. Record the evidence.
 
 To roll back: `sudo tailscale serve --https=8443 off`, then `docker compose … rm -sf mcp`. Nothing else depends on the service; the local stdio server keeps working.
+
+## Dashboard database backup (master plan A1)
+
+Status 2026-11-12: built and checked locally with `pnpm test:db-backup`. **Not enabled on the VPS.** The steps below are for later; each VPS write needs the owner's approval first.
+
+This backs up the dashboard's own database (accounts, audit, records), not Minecraft worlds. An optional service, `database-backup`, takes one dump shortly after it starts and then one every day at a set time. It writes `craftlayer-db-<UTC time>.dump` plus a `.sha256` file next to it, keeps the newest 14 and deletes older ones. A file only gets its final name after `pg_restore --list` could read it, so every `.dump` in the folder is complete. The service publishes no port, runs as a non-root user with a read-only filesystem, and is limited to 128 MB and half a CPU.
+
+**The dumps contain account data and hashed credentials and are not encrypted.** Keep the folder private (mode `0700`), outside the repository, and never commit or share a dump.
+
+Settings in `.env`:
+
+| Name | Default | Meaning |
+| --- | --- | --- |
+| `CRAFTLAYER_DB_BACKUP_DIR` | none, required | Folder on the VPS for the dumps |
+| `CRAFTLAYER_HOST_UID`, `CRAFTLAYER_HOST_GID` | none, required | Owner of that folder (`id -u`, `id -g`); already set where the node overlay is used. Must not be root |
+| `CRAFTLAYER_DB_BACKUP_TIME` | `03:30` | Daily time, `HH:MM` |
+| `CRAFTLAYER_DB_BACKUP_TZ` | `UTC` | Time zone for that time, for example `Europe/London` |
+| `CRAFTLAYER_DB_BACKUP_KEEP` | `14` | How many dumps to keep |
+
+To enable:
+
+1. **Owner approval, then operator:** create the folder outside the checkout, for example `mkdir -m 0700 /home/oli/craftlayer-db-backups`.
+2. Update the checkout, add the settings above to `.env`, and add `infra/compose/database-backup.yml` to the Compose files in use (`COMPOSE_FILE`).
+3. Start only the new service: `docker compose up -d database-backup`. No migration, no rebuild and no restart of the other services or the game server.
+
+To check:
+
+- `docker compose logs database-backup` shows one line per run: `database_backup_ok <time> bytes=<size> kept=<count>`, or `database_backup_failed <time> stage=<step>`. After a failure it tries again every 15 minutes.
+- `docker compose ps database-backup` shows `healthy` while the newest dump is under 26 hours old.
+- In the folder, `sha256sum -c craftlayer-db-<time>.dump.sha256` answers `OK`.
+
+To restore (rehearsed locally on a throwaway database; needs the owner's approval on the VPS):
+
+1. Pick a dump and check it with `sha256sum -c` as above.
+2. Stop everything that uses the database, leaving it running: `docker compose stop web worker api database-backup` (and `node-control` if it is in use).
+3. Restore into a fresh, empty database beside the current one:
+   ```sh
+   docker compose exec -T postgres createdb -U craftlayer_admin craftlayer_restore
+   docker compose exec -T postgres pg_restore -U craftlayer_admin -d craftlayer_restore --exit-on-error < /home/oli/craftlayer-db-backups/craftlayer-db-<time>.dump
+   ```
+4. Look at the restored copy before switching, for example `docker compose exec -T postgres psql -U craftlayer_admin -d craftlayer_restore -c '\dt'`.
+5. Swap the names and give the service accounts back their right to connect (this is the one setting a dump does not carry):
+   ```sh
+   docker compose exec -T postgres psql -U craftlayer_admin -d postgres -v ON_ERROR_STOP=1 \
+     -c "ALTER DATABASE craftlayer RENAME TO craftlayer_before_restore" \
+     -c "ALTER DATABASE craftlayer_restore RENAME TO craftlayer" \
+     -c "REVOKE ALL ON DATABASE craftlayer FROM PUBLIC" \
+     -c "GRANT CONNECT ON DATABASE craftlayer TO craftlayer_migrator, craftlayer_runtime, craftlayer_identity"
+   ```
+6. `docker compose up -d --wait`, sign in and check the audit page. Record the evidence.
+7. The previous database stays as `craftlayer_before_restore`. To undo, stop the same services and swap the names back. Drop it only after the owner agrees the restore is good.
+
+On a brand-new machine the same steps apply after `docker compose up -d --wait postgres`: the first start creates the service accounts with the passwords from `.env`, so use the saved `.env` or expect the accounts' passwords to be the new ones. Sessions and codes created after the dump was taken are gone; people sign in again.
+
+To turn it off: `docker compose rm -sf database-backup` and remove the overlay from `COMPOSE_FILE`. The dumps stay in the folder.
 
 ## Rollback
 

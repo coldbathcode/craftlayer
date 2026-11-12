@@ -19,6 +19,7 @@
     "db:migrate": "node --env-file-if-exists=.env --import tsx packages/db/src/migrate.ts",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:db": "node scripts/test-database.mjs",
+    "test:db-backup": "node scripts/test-database-backup.mjs",
     "build:server": "pnpm -r --filter '!@craftlayer/web' run build",
     "dev:api": "node --env-file=.env --import tsx apps/api/src/main.ts",
     "dev:worker": "node --env-file=.worker-secrets/host.env --import tsx apps/worker/src/main.ts",
