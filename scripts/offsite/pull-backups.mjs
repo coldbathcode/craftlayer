@@ -49,9 +49,9 @@ export function sshSource(host, directory) {
         ...ssh,
         host,
         "--",
-        "ls",
-        "-1",
-        directory,
+        // A folder that does not exist yet means no backups yet, not a failure. The
+        // path was checked above to hold nothing a shell could act on.
+        `test -d ${directory} && ls -1 ${directory} || test ! -e ${directory}`,
       ]);
       if (!r.ok) throw new Error("OFFSITE_SOURCE_UNREACHABLE");
       return r.out.split("\n").filter(Boolean);
