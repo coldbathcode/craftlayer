@@ -4,7 +4,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-12. Stat
 
 ## Where we are right now
 
-- **Family server:** running on the VPS (Paper 26.3 with Geyser/Floodgate). iPads join on port 19133; Java ports stay private. Allowlist enforced.
+- **Family server:** running on the VPS (Paper 26.3 with Geyser/Floodgate). iPads join on port 19133; Java clients join on host TCP 25566 (published 2026-11-13 at the owner's request; online mode on). Allowlist enforced; RCON stays private.
 - **Players:** Alex and Charlie joined from iPads on 2026-11-08. George's account could not be looked up publicly; a temporary server plugin is waiting to record his account on his next attempt so he can be added.
 - **Original world:** the old `minecraft-java` server is stopped and untouched, with one encrypted archive on the owner's Mac.
 - **Backups:** the new family world has **no backup yet** (as of 2026-11-13 morning; the off-server copy to the owner's Mac is also ready and waiting for it). State since 2026-11-12 evening: everything is in place on the VPS: folder, switch, helper settings; it needs the owner to choose **Use this host**, turn on nightly backups and tap **Back up now**). The dashboard's own database is dumped nightly on the VPS since 2026-11-12.
