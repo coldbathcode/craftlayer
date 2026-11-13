@@ -15,6 +15,7 @@ it("deletes only the named occurrence's two files and reports each removal once"
     await mkdir(folder);
     for (const name of [
       `${old}.tar.gz`,
+      `${old}.tar.gz.age`,
       `${old}.manifest.json`,
       `${kept}.tar.gz`,
       `${kept}.manifest.json`,

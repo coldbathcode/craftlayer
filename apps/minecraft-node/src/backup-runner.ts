@@ -8,6 +8,7 @@ import {
   type RconSession,
   verifyBackupArchive,
 } from "./game-control/index.js";
+import { encryptArchive } from "./offsite.js";
 
 /** Where one server's world lives and where its archives go, as this agent sees them.
  * Both come from the operator's private configuration; callers never choose a path. */
@@ -15,6 +16,8 @@ export interface BackupTarget {
   channel: GameChannel;
   dataDirectory: string;
   backupDirectory: string;
+  /** When set, each verified archive is also encrypted to this key for collection. */
+  offsiteRecipient?: string;
 }
 const within = (parent: string, child: string) => {
   const r = relative(resolve(parent), resolve(child));
@@ -73,6 +76,15 @@ export async function runBackup(
           options.log?.("NODE_BACKUP_VERIFICATION_FAILED");
           return failed("verification_failed");
         }
+        // The off-server copy is extra: failing to prepare it never fails the backup.
+        if (
+          target.offsiteRecipient &&
+          !(await encryptArchive(
+            evidence.archive_path,
+            target.offsiteRecipient,
+          ).catch(() => false))
+        )
+          options.log?.("NODE_BACKUP_OFFSITE_ENCRYPT_FAILED");
         return {
           ok: true,
           archive_sha256: evidence.archive_sha256,

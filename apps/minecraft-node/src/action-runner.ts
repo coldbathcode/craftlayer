@@ -19,6 +19,7 @@ import {
   DockerPower,
   type PowerControl,
 } from "./lifecycle.js";
+import { offsiteRecipient } from "./offsite.js";
 
 /** One game server this node holds a private control channel for. Written by the
  * operator into the agent's read-only configuration; callers never choose any of it. */
@@ -37,6 +38,8 @@ export const gameServerConfig = z.strictObject({
    * agent sees it, and a separate protected directory that receives the archives. */
   data_directory: z.string().startsWith("/").optional(),
   backup_directory: z.string().startsWith("/").optional(),
+  /** Off-server copy (ADR 0050): the owner's age public key. Needs the two above. */
+  offsite_recipient: offsiteRecipient.optional(),
   /** Asking to join (ADR 0037): the Knock plugin's file as this agent sees it. */
   knock_file: z.string().startsWith("/").endsWith("/knocks.jsonl").optional(),
   /** Turning on and off (ADR 0047): the one container that is this server. */

@@ -71,6 +71,25 @@ Checks: `pnpm test` covers the worker, journal and runner (`apps/minecraft-node/
 
 Built 2026-11-12 ([ADR 0049](../architecture/decisions/0049-backup-archive-expiry.md)). Once an hour the helper asks which archives it may delete and removes exactly those: complete backups older than the policy's retention that are not under legal hold and are not the newest verified, off-server-verified or restore-tested backup. While no backup is verified, nothing is deleted. The record stays, with `archive_removed_at` set, and the list and health ignore it as a recovery point.
 
+## Off-server copy
+
+Built 2026-11-13 ([ADR 0050](../architecture/decisions/0050-offsite-backup-copy.md)). With `"offsite_recipient": "age1…"` in a server's entry of the helper's private configuration (beside `data_directory` and `backup_directory`), every verified backup is also written as `<occurrence>.tar.gz.age`, readable only with the matching private key.
+
+On the owner's machine (needs `age`, `ssh` access to the host and Node):
+
+```bash
+age-keygen -o <private-folder>/identity.txt        # the public key goes into the helper's configuration
+node scripts/offsite/pull-backups.mjs <config.json>
+# config.json: { "ssh_host": "<ssh alias>", "remote_directory": "<archive folder>/<server id>",
+#                "local_directory": "<where copies live>", "identity_file": "<private-folder>/identity.txt", "keep": 30 }
+```
+
+Each run prints one line per copy (`offsite_copy_ok` or `offsite_copy_failed`) and writes `status.json` in the local folder. Exit code 1 means at least one copy could not be proven. To read a copy: `age -d -i identity.txt <occurrence>.tar.gz.age > world.tar.gz`.
+
+```bash
+pnpm exec vitest run tests/unit/offsite-pull.test.ts   # real age on both sides; skipped where age is not installed
+```
+
 ## Not yet
 
-A first real backup on the family VPS, encryption and the off-site copy (D2), and periodic restore tests against stored archives (D3). Archives contain plugin secrets (for example Floodgate's `key.pem`) and must stay on protected storage until the encryption step. A switched-off server is not backed up yet.
+A first real backup on the family VPS, the dashboard showing the off-server copy (the proof stays on the owner's machine for now), a warning when pulls stop, and periodic restore tests against stored archives (D3). Archives contain plugin secrets (for example Floodgate's `key.pem`) and must stay on protected storage until the encryption step. A switched-off server is not backed up yet.

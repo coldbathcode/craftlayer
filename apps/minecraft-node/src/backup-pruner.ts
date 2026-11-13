@@ -17,7 +17,11 @@ export async function removeBackupArchive(
   const server = z.uuid().parse(expired.server_id),
     occurrence = z.uuid().parse(expired.occurrence_id),
     folder = join(backupDirectory, server);
-  for (const name of [`${occurrence}.tar.gz`, `${occurrence}.manifest.json`]) {
+  for (const name of [
+    `${occurrence}.tar.gz`,
+    `${occurrence}.tar.gz.age`,
+    `${occurrence}.manifest.json`,
+  ]) {
     const path = join(folder, name);
     await rm(path, { force: true }).catch(() => {});
     if (

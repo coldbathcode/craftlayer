@@ -51,6 +51,8 @@ CMD ["node", "dist/main.js"]
 # Node agent: the only privileged piece (Docker socket). Runs outbound-only against the gateway.
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS node
 ENV NODE_ENV=production
+# age encrypts backups to the owner's public key for the off-server copy (ADR 0050).
+RUN apt-get update && apt-get install -y --no-install-recommends age && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build --chown=node:node /prod/node .
 USER node

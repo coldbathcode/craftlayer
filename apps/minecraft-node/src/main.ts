@@ -147,7 +147,10 @@ try {
     // Backups only for servers whose world and archive directories the operator named.
     const targets = new Map<string, BackupTarget>();
     for (const g of games) {
-      if (!g.data_directory !== !g.backup_directory)
+      if (
+        !g.data_directory !== !g.backup_directory ||
+        (g.offsite_recipient && !g.backup_directory)
+      )
         throw new Error("NODE_BACKUP_DIRECTORIES_INCOMPLETE");
       const channel = channels.get(g.server_id);
       if (!g.data_directory || !g.backup_directory || !channel) continue;
@@ -156,6 +159,9 @@ try {
         channel,
         dataDirectory: g.data_directory,
         backupDirectory: g.backup_directory,
+        ...(g.offsite_recipient
+          ? { offsiteRecipient: g.offsite_recipient }
+          : {}),
       });
     }
     const log = (code: string) => console.error(`${code}; values omitted`);

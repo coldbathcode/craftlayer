@@ -78,3 +78,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0047 — Turning a server on and off: one container, chosen by the operator](0047-node-power.md).
 - [0048 — Remote MCP over Streamable HTTP](0048-remote-mcp.md).
 - [0049 — Old backup archives are deleted by the bound node, only as the retention rules allow](0049-backup-archive-expiry.md).
+- [0050 — Off-server backup copy: encrypted on the host, pulled and proven on the owner's machine](0050-offsite-backup-copy.md).
