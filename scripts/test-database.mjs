@@ -355,6 +355,32 @@ try {
     },
     stdio: "inherit",
   });
+  run("docker", [
+    "exec",
+    name,
+    "psql",
+    "-U",
+    "craftlayer_admin",
+    "-d",
+    "craftlayer",
+    "-v",
+    "ON_ERROR_STOP=1",
+    "-c",
+    "CREATE DATABASE craftlayer_ai_players_test OWNER craftlayer_migrator",
+  ]);
+  const aiPlayersUrl = (role) =>
+    `postgres://${role}:${password}@127.0.0.1:${port}/craftlayer_ai_players_test`;
+  env.TEST_AI_PLAYERS_DATABASE_URL = aiPlayersUrl("craftlayer_runtime");
+  env.TEST_AI_PLAYERS_IDENTITY_DATABASE_URL = aiPlayersUrl(
+    "craftlayer_identity",
+  );
+  run("pnpm", ["db:migrate"], {
+    env: {
+      ...env,
+      MIGRATION_DATABASE_URL: aiPlayersUrl("craftlayer_migrator"),
+    },
+    stdio: "inherit",
+  });
   run("pnpm", ["test:integration"], { env, stdio: "inherit" });
   cpSync("packages/db/migrations", migrationFixture, { recursive: true });
   writeFileSync(

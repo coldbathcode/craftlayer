@@ -66,6 +66,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@craftlayer/ai-players':
+        specifier: workspace:*
+        version: link:../../packages/ai-players
       '@craftlayer/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -205,6 +208,31 @@ importers:
       redis:
         specifier: 6.3.1
         version: 6.3.1
+
+  packages/ai-players:
+    dependencies:
+      '@craftlayer/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@craftlayer/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@craftlayer/core':
+        specifier: workspace:*
+        version: link:../core
+      '@craftlayer/providers':
+        specifier: workspace:*
+        version: link:../providers
+      pg:
+        specifier: 8.23.1
+        version: 8.23.1
+      zod:
+        specifier: 4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/pg':
+        specifier: 8.23.1
+        version: 8.23.1
 
   packages/auth:
     dependencies:

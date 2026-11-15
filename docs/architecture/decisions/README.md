@@ -81,3 +81,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0050 — Off-server backup copy: encrypted on the host, pulled and proven on the owner's machine](0050-offsite-backup-copy.md).
 - [0051 — AI player harness: a named, model-agnostic, budgeted player placed next in the plan](0051-ai-player-harness.md).
 - [0052 — Model access for AI players: compatible endpoints, usable OpenRouter pricing, standing authority](0052-ai-player-model-access.md).
+- [0053 — AI player records, worker hosts and per-player spending](0053-ai-player-records-and-hosts.md).

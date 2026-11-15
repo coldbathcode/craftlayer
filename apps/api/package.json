@@ -25,7 +25,8 @@
     "@craftlayer/providers": "workspace:*",
     "@craftlayer/runtime": "workspace:*",
     "@craftlayer/minecraft-control": "workspace:*",
-    "@craftlayer/node-protocol": "workspace:*"
+    "@craftlayer/node-protocol": "workspace:*",
+    "@craftlayer/ai-players": "workspace:*"
   },
   "scripts": {
     "build": "tsc -b"

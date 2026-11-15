@@ -14,6 +14,7 @@ import {
   type AgentRequestApi,
   registerAgentRequests,
 } from "./agent-request-routes.js";
+import { type AiPlayerApi, registerAiPlayers } from "./ai-player-routes.js";
 import { registerAuth, requestToken } from "./auth-routes.js";
 import { type BackupApi, registerBackups } from "./backup-routes.js";
 import {
@@ -43,6 +44,7 @@ export async function buildApp(options: {
   actions?: ServerActionApi;
   live?: ServerLiveApi;
   agentRequests?: AgentRequestApi;
+  aiPlayers?: AiPlayerApi;
   nodes?: NodeApi;
   deployments?: DeploymentApi;
   publicUrl?: string;
@@ -201,6 +203,8 @@ export async function buildApp(options: {
   if (options.live && options.auth) await registerServerLive(app, options.live);
   if (options.agentRequests && options.auth)
     await registerAgentRequests(app, options.agentRequests);
+  if (options.aiPlayers && options.auth)
+    await registerAiPlayers(app, options.aiPlayers);
   if (options.minecraft && options.auth)
     await registerMinecraft(
       app,

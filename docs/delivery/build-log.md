@@ -695,3 +695,11 @@ Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 61 files / 500 test
 
 Checks: `pnpm test` 62 files / 511 tests (6 new provider tests: compatible adapter, wire guard, OpenRouter rules); `pnpm test:db` 248/248 (2 new: standing authority incl. demotion and forged membership; Kong connection binding). Not done: dashboard connection screen and model picker; no call has reached a real Kong or OpenRouter endpoint; direct Anthropic/OpenAI/Gemini adapters.
 
+## G3 — AI player records, worker hosts and spending, 2026-11-15
+
+[ADR 0053](../architecture/decisions/0053-ai-player-records-and-hosts.md). New package `@craftlayer/ai-players` (owner API and worker-host API), migration 0040 (eight tenant-scoped tables with RLS), contracts in `packages/contracts/src/ai-players.ts`, routes in `apps/api/src/ai-player-routes.ts`.
+
+Found and fixed while testing: Zod 4 `.partial()` still applies field defaults, so a PATCH changing only the host reset persona, rules, instructors, protocol and calls per hour. The update schema is now built from fields without defaults, with a contract test and a database assertion. The ledger books every settled call at no less than its reservation, so the player's spend is priced from observed usage instead (ADR 0053). Hourly call counting used database time against the service clock; calls are now stamped from the service clock.
+
+Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 63 files / 513 tests; `pnpm test:db` 255/255 (7 new AI player cases). Not done: the dashboard screens, MCP tools and the worker that uses these routes (G4 onward).
+

@@ -31,3 +31,4 @@ export * from "./control.js";
 export * from "./gateway.js";
 export * from "./instance.js";
 export * from "./pricing.js";
+export { maximumCost, RouterBlocked } from "./router.js";

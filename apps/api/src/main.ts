@@ -1,3 +1,4 @@
+import { AiPlayers } from "@craftlayer/ai-players";
 import { AuthService, createResetDelivery } from "@craftlayer/auth";
 import {
   createLogger,
@@ -93,6 +94,11 @@ try {
     auth,
     actions,
   });
+  const aiPlayers = new AiPlayers({
+    databaseUrl: config.DATABASE_URL,
+    auth,
+    gateway: providers,
+  });
   const nodes = new NodeControl({
     databaseUrl: config.DATABASE_URL,
     auth,
@@ -160,6 +166,7 @@ try {
     await minecraft.close();
     await nodes.close();
     await deployments.close();
+    await aiPlayers.close();
   };
   redis.on("error", () =>
     log.warn({ code: "REDIS_UNAVAILABLE" }, "Queue unavailable"),
@@ -175,6 +182,7 @@ try {
     actions,
     live,
     agentRequests,
+    aiPlayers,
     nodes,
     deployments,
     publicUrl: config.CRAFTLAYER_PUBLIC_URL,
@@ -205,6 +213,7 @@ try {
     await minecraft.close();
     await nodes.close();
     await deployments.close();
+    await aiPlayers.close();
   };
   installShutdown(() => close(), log);
   await app.listen({

@@ -38,6 +38,9 @@
       "path": "packages/minecraft-control"
     },
     {
+      "path": "packages/ai-players"
+    },
+    {
       "path": "packages/node-protocol"
     },
     {
