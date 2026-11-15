@@ -54,7 +54,8 @@
     "node:run": "node apps/minecraft-node/dist/main.js run",
     "mcp": "node --import tsx apps/mcp/src/main.ts",
     "mcp:run": "node apps/mcp/dist/main.js",
-    "test:game-control": "pnpm build:server && node scripts/test-game-control.mjs"
+    "test:game-control": "pnpm build:server && node scripts/test-game-control.mjs",
+    "test:ai-player-world": "pnpm --filter @craftlayer/ai-player build && node scripts/test-ai-player-world.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.4",

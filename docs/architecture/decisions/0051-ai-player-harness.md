@@ -1,6 +1,6 @@
 # ADR 0051 — AI player harness: a named, model-agnostic, budgeted player placed next in the plan
 
-Status: proposed on 2026-11-15 at the owner's request ("add it as the next thing to do"). Planning only: implementation starts when the owner completes step G0 (accepts the Chapter 03 review and authorizes Milestone G). Plan: [Milestone G](../../plan/G-ai-player.md).
+Status: adopted 2026-11-15. The owner asked for it as the next thing to do, answered decisions 8–12, then said "get going" after being told that G0 meant accepting the Chapter 03 review and authorizing Milestone G; that is recorded as both. Plan: [Milestone G](../../plan/G-ai-player.md).
 
 ## Context
 
@@ -25,6 +25,6 @@ What exists: the provider gateway with OpenRouter and Ollama adapters, encrypted
 - Chapter 04's specification stays the engineering source for the bot adapter; Milestone G adds the brain, memory, model choice, conversation and cost monitor around it.
 - Chapter 07 shrinks to the providers and compatible endpoints not delivered by G2.
 - The first AI player costs no licence but borrows the owner's account: the owner cannot be on Java with it at the same time, and a VPS compromise could misuse the stored session until revoked. Further AI players each need an account; a turnkey multi-bot experience is not promised.
-- Mineflayer support for the family server's game version is unverified. If none exists, the fallback (a protocol-translation plugin on the server) is a production change needing separate approval and a verified backup.
+- **G1 (2026-11-15):** Mineflayer supports 26.1, not 26.3. The bot speaks 26.1 and ViaVersion/ViaBackwards on the server translate. Installing them on the family server is a production change needing approval and a verified backup (decision 13). Mineflayer is pinned to an official master commit because the release lacks `tick_end`; the body adds the upstream #4201 tick rule and the float player width (#3911). Details: [AI player runbook](../../development/ai-player.md).
 - Real-model evaluation and paid calls run only under the configured limit (decision 3 allows paid models; decision 9 sets $1/day, $10 total). CI uses a scripted fake model and a fake body.
 - Kid Mode (F2b) and teams (F2c) build on G's profiles, skills and limits rather than a separate stack.

@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "id": "ai-player-paper-26_3-via-candidate-1",
+  "qualification": "unqualified",
+  "researched_at": "2026-11-15",
+  "server_profile": "paper-26_3-crossplay-candidate-1",
+  "server_minecraft_java": "26.3",
+  "bot": {
+    "library": "mineflayer",
+    "version": "4.39.0",
+    "pathfinder": "mineflayer-pathfinder 2.4.5",
+    "minecraft_data": "3.119.0",
+    "protocol_version": "26.1",
+    "note": "mineflayer 4.39.0 lists 26.1 as its newest tested version and minecraft-data 3.119.0 has no 26.3 data, so the bot speaks 26.1 and the server-side ViaBackwards bridge translates 26.3 to 26.1."
+  },
+  "server_plugins": [
+    {
+      "component": "viaversion",
+      "version": "5.12.2",
+      "filename": "ViaVersion-5.12.2.jar",
+      "sha256": "24e4876fefe73e08a4c87cd6c457ee0916e62dd69656631caf41e26f909d504b",
+      "url": "https://github.com/ViaVersion/ViaVersion/releases/download/5.12.2/ViaVersion-5.12.2.jar"
+    },
+    {
+      "component": "viabackwards",
+      "version": "5.12.2",
+      "filename": "ViaBackwards-5.12.2.jar",
+      "sha256": "9a148a80ea22074f4bd1626cdbe254a4cd998bf44e7ceaff4e285a1b6b35da42",
+      "url": "https://github.com/ViaVersion/ViaBackwards/releases/download/5.12.2/ViaBackwards-5.12.2.jar"
+    }
+  ],
+  "native_diagnostic_server": {
+    "component": "paper",
+    "version": "26.1.2",
+    "build": 74,
+    "sha256": "1d70b1dab9cf4a6de615209a536f3a45a2186240253c428213ce2188ab95e5f7",
+    "url": "https://fill-data.papermc.io/v1/objects/1d70b1dab9cf4a6de615209a536f3a45a2186240253c428213ce2188ab95e5f7/paper-26.1.2-74.jar",
+    "purpose": "Diagnostics only (AI_PLAYER_NATIVE_SERVER=1): separates bot-library faults from bridge faults."
+  },
+  "alternative": "ViaProxy 3.4.14 (26.3 server support) beside the bot avoids any server plugin, but then the proxy must hold the Minecraft session for online-mode servers.",
+  "test_world": {
+    "seed": "craftlayer-ai-player-1",
+    "online_mode": false,
+    "reason": "Isolated loopback fixture only. Production keeps online mode and the allowlist."
+  }
+}

@@ -24,7 +24,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-15. Stat
 | [D — Backups](D-backups.md) | In progress | D1: switch the nightly loop on for the VPS (needs A2 live and a backup folder), then D2 |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F2a is delivered by G; F1, F2b and F2c follow G |
-| [G — AI player harness](G-ai-player.md) | Needs decision (next) | Decisions 8–12 answered; owner G0 still needs: accept the Chapter 03 review and authorize G; then G1–G3 in parallel |
+| [G — AI player harness](G-ai-player.md) | In progress | G0 done (owner: "get going", 2026-11-15); G1 built; G2–G3 next. The family server needs the version bridge (decision 13) before the AI player can join it |
 
 ## Steps
 
@@ -52,8 +52,8 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-15. Stat
 | E4 | Decommission with retained backup | E2 | Not started | — |
 | F1 | Dashboard assistant | C3, B2, Decision 3 | Not started | Provider gateway built (Chapter 02) |
 | F2 | In-game AI helpers | G (F2a); F2b/F2c build on G | Not started | Fleet runtime built (Chapter 03); F2a is carried by Milestone G |
-| G0 | Owner gate: accept Chapter 03 review, authorize G | — | Needs decision | Plan written 2026-11-15 ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); decisions 8–12 answered the same day; Chapter 03 review prepared (`docs/reviews/03-fleet-engine.md`) |
-| G1 | Compatibility spike and sealed local test world; owner-account sign-in | G0 | Not started | Mineflayer support for Paper 26.3 is unverified; fallback needs separate approval |
+| G0 | Owner gate: accept Chapter 03 review, authorize G | — | Done | 2026-11-15: owner said "get going" after being told G0 meant accepting the Chapter 03 review and authorizing G; recorded as both ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)). Decisions 8–12 answered the same day |
+| G1 | Compatibility spike and sealed local test world; owner-account sign-in | G0 | Built | 2026-11-15: the bot plays on Paper 26.3 (family pins) through ViaVersion/ViaBackwards 5.12.2, with Mineflayer pinned to official master `5a252e6` plus two body fixes (tick-end shim, server hitbox width). `pnpm test:ai-player-world`: 3/3 runs, 12/12 moves, dig/collect/place verified ([record](../development/ai-player.md)). Online sign-in moves to G3/G4; the family server's bridge is decision 13 |
 | G2 | Pick any model: Kong AI Gateway and OpenAI-compatible connections, then Anthropic, OpenAI, Gemini; price table; one catalog | G0 | Not started | OpenRouter and Ollama adapters exist (Chapter 02) |
 | G3 | AI player profiles, master tasks, account sign-in, per-player spending limits ($1/day, $10 total) | G0 | Not started | Ledger has micro-USD and mission/task scopes; AI-player scope is new |
 | G4 | Body: player worker, single session, stop, reconnect, observations | G1, G3 | Not started | CL-04-03, CL-04-04 |
@@ -82,6 +82,7 @@ Decided on 2026-11-08 unless noted.
 | 10 | Who may instruct the AI player (2026-11-15) | **Only the owner** | G8 accepts the owner's identities only |
 | 11 | Where it may dig and build (2026-11-15) | **Anywhere: free run of the world** | No zones by default; no attacking players; block journal; family world only after a verified backup |
 | 12 | What it does unasked (2026-11-15) | **Owner-allowed master tasks** (unasked work only; direct instructions unrestricted) | G3 task list; G6 picks tasks when idle |
+| 13 | Install the ViaVersion/ViaBackwards bridge on the family server | *Open* — needed before the AI player can join the family world (one restart, verified backup first) | Without it the AI player can join only the test world; G1 shows why it is needed |
 
 ## Change log
 
@@ -114,3 +115,4 @@ Decided on 2026-11-08 unless noted.
 - 2026-11-13 — VPS updated to `7e4bb88` (migration 0037, expiry, encryption to the owner's key; game untouched). Off-server pull job installed on the owner's Mac. Still waiting on the owner's taps for the first backup.
 - 2026-11-15 — Milestone G (AI player harness) planned and placed next at the owner's request ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); waits on the owner's G0 step.
 - 2026-11-15 — Owner answered G decisions 8–12: own Java account, any model via OpenRouter and Kong AI Gateway with $1/day and $10 total, owner-only instructions, free run of the world, master tasks for unasked work.
+- 2026-11-15 — G0 done (owner: "get going"). G1 built: an AI player body plays on the family server's exact version (Paper 26.3) through the ViaVersion/ViaBackwards bridge; two bot-library faults found and fixed in our body code. The family server needs the bridge (decision 13).

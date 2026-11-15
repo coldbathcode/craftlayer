@@ -681,3 +681,11 @@ Owner asked for "the java clients to be accessible for the world". `java-public.
 
 Bedrock account for a family member: the server refused the gamertag on 2026-11-08 before anything recorded account numbers, and the Floodgate global lookup still has no record of it. A private watcher on the VPS adds exactly the Bedrock account the Knock plugin records being refused under that gamertag, through the same `GameActions.allow` path as the dashboard, then stops (24 h limit). Not done yet: he has not tried to join since. No Java account is on the allowlist yet, so Java players are refused until they are added.
 
+## G1 — AI player compatibility, 2026-11-15
+
+Owner said "get going" on Milestone G (recorded as Chapter 03 acceptance and G authorization). New app `apps/ai-player` with the bot body: Mineflayer pinned to official commit `5a252e6d258882b042e60e21c37d552cdf3b3380` (4.39.0 lacks `tick_end`), mineflayer-pathfinder 2.4.5, minecraft-data 3.119.0. Pins and bridge plugins in `infra/minecraft/ai-player-compat.lock.json`.
+
+Findings, in order: the bot spawned on Paper 26.3 through ViaVersion/ViaBackwards 5.12.2 but was kicked (`invalid_player_movement`) on its first move; Mineflayer master fixed the kick; corrections remained until the tick-end shim (upstream #4201 rule); pathfinding still stalled near trees with ~19 corrections a second, also on a native Paper 26.1.2 (so a bot fault, not the bridge), until the player half-width was set to the float value (#3911).
+
+Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 61 files / 500 tests pass (5 new for the shim and guard); `CRAFTLAYER_ACCEPT_EULA=true pnpm test:ai-player-world` 3/3 PASS: 12/12 moves with zero non-spawn corrections, dig, collect and place verified. Not done: online sign-in, the family server's bridge (decision 13), no Bedrock client joined the test world, combat/crafting/chests untested.
+
