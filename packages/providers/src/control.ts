@@ -6,6 +6,7 @@ import {
   modelSchema,
 } from "@craftlayer/contracts";
 import type pg from "pg";
+import { CompatibleProvider } from "./compatible.js";
 import {
   type ConnectionOptions,
   type ConnectionRow,
@@ -38,7 +39,7 @@ export class GatewayControl extends ConnectionService {
   ): Promise<ModelProvider> {
     const endpoint = this.endpoint(row, policy);
     let secret: string | undefined;
-    if (generation && row.kind === "openrouter") {
+    if (generation && row.kind !== "ollama") {
       if (!row.credential_payload || !row.key_id)
         throw new ProviderError("auth", false);
       secret = openCredential(
@@ -51,6 +52,13 @@ export class GatewayControl extends ConnectionService {
       );
     }
     if (this.factory) return this.factory(row, policy, secret);
+    if (row.kind === "openai_compatible")
+      return new CompatibleProvider(
+        this.compatibleEndpoint(row, policy),
+        secret,
+        undefined,
+        this.now,
+      );
     if (row.kind === "ollama" && endpoint)
       return new OllamaProvider(endpoint, undefined, this.now);
     return new OpenRouterProvider(
@@ -95,10 +103,7 @@ export class GatewayControl extends ConnectionService {
     const models = (await adapter.discover(AbortSignal.timeout(4000))).map(
       (m) => modelSchema.parse(m),
     );
-    const approved =
-      state.kind === "ollama"
-        ? (this.endpoint(state, policy)?.models ?? [])
-        : policy.openrouter_models;
+    const approved = this.approvedModels(state, policy);
     if (
       models.length > 32 ||
       models.some(

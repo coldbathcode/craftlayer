@@ -47,6 +47,18 @@ const contextSchema = z
       (!v.attempt_id || Boolean(v.mission_id && v.task_id)),
   );
 export type ExecutionBudgetContext = z.infer<typeof contextSchema>;
+const standingSchema = z.strictObject({
+  org: z.uuid(),
+  userId: z.uuid(),
+  membershipId: z.uuid(),
+  projectId: z.uuid(),
+});
+export type StandingAuthority = z.infer<typeof standingSchema>;
+const modelChoiceSchema = z.strictObject({
+  connection_id: z.uuid(),
+  model_id: z.string().min(1).max(180),
+});
+export type ModelChoice = z.infer<typeof modelChoiceSchema>;
 interface CurrentState extends RoutingSnapshot {
   budget: BudgetConfiguration;
 }
@@ -127,7 +139,7 @@ export class ProviderGateway extends GatewayControl {
     const connections = (
       await client.query<{
         id: string;
-        kind: "ollama" | "openrouter";
+        kind: "ollama" | "openrouter" | "openai_compatible";
         endpoint_id: string;
         version: number;
         descriptor: unknown;
@@ -144,12 +156,7 @@ export class ProviderGateway extends GatewayControl {
       const model = parsed.data;
       let allowed: string[] = [];
       try {
-        allowed =
-          row.kind === "ollama"
-            ? (this.endpoint(row, instance)?.models ?? [])
-            : instance.openrouter_enabled
-              ? instance.openrouter_models
-              : [];
+        allowed = this.approvedModels(row, instance);
       } catch {
         continue;
       }
@@ -206,20 +213,200 @@ export class ProviderGateway extends GatewayControl {
     signal: AbortSignal = AbortSignal.timeout(60000),
   ) {
     const grant = executionGrantSchema.parse(structuredClone(inputGrant)),
-      request = generateRequestSchema.parse(structuredClone(input)),
       labels = contextSchema.parse(structuredClone(inputLabels));
-    const snapshot = () =>
-      this.execute(grant, labels, (client, _p, context) =>
+    return this.route(
+      {
+        organizationId: grant.organizationId,
+        run: (operation) => this.execute(grant, labels, operation),
+        guard: async (client, principal, context, request) => {
+          if (!labels.attempt_id) return;
+          const allowed = (
+            await client.query<{ allowed: boolean }>(
+              "select runtime_guard_provider_dispatch_v1($1,$2,$3,$4,$5,$6,$7,$8,$9) as allowed",
+              [
+                context.org,
+                labels.mission_id,
+                labels.task_id,
+                labels.attempt_id,
+                request.request_id,
+                grant.id,
+                grant.signature,
+                new Date(this.now()),
+                new Date(principal.authorityExpiresAt ?? grant.expiresAt),
+              ],
+            )
+          ).rows[0]?.allowed;
+          if (!allowed) throw new ProviderError("policy_denied", false);
+        },
+        expiry: (principal) => principal.authorityExpiresAt ?? grant.expiresAt,
+      },
+      input,
+      signal,
+    );
+  }
+  /**
+   * Master plan G (ADR 0052): a call for a long-running AI player. Authority is the
+   * delegating adult's current standing (no session), re-checked at every step; the
+   * call may use exactly the model chosen in the player's profile, nothing else.
+   * Budgets apply to the adult and the player's project like any other call.
+   */
+  async generateStanding(
+    standing: StandingAuthority,
+    choice: ModelChoice,
+    input: GenerateRequest,
+    signal: AbortSignal = AbortSignal.timeout(60000),
+  ) {
+    const value = standingSchema.parse(structuredClone(standing)),
+      chosen = modelChoiceSchema.parse(structuredClone(choice));
+    return this.route(
+      {
+        organizationId: value.org,
+        run: (operation) => this.executeStanding(value, operation),
+        guard: async () => {},
+        expiry: (principal) => principal.authorityExpiresAt ?? 0,
+        choice: chosen,
+      },
+      input,
+      signal,
+    );
+  }
+  /**
+   * Refreshes one connection's model snapshot under standing authority, so a
+   * long-running player is not blocked by the five-minute price freshness rule.
+   * Only the instance operator's approved models are stored.
+   */
+  async refreshStanding(standing: StandingAuthority, connectionId: string) {
+    const value = standingSchema.parse(structuredClone(standing));
+    const state = await this.executeStanding(value, async (client) => {
+      const row = await this.row(client, value.org, connectionId);
+      if (!row.enabled) throw new ProviderError("policy_denied", false);
+      return row;
+    });
+    const policy = await this.files.policy(),
+      stamp = await this.files.stamp(),
+      adapter = await this.adapter(state, policy);
+    const approved = this.approvedModels(state, policy);
+    const models = (await adapter.discover(AbortSignal.timeout(4000)))
+      .map((m) => modelSchema.parse(m))
+      .filter((m) => approved.includes(m.id));
+    if (
+      models.length > 32 ||
+      models.some(
+        (m) =>
+          m.provider !== state.kind ||
+          m.classification !==
+            (state.kind === "ollama" ? "operator_local" : "hosted"),
+      )
+    )
+      throw new ProviderError("malformed_response", false);
+    return this.executeStanding(value, async (client) => {
+      const row = await this.row(client, value.org, connectionId, true);
+      this.assertVersion(row, state.version);
+      if (!row.enabled || (await this.files.stamp()) !== stamp)
+        throw new ProviderError("policy_denied", false);
+      await client.query(
+        "delete from model_snapshots where organization_id=$1 and connection_id=$2",
+        [value.org, connectionId],
+      );
+      for (const model of models)
+        await client.query(
+          "insert into model_snapshots(organization_id,connection_id,connection_version,model_id,descriptor,fetched_at,expires_at) values($1,$2,$3,$4,$5::jsonb,$6,$7)",
+          [
+            value.org,
+            connectionId,
+            row.version,
+            model.id,
+            JSON.stringify(model),
+            new Date(model.pricing.observed_at),
+            new Date(model.pricing.expires_at),
+          ],
+        );
+      return models;
+    });
+  }
+  /** The chosen model's current snapshot (for cost bounds), or null when absent or stale. */
+  async chosenModel(standing: StandingAuthority, choice: ModelChoice) {
+    const value = standingSchema.parse(structuredClone(standing)),
+      chosen = modelChoiceSchema.parse(structuredClone(choice));
+    return this.executeStanding(value, async (client) => {
+      const row = (
+        await client.query<{ descriptor: unknown; expires_at: Date }>(
+          "select s.descriptor,s.expires_at from model_snapshots s join provider_connections c on c.organization_id=s.organization_id and c.id=s.connection_id and c.version=s.connection_version where s.organization_id=$1 and s.connection_id=$2 and s.model_id=$3 and c.enabled=true",
+          [value.org, chosen.connection_id, chosen.model_id],
+        )
+      ).rows[0];
+      if (!row) return null;
+      const model = modelSchema.safeParse(row.descriptor);
+      return model.success ? model.data : null;
+    });
+  }
+  private async executeStanding<T>(
+    standing: StandingAuthority,
+    operation: (
+      client: pg.PoolClient,
+      p: Principal,
+      context: LedgerContext,
+    ) => Promise<T>,
+  ): Promise<T> {
+    return this.auth.guardStanding(
+      standing.org,
+      { userId: standing.userId, membershipId: standing.membershipId },
+      "ai_player:manage",
+      { kind: "project", id: standing.projectId },
+      (p) =>
+        this.tx(standing.org, (client) =>
+          operation(client, p, {
+            org: standing.org,
+            user: p.user.id,
+            project: standing.projectId,
+          }),
+        ),
+    );
+  }
+  private async route(
+    authority: {
+      organizationId: string;
+      run: <T>(
+        operation: (
+          client: pg.PoolClient,
+          p: Principal,
+          context: LedgerContext,
+        ) => Promise<T>,
+      ) => Promise<T>;
+      guard: (
+        client: pg.PoolClient,
+        p: Principal,
+        context: LedgerContext,
+        request: GenerateRequest,
+      ) => Promise<void>;
+      expiry: (p: Principal) => number;
+      choice?: ModelChoice;
+    },
+    input: GenerateRequest,
+    signal: AbortSignal,
+  ) {
+    const request = generateRequestSchema.parse(structuredClone(input));
+    const { run, choice } = authority;
+    const snapshot = async () => {
+      const state = await run((client, _p, context) =>
         this.current(client, context),
       );
+      if (!choice) return state;
+      return {
+        ...state,
+        candidates: state.candidates.filter(
+          (c) =>
+            c.connection_id === choice.connection_id &&
+            c.model.id === choice.model_id,
+        ),
+      };
+    };
     const port: RouterPort = {
       snapshot,
       begin: (body) =>
-        this.execute(grant, labels, (client, _p, context) =>
-          this.ledger.begin(client, context, body),
-        ),
+        run((client, _p, context) => this.ledger.begin(client, context, body)),
       reserve: (candidate, body, attempt, epoch, cost) =>
-        this.execute(grant, labels, async (client, _p, context) => {
+        run(async (client, _p, context) => {
           const state = await this.current(client, context);
           if (state.epoch !== epoch || state.stopped)
             throw new RouterBlocked(["policy_changed"]);
@@ -235,26 +422,8 @@ export class ProviderGateway extends GatewayControl {
           );
         }),
       dispatch: (reservation, epoch) =>
-        this.execute(grant, labels, async (client, principal, context) => {
-          if (labels.attempt_id) {
-            const allowed = (
-              await client.query<{ allowed: boolean }>(
-                "select runtime_guard_provider_dispatch_v1($1,$2,$3,$4,$5,$6,$7,$8,$9) as allowed",
-                [
-                  context.org,
-                  labels.mission_id,
-                  labels.task_id,
-                  labels.attempt_id,
-                  request.request_id,
-                  grant.id,
-                  grant.signature,
-                  new Date(this.now()),
-                  new Date(principal.authorityExpiresAt ?? grant.expiresAt),
-                ],
-              )
-            ).rows[0]?.allowed;
-            if (!allowed) throw new ProviderError("policy_denied", false);
-          }
+        run(async (client, principal, context) => {
+          await authority.guard(client, principal, context, request);
           const state = await this.current(client, context);
           if (state.epoch !== epoch || state.stopped)
             throw new ProviderError("policy_denied", false);
@@ -272,26 +441,26 @@ export class ProviderGateway extends GatewayControl {
             epoch,
             state.budget,
           );
-          if ((principal.authorityExpiresAt ?? grant.expiresAt) <= this.now())
+          if (authority.expiry(principal) <= this.now())
             throw new ProviderError("policy_denied", false);
         }),
       // Settlement must survive initiating-session revocation; this closure retains canonical org.
       complete: (reservation, outcome) =>
-        this.tx(grant.organizationId, (client) =>
+        this.tx(authority.organizationId, (client) =>
           this.ledger.complete(
             client,
-            grant.organizationId,
+            authority.organizationId,
             reservation,
             outcome,
           ),
         ),
       cooldown: (id, delay) =>
-        this.recordCooldown(grant.organizationId, id, delay),
+        this.recordCooldown(authority.organizationId, id, delay),
       provider: (candidate) =>
-        this.execute(grant, labels, async (client) => {
+        run(async (client) => {
           const row = await this.row(
             client,
-            grant.organizationId,
+            authority.organizationId,
             candidate.connection_id,
           );
           this.assertVersion(row, candidate.version);

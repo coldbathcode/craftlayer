@@ -17,7 +17,7 @@ import type { InstancePolicy, ProviderFiles } from "./instance.js";
 export interface ConnectionRow {
   id: string;
   organization_id: string;
-  kind: "ollama" | "openrouter";
+  kind: "ollama" | "openrouter" | "openai_compatible";
   endpoint_id: string;
   label: string;
   enabled: boolean;
@@ -122,9 +122,38 @@ export class ConnectionService {
         throw new ProviderError("policy_denied", false);
       return null;
     }
+    if (row.kind === "openai_compatible") return null;
     const endpoint = policy.ollama.find((e) => e.id === row.endpoint_id);
     if (!endpoint) throw new ProviderError("policy_denied", false);
     return endpoint;
+  }
+  protected compatibleEndpoint(
+    row: Pick<ConnectionRow, "kind" | "endpoint_id">,
+    policy: InstancePolicy,
+  ) {
+    const endpoint =
+      row.kind === "openai_compatible"
+        ? policy.openai_compatible.find((e) => e.id === row.endpoint_id)
+        : undefined;
+    if (!endpoint) throw new ProviderError("policy_denied", false);
+    return endpoint;
+  }
+  /** Model IDs the instance operator approved for this connection's endpoint. */
+  protected approvedModels(
+    row: Pick<ConnectionRow, "kind" | "endpoint_id">,
+    policy: InstancePolicy,
+  ): string[] {
+    if (row.kind === "openai_compatible")
+      return this.compatibleEndpoint(row, policy).models.map((m) => m.id);
+    if (row.kind === "ollama") return this.endpoint(row, policy)?.models ?? [];
+    return policy.openrouter_enabled ? policy.openrouter_models : [];
+  }
+  protected checkEndpoint(
+    row: Pick<ConnectionRow, "kind" | "endpoint_id">,
+    policy: InstancePolicy,
+  ) {
+    if (row.kind === "openai_compatible") this.compatibleEndpoint(row, policy);
+    else this.endpoint(row, policy);
   }
   protected async audit(
     client: pg.PoolClient,
@@ -159,8 +188,9 @@ export class ConnectionService {
     });
     const value = connectionCreateSchema.parse(input),
       policy = await this.files.policy();
-    this.endpoint(value, policy);
-    if ((value.kind === "openrouter") !== Boolean(value.secret))
+    this.checkEndpoint(value, policy);
+    // Hosted connections need a credential; operator-local Ollama never takes one.
+    if ((value.kind !== "ollama") !== Boolean(value.secret))
       throw new ProviderError("policy_denied", false);
     const id = randomUUID(),
       sealed = value.secret
@@ -168,7 +198,7 @@ export class ConnectionService {
         : null;
     return this.admin(token, org, async (client, p) => {
       // Re-read protected configuration after authority acquisition, before state change.
-      this.endpoint(value, await this.files.policy());
+      this.checkEndpoint(value, await this.files.policy());
       await client.query(
         "insert into provider_connections(id,organization_id,kind,endpoint_id,label,credential_version,key_id,credential_payload) values($1,$2,$3,$4,$5,$6,$7,$8)",
         [
@@ -196,7 +226,7 @@ export class ConnectionService {
     return this.admin(token, org, async (client, p) => {
       const row = await this.row(client, org, id, true);
       this.assertVersion(row, version);
-      if (enabled) this.endpoint(row, await this.files.policy());
+      if (enabled) this.checkEndpoint(row, await this.files.policy());
       await client.query(
         "update provider_connections set enabled=$3,version=version+1 where organization_id=$1 and id=$2",
         [org, id, enabled],
@@ -228,7 +258,7 @@ export class ConnectionService {
     return this.admin(token, org, async (client, p) => {
       const row = await this.row(client, org, id, true);
       this.assertVersion(row, version);
-      if (row.kind !== "openrouter")
+      if (row.kind === "ollama")
         throw new ProviderError("policy_denied", false);
       const ring = secret !== null || rewrap ? await this.files.keys() : null;
       let next = secret;

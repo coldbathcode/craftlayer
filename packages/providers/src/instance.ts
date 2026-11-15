@@ -60,6 +60,91 @@ export const approvedLocalSchema = z.strictObject({
   context_tokens: z.number().int().min(1024).max(131072),
   output_tokens: z.number().int().min(1).max(8192),
 });
+const priceAmount = z.string().regex(/^(0|[1-9][0-9]{0,8})(\.[0-9]{1,18})?$/);
+/** Every price dimension, USD per token (request: per request; image: per image; audio: per second; tool: per call). */
+export const priceTableSchema = z.strictObject({
+  input: priceAmount,
+  output: priceAmount,
+  cache_read: priceAmount,
+  cache_write: priceAmount,
+  request: priceAmount,
+  image: priceAmount,
+  audio: priceAmount,
+  reasoning: priceAmount,
+  tool: priceAmount,
+});
+export const compatibleModelSchema = z.strictObject({
+  id: z
+    .string()
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9._:/@-]{0,179}$/)
+    .refine((value) => !value.includes("..")),
+  context_tokens: z.number().int().min(1024).max(2_000_000),
+  output_tokens: z.number().int().min(1).max(1_000_000),
+  tools: z.boolean(),
+  structured: z.boolean(),
+  prices: priceTableSchema,
+  /** Where the operator took the prices from, and when. */
+  price_source: z.string().trim().min(1).max(200),
+  price_checked_on: z.iso.date(),
+});
+/**
+ * An OpenAI-compatible chat endpoint the instance operator approves, for
+ * example Kong AI Gateway in front of several providers. The operator declares
+ * its models and full price table; nothing is discovered from the endpoint.
+ */
+export const compatibleEndpointSchema = z
+  .strictObject({
+    id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+    label: z.string().trim().min(1).max(80),
+    flavor: z.enum(["kong_ai_gateway", "generic"]),
+    url: z.url().refine((value) => {
+      const u = new URL(value);
+      return (
+        ["http:", "https:"].includes(u.protocol) &&
+        !u.username &&
+        !u.password &&
+        !u.search &&
+        !u.hash
+      );
+    }),
+    /** Chat completions path relative to url, e.g. "chat/completions" or "v1/chat/completions". */
+    chat_path: z
+      .string()
+      .regex(/^[a-zA-Z0-9._~-]+(\/[a-zA-Z0-9._~-]+)*$/)
+      .refine((value) => !value.split("/").includes(".."))
+      .default("chat/completions"),
+    /** Header that carries the credential: Kong key-auth uses "apikey". */
+    auth_header: z.enum(["authorization", "apikey", "x-api-key"]),
+    /** public: must resolve to public addresses. private: only the listed LAN/tailnet addresses. */
+    network: z.enum(["public", "private"]),
+    addresses: z.array(z.string()).max(8).default([]),
+    models: z.array(compatibleModelSchema).min(1).max(32),
+  })
+  .refine(
+    (e) =>
+      e.network === "public"
+        ? e.addresses.length === 0
+        : e.addresses.length > 0 &&
+          e.addresses.every((a) => isIP(a) !== 0 && privateAddress(a)),
+    "Private endpoints list their LAN/tailnet addresses; public endpoints list none",
+  )
+  .refine(
+    (e) => new URL(e.url).protocol === "https:" || e.network === "private",
+    "Public endpoints require HTTPS",
+  )
+  .refine(
+    (e) => new Set(e.models.map((m) => m.id)).size === e.models.length,
+    "Duplicate model IDs",
+  );
+/** LAN, loopback or Tailscale (100.64.0.0/10) address. */
+export const privateAddress = (address: string) =>
+  localAddress(address) ||
+  (isIP(address) === 4 &&
+    (() => {
+      const p = address.split(".").map(Number);
+      return p[0] === 100 && (p[1] ?? 0) >= 64 && (p[1] ?? 0) <= 127;
+    })());
+export type CompatibleEndpoint = z.infer<typeof compatibleEndpointSchema>;
 export const instancePolicySchema = z
   .strictObject({
     limits: budgetLimitsSchema.default(defaultInstanceLimits),
@@ -70,10 +155,17 @@ export const instancePolicySchema = z
     max_paid_micro_usd: microUsd,
     stopped: z.boolean(),
     ollama: z.array(approvedLocalSchema).max(16),
+    openai_compatible: z.array(compatibleEndpointSchema).max(16).default([]),
   })
   .refine(
     (p) => new Set(p.ollama.map((e) => e.id)).size === p.ollama.length,
     "Duplicate endpoint IDs",
+  )
+  .refine(
+    (p) =>
+      new Set(p.openai_compatible.map((e) => e.id)).size ===
+      p.openai_compatible.length,
+    "Duplicate compatible endpoint IDs",
   );
 export type InstancePolicy = z.infer<typeof instancePolicySchema>;
 export type ApprovedLocal = z.infer<typeof approvedLocalSchema>;
@@ -86,6 +178,7 @@ export const disabledInstance: InstancePolicy = {
   max_paid_micro_usd: "0",
   stopped: false,
   ollama: [],
+  openai_compatible: [],
 };
 const keyRingSchema = z
   .strictObject({

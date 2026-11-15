@@ -25,6 +25,7 @@ export interface ModelProvider {
     beforeDispatch?: () => Promise<void>,
   ): Promise<GenerateResult>;
 }
+export * from "./compatible.js";
 export * from "./connections.js";
 export * from "./control.js";
 export * from "./gateway.js";

@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-export const providerKind = z.enum(["ollama", "openrouter"]);
+export const providerKind = z.enum([
+  "ollama",
+  "openrouter",
+  "openai_compatible",
+]);
 export const priceDimensions = [
   "input",
   "output",
@@ -40,7 +44,12 @@ export const pricingSchema = z
     observed_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     expires_at: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
     source_hash: z.string().regex(/^[a-f0-9]{64}$/),
-    source: z.enum(["provider_catalog", "operator_local", "fixture"]),
+    source: z.enum([
+      "provider_catalog",
+      "operator_local",
+      "operator_price_table",
+      "fixture",
+    ]),
   })
   .refine(
     (p) =>

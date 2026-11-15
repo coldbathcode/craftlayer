@@ -37,13 +37,21 @@ class RouterWire implements JsonWire {
       : { data: [structuredClone(this.entry)] };
   }
 }
-it("keeps omitted/malformed/extra pricing unknown and never infers free enforcement", () => {
+it("prices contained dimensions at zero, keeps malformed/extra pricing unknown and never infers free enforcement", () => {
   const clock = new FakeClock(),
     model = normalizeOpenRouter(entry, clock.now);
   if (!model) throw new Error("Missing fixture");
-  expect(model.pricing.dimensions.cache_read).toBeNull();
+  // Cached/reasoning tokens sit inside prompt/completion counts; audio, tool fees never apply (ADR 0052).
+  expect(model.pricing.dimensions.cache_read).toEqual({
+    amount: "0",
+    unit: "token",
+  });
+  expect(model.pricing.dimensions.reasoning).toEqual({
+    amount: "0",
+    unit: "token",
+  });
   expect(model.zero_cost_enforced).toBe(false);
-  expect(zeroPriceReason(model, clock.now)).toBe("unknown_pricing");
+  expect(zeroPriceReason(model, clock.now)).toBe("zero_cost_not_enforced");
   expect(
     normalizeOpenRouter({ ...entry, id: "openrouter/free" }, clock.now),
   ).toBeNull();
@@ -135,4 +143,37 @@ it("rejects changed pricing before dispatch and suppresses provider credential e
   await expect(
     provider.generate(model, fixtureRequest(), signal),
   ).rejects.toMatchObject({ code: "malformed_response", dispatched: true });
+});
+it("counts a reasoning price only above the output price and ignores zero-valued extras", () => {
+  const clock = new FakeClock(),
+    paid = normalizeOpenRouter(
+      {
+        ...entry,
+        id: "fixture/paid",
+        pricing: {
+          prompt: "0.000003",
+          completion: "0.000015",
+          request: "0",
+          image: "0",
+          internal_reasoning: "0.00002",
+          input_cache_read: "0.0000003",
+          web_search: "0.01",
+          future_free_thing: "0",
+        },
+        top_provider: { max_completion_tokens: null },
+        supported_parameters: ["max_tokens", "tools", "reasoning"],
+      },
+      clock.now,
+    );
+  if (!paid) throw new Error("Missing fixture");
+  expect(paid.pricing.dimensions.reasoning?.amount).toBe("0.000005");
+  expect(paid.pricing.dimensions.cache_read?.amount).toBe("0");
+  expect(paid.pricing.unknown_dimensions).toEqual([]);
+  expect(paid.output_tokens).toBe(8192);
+  expect(paid.capabilities.reasoning).toBe(true);
+  const surprise = normalizeOpenRouter(
+    { ...entry, pricing: { ...entry.pricing, per_hour_fee: "0.5" } },
+    clock.now,
+  );
+  expect(surprise?.pricing.unknown_dimensions).toEqual(["per_hour_fee"]);
 });

@@ -11,7 +11,7 @@ import {
 import { z } from "zod";
 import { providerSecret } from "./credentials.js";
 import { type ModelProvider, ProviderError } from "./index.js";
-import { ceilingMicroUsd } from "./pricing.js";
+import { ceilingMicroUsd, scaledPrice } from "./pricing.js";
 import { HttpWire, type JsonWire, statusError } from "./wire.js";
 
 const explicitModel = z
@@ -63,6 +63,29 @@ const resultSchema = z.object({
     })
     .optional(),
 });
+/**
+ * Catalog fields that cannot add charges to a CraftLayer request (ADR 0052):
+ * cached and reasoning tokens are already inside OpenRouter's prompt and
+ * completion counts, CraftLayer never sends cache_control, images or audio,
+ * and every request disables plugins (so no web search).
+ */
+const contained = new Set([
+  "input_cache_read",
+  "input_cache_write",
+  "web_search",
+  "internal_reasoning",
+  "audio",
+]);
+function priceDifference(a: string, b: string): string {
+  const diff = scaledPrice(a) - scaledPrice(b);
+  if (diff <= 0n) return "0";
+  const whole = diff / 10n ** 18n,
+    fraction = (diff % 10n ** 18n)
+      .toString()
+      .padStart(18, "0")
+      .replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : whole.toString();
+}
 const positive = (value: unknown, max: number) =>
   typeof value === "number" &&
   Number.isSafeInteger(value) &&
@@ -100,9 +123,39 @@ export function normalizeOpenRouter(
               : "token",
       };
   }
-  const unknown = Object.keys(entry.pricing ?? {})
-    .filter((key) => !Object.hasOwn(map, key))
-    .map((key) =>
+  // Prices that are inside the token counts or for features never sent are zero;
+  // a reasoning price above the output price counts only by the difference.
+  const zero = (u: "token" | "second" | "tool_call") => ({
+    amount: "0",
+    unit: u,
+  });
+  dimensions.cache_read = zero("token");
+  dimensions.cache_write = zero("token");
+  dimensions.audio = zero("second");
+  dimensions.tool = zero("tool_call");
+  const reasoningPrice = decimalPrice.safeParse(
+    entry.pricing?.internal_reasoning,
+  );
+  dimensions.reasoning =
+    reasoningPrice.success && dimensions.output
+      ? {
+          amount: priceDifference(
+            reasoningPrice.data,
+            dimensions.output.amount,
+          ),
+          unit: "token",
+        }
+      : entry.pricing && !Object.hasOwn(entry.pricing, "internal_reasoning")
+        ? zero("token")
+        : null;
+  const unknown = Object.entries(entry.pricing ?? {})
+    .filter(([key, value]) => {
+      if (Object.hasOwn(map, key) || contained.has(key)) return false;
+      // An unmodelled field is harmless only when it is exactly zero.
+      const parsed = decimalPrice.safeParse(value);
+      return !parsed.success || scaledPrice(parsed.data) !== 0n;
+    })
+    .map(([key]) =>
       /^[a-z][a-z0-9_]{0,39}$/.test(key) ? key : "unrecognized_field",
     )
     .slice(0, 32);
@@ -124,10 +177,12 @@ export function normalizeOpenRouter(
       reasoning: params ? params.includes("reasoning") : null,
     },
     context_tokens: positive(entry.context_length, 2_000_000),
-    output_tokens: positive(
-      entry.top_provider?.max_completion_tokens,
-      1_000_000,
-    ),
+    // Many catalog entries omit a completion cap; fall back to the context size, at most 8192.
+    output_tokens:
+      positive(entry.top_provider?.max_completion_tokens, 1_000_000) ??
+      (positive(entry.context_length, 2_000_000) === null
+        ? null
+        : Math.min(8192, positive(entry.context_length, 2_000_000) ?? 0)),
     pricing: {
       currency: "USD",
       dimensions,
@@ -232,7 +287,6 @@ export class OpenRouterProvider implements ModelProvider {
       !fresh ||
       fresh.pricing.source_hash !== model.pricing.source_hash ||
       fresh.capabilities.text !== true ||
-      fresh.capabilities.reasoning !== false ||
       request.max_input_tokens + request.max_output_tokens >
         (fresh.context_tokens ?? 0) ||
       request.max_output_tokens > (fresh.output_tokens ?? 0) ||
@@ -275,6 +329,10 @@ export class OpenRouterProvider implements ModelProvider {
           },
           ...(request.response_format === "json"
             ? { response_format: { type: "json_object" } }
+            : {}),
+          // Reasoning tokens are billed inside completion tokens; keep them few and unreturned.
+          ...(fresh.capabilities.reasoning === true
+            ? { reasoning: { effort: "low", exclude: true } }
             : {}),
           ...(request.tools.length
             ? {

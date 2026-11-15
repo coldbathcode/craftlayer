@@ -975,6 +975,73 @@ export class AuthService {
       async (_client, principal, authority) => operation(principal, authority),
     );
   }
+  /**
+   * Standing authority for long-running delegated work (master plan G: an AI player).
+   * There is no session: the delegating adult's membership must still be enabled, the
+   * user an enabled adult, and the permission held in scope right now. Checked on every
+   * step, so demoting or disabling the adult stops the work at its next call. The
+   * returned principal's `sessionId` is the membership ID and its authority lasts 60 s.
+   */
+  async guardStanding<T>(
+    org: string,
+    delegate: { userId: string; membershipId: string },
+    permission: Permission,
+    scope: { kind: "organization" | "project" | "environment"; id: string },
+    operation: (principal: Principal, authority: Authority) => Promise<T>,
+  ): Promise<T> {
+    this.ensureReady();
+    if (
+      !z.uuid().safeParse(org).success ||
+      !z.uuid().safeParse(delegate.userId).success ||
+      !z.uuid().safeParse(delegate.membershipId).success
+    )
+      throw new AuthError(404, "NOT_FOUND", "Organization not found.");
+    return this.transaction(async (client) => {
+      await client.query("select set_config('app.organization_id',$1,true)", [
+        org,
+      ]);
+      const user = (
+        await client.query<UserRow>(
+          "select * from users where id=$1 and disabled_at is null and account_type='adult' for share",
+          [delegate.userId],
+        )
+      ).rows[0];
+      const member = user
+        ? (
+            await client.query<{ id: string; auth_version: number }>(
+              "select id,auth_version from memberships where organization_id=$1 and id=$2 and user_id=$3 and disabled_at is null for share",
+              [org, delegate.membershipId, delegate.userId],
+            )
+          ).rows[0]
+        : undefined;
+      if (!user || !member)
+        throw new AuthError(
+          403,
+          "STANDING_REVOKED",
+          "The adult who started this no longer has authority.",
+        );
+      const principal: Principal = {
+        user: this.publicUser(user),
+        userVersion: user.auth_version,
+        sessionId: member.id,
+        authorityExpiresAt: this.now().getTime() + 60000,
+      };
+      const authority = await this.memberAuthority(
+        client,
+        org,
+        member.id,
+        principal,
+      );
+      const canonical = await this.canonicalScope(client, org, scope);
+      if (!canAccess(authority, permission, canonical))
+        throw new AuthError(
+          403,
+          "STANDING_REVOKED",
+          "The adult who started this no longer has authority.",
+        );
+      return operation(principal, authority);
+    });
+  }
   /** Owner-only composition hook; does not expose the identity database client. */
   async guardInstance<T>(
     token: string,

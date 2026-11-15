@@ -80,13 +80,51 @@ Replace every illustrative value with your actual deployment. The model must alr
 
 Disable Ollama cloud features on the server using its documented configuration, and verify the deployment before attesting `cloud_disabled: true`. That field is an operator assertion, not remote attestation. Discovery rejects cloud/proxy metadata and requires installed GGUF completion/context evidence. Unknown capabilities remain unknown. Thinking models are eligible only when disabled thinking is explicitly supported. Provider invoice estimates can be zero while CPU, RAM and electricity still have costs. [Ollama configuration](https://docs.ollama.com/faq).
 
-OpenRouter is limited to the fixed HTTPS API host and explicit canonical model IDs in `openrouter_models`. Dynamic routers, provider-selected fallback arrays and optional paid features are excluded. A `:free` suffix proves nothing about the complete invoice. Current documented pricing/routing controls do not establish every ancillary dimension or complete zero-cost enforcement, so the real OpenRouter adapter remains ineligible under strict free-only and zero-spend policies. Setting `allow_paid` does not manufacture missing price evidence. The chapter includes its bounded protocol/negative contracts, not a claim of usable free hosted capacity. No model list or price is hardcoded. [Provider routing controls](https://openrouter.ai/docs/guides/routing/provider-selection).
+OpenRouter is limited to the fixed HTTPS API host and explicit canonical model IDs in `openrouter_models`. Dynamic routers, provider-selected fallback arrays and optional paid features are excluded. A `:free` suffix proves nothing about the complete invoice, so OpenRouter remains ineligible under strict free-only and zero-spend policies (zero is not *enforced*). For paid use (G2, [ADR 0052](../architecture/decisions/0052-ai-player-model-access.md)), dimensions that cannot add charges to a CraftLayer request are priced at 0. Cached and reasoning tokens are inside the prompt and completion counts. Images, audio and `cache_control` are never sent. Plugins are disabled, so there is no web search. Tool calls are billed as tokens. A reasoning price above the output price counts by the difference. Any other non-zero catalog field still blocks the model. Reasoning-capable models are sent `reasoning: {effort: "low", exclude: true}`. No model list or price is hardcoded. [Provider routing controls](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+### OpenAI-compatible endpoints (Kong AI Gateway)
+
+Declare each endpoint under `openai_compatible`. Kong AI Gateway's AI Proxy plugin exposes an OpenAI-format chat route in front of the providers configured in Kong. Point `url` at the Kong route's base and `chat_path` at the chat path under it. Kong's key-auth reads the consumer key from the `apikey` header by default; use `authorization` for a bearer token. The endpoint, models and prices come only from this file; CraftLayer discovers nothing from Kong. Illustrative values:
+
+```json
+{
+  "id": "kong",
+  "label": "Kong AI Gateway",
+  "flavor": "kong_ai_gateway",
+  "url": "https://kong.example.net/ai",
+  "chat_path": "chat/completions",
+  "auth_header": "apikey",
+  "network": "public",
+  "models": [
+    {
+      "id": "the-model-name-your-kong-route-expects",
+      "context_tokens": 200000,
+      "output_tokens": 8192,
+      "tools": true,
+      "structured": false,
+      "prices": {
+        "input": "0.000003", "output": "0.000015",
+        "cache_read": "0", "cache_write": "0", "request": "0",
+        "image": "0", "audio": "0", "reasoning": "0", "tool": "0"
+      },
+      "price_source": "Provider price page, USD per token",
+      "price_checked_on": "2026-11-15"
+    }
+  ]
+}
+```
+
+- Prices are USD **per token**: divide a per-million price by 1,000,000. Enter 0 for features CraftLayer never uses (cache, image, audio, tool). A non-zero cache price makes the recorded spend higher than the real one, because settlement charges every input token at input + cache prices.
+- `network: "public"` needs HTTPS and public addresses. A Kong data plane on the tailnet or LAN uses `"network": "private"` with its exact addresses in `addresses` (Tailscale `100.64.0.0/10` addresses are accepted); plain HTTP is allowed only there.
+- `tools: true` is required for the AI player. Set it only if the upstream model supports OpenAI-style tool calls through your Kong route.
+- Then, as an adult with `provider:manage`: `POST /api/v1/providers` with `{"kind":"openai_compatible","endpoint_id":"kong","label":"Kong AI Gateway","secret":"<consumer key>"}`, then `POST /api/v1/providers/:id/refresh`. The key is sealed with the active master key and never returned.
+- Kong's own token rate limiting and cost analytics can run alongside. The limit that stops an AI player is CraftLayer's.
 
 ## Adult administration API
 
 Authenticate through local identity, select an organization from current membership, and send its ID in `x-craftlayer-organization`. Organization headers select context; membership and scoped permission checks remain authoritative. Mutations require the configured same origin, session cookie and `x-csrf-token`. Use a trusted HTTP client that keeps secret inputs and cookies out of shell history, process arguments and logs. Browser submissions must use the trusted private loopback deployment or protected HTTPS when deployed remotely.
 
-The generated `/api/v1/openapi.json` is the exact running contract. Unknown request fields are rejected. Connection creation accepts a label, `kind`, operator-defined `endpoint_id` and an OpenRouter `secret`; it accepts no arbitrary URL. `openrouter` is the only hosted endpoint ID. Ollama receives no credential. Responses expose configuration status/key ID only. Versioned edits return 409 on stale versions; refetch before retrying. Do not blindly retry credential mutations.
+The generated `/api/v1/openapi.json` is the exact running contract. Unknown request fields are rejected. Connection creation accepts a label, `kind`, operator-defined `endpoint_id` and, for OpenRouter and OpenAI-compatible endpoints, a `secret`; it accepts no arbitrary URL. Hosted endpoint IDs are `openrouter` and the IDs declared under `openai_compatible`. Ollama receives no credential. Responses expose configuration status/key ID only. Versioned edits return 409 on stale versions; refetch before retrying. Do not blindly retry credential mutations.
 
 | Route under `/api/v1` | Behavior / authority |
 | --- | --- |
@@ -104,7 +142,7 @@ The generated `/api/v1/openapi.json` is the exact running contract. Unknown requ
 | `GET /usage` | Latest 100 reservations and 100 ledger entries for this organization; `budget:manage` |
 | `POST /usage/:id/reconcile` | Adult budget administrator records conservative recovery after confirmed quiescence |
 
-No public generation route exists. `ProviderGateway.generate` is an internal server API requiring a current signed adult mission-execution grant tied to a canonical project/environment. Children cannot use it. Future child preset execution needs a separate adult-approved runtime path, not relaxed raw inference permissions. Mission/task UUID labels currently group budgets only; Chapter 03 must load and validate canonical entities and their policies. Queue messages must never carry keys or become authority by themselves.
+No public generation route exists. `ProviderGateway.generate` is an internal server API requiring a current signed adult mission-execution grant tied to a canonical project/environment. `generateStanding` serves AI players only: the delegating adult's current standing with `ai_player:manage`, re-checked at each step, and exactly one chosen model ([ADR 0052](../architecture/decisions/0052-ai-player-model-access.md)). Children cannot use it. Future child preset execution needs a separate adult-approved runtime path, not relaxed raw inference permissions. Mission/task UUID labels currently group budgets only; Chapter 03 must load and validate canonical entities and their policies. Queue messages must never carry keys or become authority by themselves.
 
 ## Key rotation and revocation
 

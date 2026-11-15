@@ -3,11 +3,19 @@ import http from "node:http";
 import https from "node:https";
 import { isIP } from "node:net";
 import { ProviderError } from "./index.js";
-import { localAddress } from "./instance.js";
+import { localAddress, privateAddress } from "./instance.js";
 
 export type WireTarget =
   | { kind: "operator_local"; url: string; addresses: string[] }
-  | { kind: "hosted"; url: "https://openrouter.ai/api/v1" };
+  | { kind: "hosted"; url: "https://openrouter.ai/api/v1" }
+  | {
+      kind: "compatible";
+      url: string;
+      chat_path: string;
+      network: "public" | "private";
+      addresses: string[];
+      auth_header: "authorization" | "apikey" | "x-api-key";
+    };
 export interface WireRequest {
   target: WireTarget;
   path: string;
@@ -69,6 +77,14 @@ function publicAddress(value: string) {
     !value.toLowerCase().startsWith("2001:db8:")
   );
 }
+function credentialHeader(
+  target: WireTarget,
+  secret: string,
+): Record<string, string> {
+  if (target.kind !== "compatible" || target.auth_header === "authorization")
+    return { authorization: `Bearer ${secret}` };
+  return { [target.auth_header]: secret };
+}
 export class HttpWire implements JsonWire {
   constructor(private resolve: typeof lookup = lookup) {}
   async json(input: WireRequest): Promise<unknown> {
@@ -79,10 +95,16 @@ export class HttpWire implements JsonWire {
     if (signal.aborted) throw new ProviderError(abortCode(signal), false);
     const base = new URL(input.target.url),
       url = new URL(input.path, `${input.target.url.replace(/\/$/, "")}/`);
+    const target = input.target;
     const allowed =
-      input.target.kind === "hosted"
+      target.kind === "hosted"
         ? ["/api/v1/models", "/api/v1/chat/completions"]
-        : ["/api/tags", "/api/show", "/api/chat"];
+        : target.kind === "compatible"
+          ? [
+              new URL(target.chat_path, `${target.url.replace(/\/$/, "")}/`)
+                .pathname,
+            ]
+          : ["/api/tags", "/api/show", "/api/chat"];
     if (
       !["http:", "https:"].includes(base.protocol) ||
       url.origin !== base.origin ||
@@ -93,10 +115,13 @@ export class HttpWire implements JsonWire {
       (input.target.kind === "hosted" &&
         input.target.url !== "https://openrouter.ai/api/v1") ||
       (input.target.kind === "operator_local" &&
-        (base.pathname !== "/" || base.search))
+        (base.pathname !== "/" || base.search)) ||
+      (target.kind === "compatible" &&
+        (base.search ||
+          (target.network === "public" && base.protocol !== "https:")))
     )
       throw new ProviderError("policy_denied", false);
-    if (input.secret && input.target.kind !== "hosted")
+    if (input.secret && input.target.kind === "operator_local")
       throw new ProviderError("policy_denied", false);
     const hostname = url.hostname.replace(/^\[|\]$/g, "");
     let addresses: Array<{ address: string; family: number }>;
@@ -107,7 +132,7 @@ export class HttpWire implements JsonWire {
             this.resolve(hostname, {
               all: true,
               verbatim: true,
-              family: input.target.kind === "hosted" ? 4 : 0,
+              family: target.kind === "hosted" ? 4 : 0,
             }),
             new Promise<never>((_resolve, reject) =>
               signal.addEventListener(
@@ -137,10 +162,12 @@ export class HttpWire implements JsonWire {
     if (
       !addresses.length ||
       addresses.some((a) =>
-        input.target.kind === "operator_local"
-          ? !localAddress(a.address) ||
-            !input.target.addresses.includes(a.address)
-          : !publicAddress(a.address),
+        target.kind === "operator_local"
+          ? !localAddress(a.address) || !target.addresses.includes(a.address)
+          : target.kind === "compatible" && target.network === "private"
+            ? !privateAddress(a.address) ||
+              !target.addresses.includes(a.address)
+            : !publicAddress(a.address),
       )
     )
       throw new ProviderError("policy_denied", false);
@@ -174,9 +201,7 @@ export class HttpWire implements JsonWire {
                   "content-length": Buffer.byteLength(body),
                 }
               : {}),
-            ...(input.secret
-              ? { authorization: `Bearer ${input.secret}` }
-              : {}),
+            ...(input.secret ? credentialHeader(target, input.secret) : {}),
           },
         },
         (response) => {

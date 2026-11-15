@@ -689,3 +689,9 @@ Findings, in order: the bot spawned on Paper 26.3 through ViaVersion/ViaBackward
 
 Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 61 files / 500 tests pass (5 new for the shim and guard); `CRAFTLAYER_ACCEPT_EULA=true pnpm test:ai-player-world` 3/3 PASS: 12/12 moves with zero non-spawn corrections, dig, collect and place verified. Not done: online sign-in, the family server's bridge (decision 13), no Bedrock client joined the test world, combat/crafting/chests untested.
 
+## G2 — Model access for AI players (gateway side), 2026-11-15
+
+[ADR 0052](../architecture/decisions/0052-ai-player-model-access.md). `openai_compatible` provider kind (migration 0038): the instance operator declares the endpoint (Kong AI Gateway or another), credential header, network (public HTTPS, or listed LAN/Tailscale addresses), and each model with all nine prices, source and date. The connection holds the sealed key. The wire keeps one declared path and pins the address. OpenRouter: dimensions that cannot apply to a CraftLayer request are 0, a reasoning price counts above output, any other non-zero field still blocks, and reasoning models are allowed with low, excluded reasoning. Before this, no OpenRouter model was eligible for any call. New `ai_player:manage` permission (migration 0039, org admins). `AuthService.guardStanding` and `ProviderGateway.generateStanding`/`refreshStanding`/`chosenModel`: a running AI player's call needs the delegating adult's current standing at every step and may use only the chosen model.
+
+Checks: `pnpm test` 62 files / 511 tests (6 new provider tests: compatible adapter, wire guard, OpenRouter rules); `pnpm test:db` 248/248 (2 new: standing authority incl. demotion and forged membership; Kong connection binding). Not done: dashboard connection screen and model picker; no call has reached a real Kong or OpenRouter endpoint; direct Anthropic/OpenAI/Gemini adapters.
+

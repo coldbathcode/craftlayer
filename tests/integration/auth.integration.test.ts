@@ -37,6 +37,7 @@ import {
   ProviderGateway,
 } from "../../packages/providers/src/index.js";
 import { BudgetLedger } from "../../packages/providers/src/ledger.js";
+import { RouterBlocked } from "../../packages/providers/src/router.js";
 import {
   instanceStopScope,
   queueName,
@@ -2325,6 +2326,177 @@ describe("provider credential and connection boundary", () => {
     expect(response.body).not.toMatch(
       /credential_payload|private-prompt-canary/,
     );
+  });
+  it("runs an AI player's calls on the adult's current standing, limited to the chosen model (G2)", async () => {
+    const f = await inferenceFixture("Standing authority fixture");
+    const delegate = await fixtureMember("org_admin", f.org);
+    const standing = {
+      org: f.org,
+      userId: delegate.userId,
+      membershipId: delegate.memberId,
+      projectId: f.project,
+    };
+    const choice = {
+      connection_id: f.connection.id,
+      model_id: "fixture:local",
+    };
+    let calls = 0;
+    generateHook = async (_row, _model, _request, _signal, barrier) => {
+      await barrier?.();
+      calls++;
+      return result(30, 5);
+    };
+    expect((await providers.chosenModel(standing, choice))?.id).toBe(
+      "fixture:local",
+    );
+    const done = await providers.generateStanding(
+      standing,
+      choice,
+      fixtureRequest(),
+    );
+    expect(done.result.usage.input_tokens).toBe(30);
+    expect(calls).toBe(1);
+    // Refreshing under standing keeps only approved models.
+    expect(
+      (await providers.refreshStanding(standing, f.connection.id)).map(
+        (m) => m.id,
+      ),
+    ).toEqual(["fixture:local"]);
+    // Any other model is simply not a candidate.
+    await expect(
+      providers.generateStanding(
+        standing,
+        { ...choice, model_id: "fixture:other" },
+        fixtureRequest(),
+      ),
+    ).rejects.toBeInstanceOf(RouterBlocked);
+    // The ledger records the delegating adult as the user scope.
+    const links = await scoped(
+      f.org,
+      async (client) =>
+        (
+          await client.query(
+            "select scope_kind,scope_id from reservation_budget_links where organization_id=$1",
+            [f.org],
+          )
+        ).rows,
+    );
+    expect(links).toContainEqual({
+      scope_kind: "user",
+      scope_id: delegate.userId,
+    });
+    expect(links).toContainEqual({
+      scope_kind: "project",
+      scope_id: f.project,
+    });
+    // Demoting the adult stops the next call before any dispatch.
+    const viewer = (await auth.listRoles(ownerToken, f.org)).find(
+      (r) => r.name === "viewer",
+    );
+    await auth.setMemberRoles(ownerToken, f.org, delegate.memberId, [
+      viewer.id,
+    ]);
+    await expect(
+      providers.generateStanding(standing, choice, fixtureRequest()),
+    ).rejects.toMatchObject({ status: 403, code: "STANDING_REVOKED" });
+    // A forged membership is refused the same way.
+    await expect(
+      providers.generateStanding(
+        { ...standing, membershipId: crypto.randomUUID() },
+        choice,
+        fixtureRequest(),
+      ),
+    ).rejects.toMatchObject({ status: 403, code: "STANDING_REVOKED" });
+    expect(calls).toBe(1);
+  });
+  it("binds an OpenAI-compatible connection (Kong AI Gateway) to an operator-declared endpoint (G2)", async () => {
+    const policy = JSON.parse(basePolicy);
+    const price = "0";
+    policy.openai_compatible = [
+      {
+        id: "kong",
+        label: "Kong AI Gateway",
+        flavor: "kong_ai_gateway",
+        url: "https://ai.example.test/llm",
+        auth_header: "apikey",
+        network: "public",
+        models: [
+          {
+            id: "fixture/model:free",
+            context_tokens: 32768,
+            output_tokens: 1024,
+            tools: true,
+            structured: true,
+            prices: {
+              input: price,
+              output: price,
+              cache_read: price,
+              cache_write: price,
+              request: price,
+              image: price,
+              audio: price,
+              reasoning: price,
+              tool: price,
+            },
+            price_source: "Fixture",
+            price_checked_on: "2026-11-15",
+          },
+        ],
+      },
+    ];
+    await writeFile(policyPath(), JSON.stringify(policy));
+    const org = await auth.createOrganization(ownerToken, "Compatible fixture");
+    // A hosted connection needs a credential; an unknown endpoint is refused.
+    await expect(
+      providers.createConnection(ownerToken, org.id, {
+        kind: "openai_compatible",
+        endpoint_id: "kong",
+        label: "No key",
+      }),
+    ).rejects.toMatchObject({ code: "policy_denied" });
+    await expect(
+      providers.createConnection(ownerToken, org.id, {
+        kind: "openai_compatible",
+        endpoint_id: "not-declared",
+        label: "Unknown",
+        secret: canary,
+      }),
+    ).rejects.toMatchObject({ code: "policy_denied" });
+    const connection = await providers.createConnection(ownerToken, org.id, {
+      kind: "openai_compatible",
+      endpoint_id: "kong",
+      label: "Kong AI Gateway",
+      secret: canary,
+    });
+    expect(connection).toMatchObject({
+      kind: "openai_compatible",
+      credential_configured: true,
+    });
+    expect(JSON.stringify(connection)).not.toContain(canary);
+    const models = await providers.refreshModels(
+      ownerToken,
+      org.id,
+      connection.id,
+    );
+    expect(models.map((m) => m.id)).toEqual(["fixture/model:free"]);
+    // Removing the endpoint from the policy blocks re-enabling the connection.
+    await providers.setEnabled(
+      ownerToken,
+      org.id,
+      connection.id,
+      connection.version,
+      false,
+    );
+    await writeFile(policyPath(), basePolicy);
+    await expect(
+      providers.setEnabled(
+        ownerToken,
+        org.id,
+        connection.id,
+        connection.version + 1,
+        true,
+      ),
+    ).rejects.toMatchObject({ code: "policy_denied" });
   });
   it("atomically intersects concurrent organization/user/project quotas without partial debits", async () => {
     const f = await inferenceFixture("Concurrent budget fixture");
