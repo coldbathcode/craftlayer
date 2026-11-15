@@ -54,6 +54,9 @@ export type AiPlayerApi = Pick<
   | "memoriesFor"
   | "remember"
   | "think"
+  | "agentList"
+  | "agentTranscript"
+  | "agentStop"
 >;
 
 /** Master plan G3: owner routes for AI players, and the worker host routes. */
@@ -229,6 +232,48 @@ export async function registerAiPlayers(
       },
     },
     (r) => players.revokeHost(token(r), org(r), r.params.id),
+  );
+
+  // AI agent routes (MCP): the agent's own token and ai_player:instruct.
+  api.get(
+    "/api/v1/agent/ai-players",
+    { schema: { response: ok(aiPlayerList) } },
+    (r) => players.agentList(token(r), org(r)),
+  );
+  api.get(
+    "/api/v1/agent/ai-players/:id/transcript",
+    {
+      schema: {
+        params: id,
+        querystring: z.strictObject({
+          after: z.coerce.number().int().min(0).default(0),
+        }),
+        response: ok(aiPlayerTranscript),
+      },
+    },
+    (r) =>
+      players.agentTranscript(token(r), org(r), r.params.id, r.query.after),
+  );
+  api.post(
+    "/api/v1/agent/ai-players/:id/instructions",
+    {
+      schema: {
+        params: id,
+        body: aiPlayerInstruction,
+        response: { 202: z.strictObject({ id: z.uuid() }), ...errors },
+      },
+    },
+    async (r, reply) =>
+      reply
+        .code(202)
+        .send(
+          await players.instruct(token(r), org(r), r.params.id, r.body, "mcp"),
+        ),
+  );
+  api.post(
+    "/api/v1/agent/ai-players/:id/stop",
+    { schema: { params: id, response: ok(aiPlayerView) } },
+    (r) => players.agentStop(token(r), org(r), r.params.id),
   );
 
   // Worker host routes: bearer host token, never a browser session.

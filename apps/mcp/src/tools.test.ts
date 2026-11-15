@@ -106,10 +106,13 @@ describe("read-only tools", () => {
     close = session.close;
     const { tools } = await session.client.listTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      "get_ai_player_conversation",
       "get_connection_info",
       "get_node_capacity",
       "get_operation_status",
       "get_server_status",
+      "instruct_ai_player",
+      "list_ai_players",
       "list_backups",
       "list_environments",
       "list_my_requests",
@@ -126,10 +129,12 @@ describe("read-only tools", () => {
       "request_server_save",
       "request_server_start",
       "request_server_stop",
+      "stop_ai_player",
     ]);
+    const acting = new Set(["instruct_ai_player", "stop_ai_player"]);
     for (const tool of tools) {
       expect(tool.annotations?.readOnlyHint).toBe(
-        !tool.name.startsWith("request_"),
+        !tool.name.startsWith("request_") && !acting.has(tool.name),
       );
       expect(tool.annotations?.destructiveHint).toBe(false);
     }

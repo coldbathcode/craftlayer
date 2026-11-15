@@ -10,7 +10,7 @@ import {
 import { installTickEndShim, type PacketWriter } from "./protocol.js";
 
 const { pathfinder, Movements, goals } = pathfinderPackage;
-export type Goal = InstanceType<typeof goals.GoalBlock>;
+export type Goal = import("mineflayer-pathfinder").goals.Goal;
 export { goals };
 
 export interface BodyConnection {

@@ -74,6 +74,8 @@ export async function registerAuth(
     if (["GET", "HEAD", "OPTIONS"].includes(request.method)) return;
     // Worker RPC accepts only registered bearer identity; cookie sessions never authorize it.
     if (request.routeOptions.url?.startsWith("/api/v1/worker/")) return;
+    // AI player hosts likewise accept only their own bearer token (master plan G3).
+    if (request.routeOptions.url?.startsWith("/api/v1/ai-player-host/")) return;
     // An explicit agent bearer is not ambient browser authority.
     if (agentBearer(request)) return;
     if (request.headers.origin !== origin)

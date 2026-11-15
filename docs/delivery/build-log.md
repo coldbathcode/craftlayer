@@ -703,3 +703,9 @@ Found and fixed while testing: Zod 4 `.partial()` still applies field defaults, 
 
 Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 63 files / 513 tests; `pnpm test:db` 255/255 (7 new AI player cases). Not done: the dashboard screens, MCP tools and the worker that uses these routes (G4 onward).
 
+## G4–G9 — AI player worker, brain, dashboard and MCP; G10 local proof, 2026-11-15
+
+[ADR 0054](../architecture/decisions/0054-ai-player-worker-and-agents.md). Worker `apps/ai-player` (host client, controller, brain, 15 skills, chat safety, memory ranking, `main.ts`). SDK `aiPlayerClient`; family app screen **AI players** (list, spend meter, Talk, Memory, Master tasks, Settings with model picker, create form, worker computers with a one-time key). Agent permission `ai_player:instruct` (migration 0041), agent routes `/api/v1/agent/ai-players…` and four MCP tools. Fixes found on the way: worker routes exempt from browser Origin/CSRF like `/api/v1/worker/`; byte-counted input bound; the prior-installation upgrade fixture now drops every migration from 0016 on, so new migrations cannot leak into it.
+
+Checks: `pnpm lint` pass; `pnpm typecheck` pass; `pnpm test` 64 files / 529 tests; `pnpm test:db` 256/256 (agent instruct/stop case added); `pnpm test:ai-player-e2e` PASS 4/4 with Ollama gemma4 on the Paper 26.3 test world (look, collect 3 logs, remember, craft planks; Stop 1 s; 17 calls, $0). Not done: paid-model run, Microsoft sign-in, in-game owner chat with a real client, VPS deployment, family-world trial (decision 13 and a verified backup).
+

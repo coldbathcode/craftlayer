@@ -57,3 +57,52 @@ The single correction is the server's spawn teleport. Before the hitbox fix, the
 Money is integer micro-USD: $1.00 is `"1000000"`. The owner decided on $1 a day and $10 in total to start (`"1000000"` and `"10000000"`). Each model call reserves its worst case first. The player is charged the observed tokens at the snapshot price, while the provider ledger books the worst case for the hourly limits, so give hourly budgets headroom.
 
 Evidence: `pnpm test:db` 255/255, including 7 AI player cases: permissions and children; one-time host tokens and assignment scoping; worst-case reservation, daily and total limits, release of an undispatched failure; calls per hour; stop latch blocking calls and instructions; once-only instruction hand-over; memory caps and owner edits; status staleness; host revocation. One case is a paid call through the real provider gateway: it charged 1500 µUSD from observed usage while the ledger booked its 6000 reservation, and the ledger's user scope is the owning adult. A contract test guards against defaults being applied on update.
+
+## G4–G8 — The worker, brain, dashboard and MCP tools (2026-11-15)
+
+[ADR 0054](../architecture/decisions/0054-ai-player-worker-and-agents.md). The worker is `apps/ai-player`. The dashboard screen is **AI players** in the family app (`/home#/ai-players`, adults with `ai_player:manage`). The MCP tools are `list_ai_players`, `get_ai_player_conversation`, `instruct_ai_player` and `stop_ai_player`, for agent tokens that also carry `ai_player:instruct`.
+
+### Set up and run an AI player
+
+1. **Connect a model** (adult with `provider:manage`). Declare the endpoint in the protected provider policy file: an Ollama endpoint, OpenRouter models, or a Kong AI Gateway / OpenAI-compatible endpoint ([providers runbook](providers-and-budgets.md#openai-compatible-endpoints-kong-ai-gateway)). Then create the connection and refresh its models. Only tool-capable models are offered. Paid models also need the instance `allow_paid` cap, an organization or project policy with `allow_hosted`, `free_only: false` and a paid cap, and hourly budgets with headroom, because the ledger books each call's worst case.
+2. **Add the computer that runs it.** In **AI players → Computers that run AI players**, add one and copy its key; it is shown once. On that computer:
+
+   ```sh
+   install -m 600 /dev/null ~/.craftlayer/ai-player-host.token   # then paste the key into it
+   pnpm --filter @craftlayer/ai-player build
+   CRAFTLAYER_API_URL=https://<your CraftLayer address> \
+   CRAFTLAYER_AI_PLAYER_TOKEN_FILE=$HOME/.craftlayer/ai-player-host.token \
+   CRAFTLAYER_AI_PLAYER_STATE_DIR=$HOME/.craftlayer/ai-player-state \
+   node apps/ai-player/dist/main.js
+   ```
+
+   The worker refuses a token file that others can read.
+3. **Create the AI player.** Fill in:
+   - its name, personality, the model, and which computer runs it;
+   - how it signs in: your Microsoft account (decision 8), or offline for a private test world;
+   - its Minecraft name and the server address the worker can reach;
+   - your in-game names, which are the only voices it takes instructions from;
+   - its limits ($1/day and $10 total to start, decision 9);
+   - master tasks, if you want it to work on its own (decision 12).
+4. **Start it.** With Microsoft sign-in, the card shows a code to enter at Microsoft's sign-in page the first time; the worker keeps the session afterwards. It joins as your account, so play from your iPad or another account while it is on. If you join on Java with the same account, it leaves and waits for you to press Start again.
+5. **Talk to it** in the dashboard's Talk tab, in the game ("Pip, follow me", or a whisper), or from Claude with an agent token that has `ai_player:instruct`.
+6. **Stop** is on its card, in Claude (`stop_ai_player`), or by stopping the worker program. Stop latches: it starts again only when an adult clears the stop and presses Start.
+
+The family server needs the ViaVersion/ViaBackwards bridge before an AI player can join it (decision 13). Until then, point it at a test world.
+
+### Evidence (G10, local)
+
+`CRAFTLAYER_ACCEPT_EULA=true pnpm test:ai-player-e2e` runs a disposable database, the real API services (auth, provider gateway, AI players), the pinned Paper 26.3 test world with the bridge, the real worker controller and a local Ollama model (`gemma4:latest`, eligible because its thinking can be turned off). Instructions go through the owner API.
+
+| Run 2026-11-15 | Result |
+| --- | --- |
+| "Look around and tell me in one sentence what you can see." | `look_around`, 12 s |
+| "Please collect 3 logs from the nearest tree." | `collect_blocks` → `oak_log x3`, 35 s |
+| "Remember that the place where you are standing right now is called home base." | `remember` → place memory with position, 10 s |
+| "Craft some planks from your logs." | `craft` → `oak_planks x8`, 55 s |
+| Stop | left the game in 1 s |
+
+17 model calls, 42,917 input and 406 output tokens, $0. The first run found two integration bugs, now fixed. The API's browser Origin/CSRF check blocked the worker's POSTs, so worker routes are now bearer-only like `/api/v1/worker/`. The brain also declared an input bound below the router's byte count, so every call was refused; the bound is now computed the same way and kept under 16,000.
+
+Not yet proven: a paid model through OpenRouter or Kong; Microsoft sign-in; in-game owner chat from a real second client; long sessions; the family server (decision 13).
+

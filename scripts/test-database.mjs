@@ -4,6 +4,7 @@ import {
   appendFileSync,
   cpSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -144,30 +145,11 @@ try {
   );
   const previousManagement = join(migrationFixture, "management-prior");
   cpSync("packages/db/migrations", previousManagement, { recursive: true });
-  rmSync(join(previousManagement, "0016_minecraft_management.sql"));
-  rmSync(join(previousManagement, "0017_minecraft_identity_requests.sql"));
-  rmSync(join(previousManagement, "0018_minecraft_nodes.sql"));
-  rmSync(join(previousManagement, "0019_minecraft_provision_plans.sql"));
-  rmSync(join(previousManagement, "0020_minecraft_reservations.sql"));
-  rmSync(join(previousManagement, "0021_minecraft_deployment_intents.sql"));
-  rmSync(join(previousManagement, "0022_minecraft_deployment_jobs.sql"));
-  rmSync(
-    join(previousManagement, "0023_minecraft_deployment_authorizations.sql"),
-  );
-  rmSync(join(previousManagement, "0024_management_admission_indexes.sql"));
-  rmSync(join(previousManagement, "0025_enrollment_history_order.sql"));
-  rmSync(join(previousManagement, "0026_deployment_approval_requests.sql"));
-  rmSync(join(previousManagement, "0027_deployment_approval_decisions.sql"));
-  rmSync(join(previousManagement, "0028_agent_tokens.sql"));
-  rmSync(join(previousManagement, "0029_backup_records.sql"));
-  rmSync(join(previousManagement, "0030_server_actions.sql"));
-  rmSync(join(previousManagement, "0031_agent_requests.sql"));
-  rmSync(join(previousManagement, "0032_two_factor.sql"));
-  rmSync(join(previousManagement, "0033_action_dispatch.sql"));
-  rmSync(join(previousManagement, "0034_backup_dispatch.sql"));
-  rmSync(join(previousManagement, "0035_server_live.sql"));
-  rmSync(join(previousManagement, "0036_server_live_allowlist.sql"));
-  rmSync(join(previousManagement, "0037_backup_archive_expiry.sql"));
+  // The prior installation predates management: drop every migration from 0016 on,
+  // so migrations added later can never leak into the simulated past.
+  for (const file of readdirSync(previousManagement))
+    if (/^\d{4}_/.test(file) && Number(file.slice(0, 4)) >= 16)
+      rmSync(join(previousManagement, file));
   const managementMigration = {
     ...env,
     MIGRATION_DATABASE_URL: managementUrl("craftlayer_migrator"),

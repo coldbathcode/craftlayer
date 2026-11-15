@@ -32,9 +32,14 @@ describe("agent token permission allowlist", () => {
     expect(inSql.sort()).toEqual([...agentTokenPermissions].sort());
   });
   it("contains only read permissions that exist and nothing a child or admin needs", () => {
+    // ADR 0054: the single non-read exception. It instructs or stops an AI player
+    // within its owner's limits; it never changes servers, access, money or authority.
+    const nonRead = new Set(["ai_player:instruct"]);
     for (const permission of agentTokenPermissions) {
       expect(organizationPermissions).toContain(permission);
-      expect(permission.endsWith(":read")).toBe(true);
+      expect(permission.endsWith(":read") || nonRead.has(permission)).toBe(
+        true,
+      );
     }
     for (const forbidden of [
       "agent:connect",
@@ -49,6 +54,8 @@ describe("agent token permission allowlist", () => {
       "provider:manage",
       "stop:clear",
       "environment:admin",
+      "ai_player:manage",
+      "budget:manage",
     ])
       expect(agentTokenPermissions).not.toContain(forbidden);
     expect(childPermissions).not.toContain("agent:connect");

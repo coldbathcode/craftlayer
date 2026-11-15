@@ -336,6 +336,22 @@ describe("AI players (master plan G3)", () => {
     const anonymous = await app.inject({
       url: "/api/v1/ai-player-host/assignments",
     });
+    // A host POST works with only its bearer (no browser origin or CSRF)...
+    const reported = await app.inject({
+      method: "POST",
+      url: `/api/v1/ai-player-host/players/${assigned.id}/status`,
+      headers: { authorization: `Bearer ${created.token}` },
+      payload: { state: "connecting", detail: {} },
+    });
+    expect(reported.statusCode).toBe(200);
+    // ...and a browser session cannot use host routes at all.
+    const viaCookie = await app.inject({
+      method: "POST",
+      url: `/api/v1/ai-player-host/players/${assigned.id}/status`,
+      headers: cookie(admin.token),
+      payload: { state: "connecting", detail: {} },
+    });
+    expect(viaCookie.statusCode).toBe(401);
     expect(anonymous.statusCode).toBe(401);
   });
 
@@ -546,6 +562,70 @@ describe("AI players (master plan G3)", () => {
     );
   });
 
+  it("lets an AI agent with ai_player:instruct list, instruct and stop, but never start or reconfigure (G8)", async () => {
+    const pip = (await players.list(admin.token, org)).players[0];
+    if (!pip) throw new Error("missing player");
+    const reader = await auth.createAgentToken(admin.token, org, {
+      name: "Reader only",
+      permissions: ["organization:read", "project:read"],
+      projectId: project,
+    });
+    const agent = await auth.createAgentToken(admin.token, org, {
+      name: "Claude for AI players",
+      permissions: ["organization:read", "ai_player:instruct"],
+      projectId: project,
+    });
+    await expect(players.agentList(reader.token, org)).rejects.toMatchObject({
+      status: 403,
+    });
+    const listed = await players.agentList(agent.token, org);
+    expect(listed.players.map((p) => p.name)).toContain("Pip");
+    // The owner routes stay closed to agents.
+    await expect(players.list(agent.token, org)).rejects.toMatchObject({
+      status: 403,
+    });
+    await expect(players.start(agent.token, org, pip.id)).rejects.toMatchObject(
+      { status: 403 },
+    );
+    await expect(
+      players.update(agent.token, org, pip.id, {
+        daily_limit_micro: "999999999",
+        expected_version: pip.version,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    await expect(
+      players.instruct(reader.token, org, pip.id, { body: "dig" }, "mcp"),
+    ).rejects.toMatchObject({
+      status: 403,
+    });
+    // Over HTTP with the agent's bearer: no cookie, origin or CSRF involved.
+    const sent = await app.inject({
+      method: "POST",
+      url: `/api/v1/agent/ai-players/${pip.id}/instructions`,
+      headers: {
+        authorization: `Bearer ${agent.token}`,
+        "x-craftlayer-organization": org,
+      },
+      payload: { body: "Collect two logs please" },
+    });
+    expect(sent.statusCode).toBe(202);
+    const transcript = await players.agentTranscript(agent.token, org, pip.id);
+    expect(transcript.messages.at(-1)).toMatchObject({
+      direction: "instruction",
+      channel: "mcp",
+      body: "Collect two logs please",
+    });
+    expect(transcript.messages.at(-1)?.author).toContain("(via AI agent)");
+    const stopped = await players.agentStop(agent.token, org, pip.id);
+    expect(stopped).toMatchObject({
+      desired_state: "stopped",
+      stop_latched: true,
+    });
+    await expect(
+      players.clearStop(agent.token, org, pip.id),
+    ).rejects.toMatchObject({ status: 403 });
+    await players.clearStop(admin.token, org, pip.id);
+  });
   it("revoking a host stops and unassigns its players", async () => {
     const hosts = await players.listHosts(admin.token, org);
     const active = hosts.hosts.find((h) => !h.revoked);

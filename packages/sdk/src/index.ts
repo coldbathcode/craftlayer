@@ -108,6 +108,7 @@ export function agentTokenClient(
       ),
   };
 }
+export * from "./ai-players.js";
 export { deploymentClient } from "./deployments.js";
 export { familyClient } from "./family.js";
 export { minecraftClient } from "./minecraft.js";

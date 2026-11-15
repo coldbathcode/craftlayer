@@ -259,12 +259,13 @@ export class AiPlayers {
       row: PlayerRow,
       login: string,
     ) => Promise<T>,
+    permission: "ai_player:manage" | "ai_player:instruct" = "ai_player:manage",
   ): Promise<T> {
     const located = await this.#tx(org, (c) => this.#player(c, org, id));
     return this.#auth.guardResource(
       token,
       org,
-      "ai_player:manage",
+      permission,
       { kind: "project", id: located.project_id },
       (p) =>
         this.#tx(org, async (c) => {
@@ -674,20 +675,26 @@ export class AiPlayers {
     channel: "dashboard" | "mcp" = "dashboard",
   ) {
     const value = aiPlayerInstruction.parse(input);
-    return this.#manage(token, org, id, async (c, _actor, _row, login) => {
-      const messageId = randomUUID();
-      await this.#insertMessage(c, org, id, {
-        id: messageId,
-        direction: "instruction",
-        channel,
-        author: (channel === "mcp" ? `${login} (via AI agent)` : login).slice(
-          0,
-          64,
-        ),
-        body: value.body,
-      });
-      return { id: messageId };
-    });
+    return this.#manage(
+      token,
+      org,
+      id,
+      async (c, _actor, _row, login) => {
+        const messageId = randomUUID();
+        await this.#insertMessage(c, org, id, {
+          id: messageId,
+          direction: "instruction",
+          channel,
+          author: (channel === "mcp" ? `${login} (via AI agent)` : login).slice(
+            0,
+            64,
+          ),
+          body: value.body,
+        });
+        return { id: messageId };
+      },
+      channel === "mcp" ? "ai_player:instruct" : "ai_player:manage",
+    );
   }
   async transcript(token: string, org: string, id: string, after = 0) {
     return this.#manage(token, org, id, async (c) => {
@@ -747,6 +754,118 @@ export class AiPlayers {
       await this.#audit(c, org, actor, "ai_player.memory_forgotten", id);
       return { forgotten: true as const };
     });
+  }
+
+  // ---- AI agents (MCP, ai_player:instruct) ------------------------------------
+
+  /** The AI players an agent may instruct: only those in projects its token reaches. */
+  async agentList(token: string, org: string) {
+    const rows = await this.#tx(
+      org,
+      async (c) =>
+        (
+          await c.query<PlayerRow>(
+            "select * from ai_players where organization_id=$1 order by created_at,id limit 50",
+            [org],
+          )
+        ).rows,
+    );
+    const allowed = new Set<string>();
+    for (const project of new Set(rows.map((r) => r.project_id))) {
+      try {
+        await this.#auth.authorize(token, org, "ai_player:instruct", {
+          kind: "project",
+          id: project,
+        });
+        allowed.add(project);
+      } catch (error) {
+        if (!(error instanceof AuthError) || ![403, 404].includes(error.status))
+          throw error;
+      }
+    }
+    if (rows.length && !allowed.size)
+      throw new AuthError(
+        403,
+        "PERMISSION_DENIED",
+        "You do not have permission for this action.",
+      );
+    if (!rows.length)
+      await this.#auth.authorize(token, org, "organization:read", {
+        kind: "organization",
+        id: org,
+      });
+    return this.#tx(org, async (c) => {
+      const visible = rows.filter((r) => allowed.has(r.project_id));
+      const tasks = await this.#tasks(
+        c,
+        org,
+        visible.map((r) => r.id),
+      );
+      const players = [];
+      for (const row of visible)
+        players.push(await this.#view(c, org, row, tasks.get(row.id) ?? []));
+      return aiPlayerList.parse({ players });
+    });
+  }
+  async agentTranscript(token: string, org: string, id: string, after = 0) {
+    return this.#manage(
+      token,
+      org,
+      id,
+      async (c) => {
+        const rows = (
+          await c.query<{
+            id: string;
+            seq: string;
+            direction: string;
+            channel: string;
+            author: string;
+            body: string;
+            delivered_at: Date | null;
+            created_at: Date;
+          }>(
+            "select * from (select id,seq,direction,channel,author,body,delivered_at,created_at from ai_player_messages where organization_id=$1 and player_id=$2 and seq>$3 order by seq desc limit 100) m order by seq",
+            [org, id, after],
+          )
+        ).rows;
+        return aiPlayerTranscript.parse({
+          messages: rows.map((r) => ({
+            id: r.id,
+            seq: Number(r.seq),
+            direction: r.direction,
+            channel: r.channel,
+            author: r.author,
+            body: r.body,
+            delivered: r.delivered_at !== null,
+            created_at: iso(r.created_at),
+          })),
+        });
+      },
+      "ai_player:instruct",
+    );
+  }
+  /** An agent may stop an AI player (never start it). The stop latches like an adult's. */
+  async agentStop(token: string, org: string, id: string) {
+    return this.#manage(
+      token,
+      org,
+      id,
+      async (c, actor) => {
+        await c.query(
+          "update ai_players set desired_state='stopped',stop_latched=true,version=version+1,updated_at=now() where organization_id=$1 and id=$2",
+          [org, id],
+        );
+        await this.#system(
+          c,
+          org,
+          id,
+          "Stopped by an AI agent acting for an adult.",
+        );
+        await this.#audit(c, org, actor, "ai_player.stopped", id);
+        return this.#view(c, org, await this.#player(c, org, id));
+      },
+      "ai_player:instruct",
+    );
   }
 
   // ---- Worker hosts ----------------------------------------------------------------

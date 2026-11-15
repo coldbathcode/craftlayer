@@ -1,6 +1,9 @@
 import {
   agentRequestAccepted,
   agentRequestPage,
+  aiPlayerList,
+  aiPlayerTranscript,
+  aiPlayerView,
   backupListView,
   backupStatusView,
   environmentSchema,
@@ -467,6 +470,109 @@ export function registerTools(server: McpServer, client: CraftLayerClient) {
           "No templates.",
         page,
       );
+    }),
+  );
+  // Master plan G8: AI players. Listing, reading the conversation, instructing and
+  // stopping need the token's ai_player:instruct; starting and settings stay with adults.
+  const playerLine = (p: z.infer<typeof aiPlayerView>) => {
+    const st = p.status;
+    const where = st?.detail.position
+      ? ` at ${Math.round(st.detail.position.x)},${Math.round(st.detail.position.y)},${Math.round(st.detail.position.z)}`
+      : "";
+    const spent = `$${(Number(p.spend.today_micro) / 1e6).toFixed(2)} of $${(Number(p.spend.daily_limit_micro) / 1e6).toFixed(2)}`;
+    return `${p.name} (${p.id}): ${p.stop_latched ? "stopped by an adult" : (st?.state ?? p.desired_state)}${where}${st?.detail.activity ? `, ${st.detail.activity}` : ""}; spent ${spent} today.`;
+  };
+  server.registerTool(
+    "list_ai_players",
+    {
+      title: "List AI players",
+      description:
+        "The family's AI players: whether each is in the game, what it is doing, where it is and what it has spent today.",
+      inputSchema: {},
+      annotations: readOnly,
+    },
+    guarded(async () => {
+      const page = await client.get("/api/v1/agent/ai-players", aiPlayerList);
+      return result(
+        page.players.map(playerLine).join("\n") ||
+          "There are no AI players yet.",
+        page,
+      );
+    }),
+  );
+  server.registerTool(
+    "get_ai_player_conversation",
+    {
+      title: "Read an AI player's conversation",
+      description:
+        "Recent instructions, replies and what the AI player did (newest last). Use after instructing it to see how it went.",
+      inputSchema: { ai_player_id: id },
+      annotations: readOnly,
+    },
+    guarded(async ({ ai_player_id }) => {
+      const page = await client.get(
+        `/api/v1/agent/ai-players/${encodeURIComponent(ai_player_id)}/transcript`,
+        aiPlayerTranscript,
+      );
+      return result(
+        page.messages
+          .slice(-40)
+          .map((m) => `[${m.direction}] ${m.author}: ${m.body}`)
+          .join("\n") || "Nothing said yet.",
+        page,
+      );
+    }),
+  );
+  server.registerTool(
+    "instruct_ai_player",
+    {
+      title: "Give an AI player an instruction",
+      description:
+        "Sends a plain-language instruction to a running AI player in the game, as if its owner said it, e.g. 'collect 16 logs and put them in the chest by the farm'. It interrupts what the player is doing. Costs model calls within the player's spending limit.",
+      inputSchema: {
+        ai_player_id: id,
+        instruction: z.string().min(1).max(2000),
+      },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    guarded(async ({ ai_player_id, instruction }) => {
+      const sent = await client.post(
+        `/api/v1/agent/ai-players/${encodeURIComponent(ai_player_id)}/instructions`,
+        { body: instruction },
+        z.strictObject({ id }),
+      );
+      return result(
+        "Sent. The AI player picks it up within a few seconds; read its conversation to follow along.",
+        sent,
+      );
+    }),
+  );
+  server.registerTool(
+    "stop_ai_player",
+    {
+      title: "Stop an AI player",
+      description:
+        "Stops an AI player and makes it leave the game. Only an adult can start it again from CraftLayer.",
+      inputSchema: { ai_player_id: id },
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    guarded(async ({ ai_player_id }) => {
+      const view = await client.post(
+        `/api/v1/agent/ai-players/${encodeURIComponent(ai_player_id)}/stop`,
+        {},
+        aiPlayerView,
+      );
+      return result(`${view.name} is stopping.`, view);
     }),
   );
 }

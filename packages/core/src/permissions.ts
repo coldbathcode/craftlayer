@@ -45,6 +45,7 @@ export const organizationPermissions = [
   "player:manage",
   "server:control",
   "ai_player:manage",
+  "ai_player:instruct",
 ] as const;
 export type OrganizationPermission = (typeof organizationPermissions)[number];
 export const instancePermissions = [
@@ -99,6 +100,7 @@ export const rolePermissions = {
     "player:manage",
     "server:control",
     "ai_player:manage",
+    "ai_player:instruct",
   ],
   operator: [
     "server:read",
@@ -183,5 +185,6 @@ export const agentTokenPermissions = [
   "mission:read",
   "agent:read",
   "backup:read",
+  "ai_player:instruct",
 ] as const satisfies readonly OrganizationPermission[];
 export type AgentTokenPermission = (typeof agentTokenPermissions)[number];

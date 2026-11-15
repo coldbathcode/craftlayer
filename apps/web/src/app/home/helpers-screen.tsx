@@ -183,6 +183,7 @@ function Connect({
     [where, setWhere] = useState(choices[0]?.key ?? ""),
     [mayAsk, setMayAsk] = useState(false),
     [kinds, setKinds] = useState<ServerActionKind[]>([]),
+    [players, setPlayers] = useState(false),
     [days, setDays] = useState<(typeof lengths)[number]>(30),
     [status, setStatus] = useState<ActionStatus>(idle);
   const busy = status.kind === "working";
@@ -199,7 +200,9 @@ function Connect({
     try {
       const created = await family.api.connectHelper({
         name: called,
-        permissions: helperReads,
+        permissions: players
+          ? [...helperReads, "ai_player:instruct"]
+          : helperReads,
         projectId: group.projectId,
         environmentId: group.environmentId,
         expiresInDays: days,
@@ -303,6 +306,15 @@ function Connect({
             </p>
           </fieldset>
         ) : null}
+        <label className="fam-choice">
+          <input
+            type="checkbox"
+            checked={players}
+            onChange={(e) => setPlayers(e.target.checked)}
+          />{" "}
+          It may also give your AI players instructions and stop them (never
+          start them or change their settings)
+        </label>
         <fieldset>
           <legend>For how long?</legend>
           {lengths.map((length) => (

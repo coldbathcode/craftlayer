@@ -1,6 +1,7 @@
 "use client";
 import type { ServerView } from "@craftlayer/contracts";
 import { useCallback, useEffect, useState } from "react";
+import { AiPlayersScreen } from "./ai-players-screen";
 import { FamilyScreen } from "./family-screen";
 import { HelpersScreen } from "./helpers-screen";
 import { HomeScreen } from "./home-screen";
@@ -13,12 +14,18 @@ type Route =
   | { screen: "home" }
   | { screen: "server"; id: string; tab: ServerTab }
   | { screen: "family" }
-  | { screen: "helpers" };
+  | { screen: "helpers" }
+  | { screen: "ai-players"; id: string | null };
 /** The address after # says which screen is open, so Back and a shared link work. */
 function parse(hash: string): Route {
   const [, first, id, tab] = hash.replace(/^#/, "").split("/");
   if (first === "family") return { screen: "family" };
   if (first === "helpers") return { screen: "helpers" };
+  if (first === "ai-players")
+    return {
+      screen: "ai-players",
+      id: id && /^[0-9a-f-]{36}$/.test(id) ? id : null,
+    };
   if (first === "server" && id && /^[0-9a-f-]{36}$/.test(id))
     return {
       screen: "server",
@@ -51,9 +58,12 @@ function Signed({ family }: { family: Family }) {
       ? (servers.value?.find((s) => s.id === route.id) ?? null)
       : null;
   const section =
-    route.screen === "family" || route.screen === "helpers"
+    route.screen === "family" ||
+    route.screen === "helpers" ||
+    route.screen === "ai-players"
       ? route.screen
       : "home";
+  const aiPlayers = family.authority.permissions.includes("ai_player:manage");
   return (
     <div className="fam-shell">
       <a className="skip" href="#fam-main">
@@ -71,16 +81,19 @@ function Signed({ family }: { family: Family }) {
             ["home", "#/", "Home"],
             ["family", "#/family", "Family"],
             ["helpers", "#/helpers", "AI helpers"],
+            ["ai-players", "#/ai-players", "AI players"],
           ] as const
-        ).map(([key, href, label]) => (
-          <a
-            key={key}
-            href={href}
-            aria-current={section === key ? "page" : undefined}
-          >
-            {label}
-          </a>
-        ))}
+        )
+          .filter(([key]) => key !== "ai-players" || aiPlayers)
+          .map(([key, href, label]) => (
+            <a
+              key={key}
+              href={href}
+              aria-current={section === key ? "page" : undefined}
+            >
+              {label}
+            </a>
+          ))}
         <a href="/advanced">Advanced</a>
       </nav>
       <main id="fam-main" className="fam-main">
@@ -121,6 +134,15 @@ function Signed({ family }: { family: Family }) {
           )
         ) : null}
         {route.screen === "family" ? <FamilyScreen family={family} /> : null}
+        {route.screen === "ai-players" ? (
+          aiPlayers ? (
+            <AiPlayersScreen family={family} selected={route.id} />
+          ) : (
+            <Card>
+              <p>Only a manager can set up AI players.</p>
+            </Card>
+          )
+        ) : null}
         {route.screen === "helpers" ? (
           <HelpersScreen family={family} servers={servers.value ?? []} />
         ) : null}
