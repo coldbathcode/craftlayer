@@ -60,7 +60,7 @@ To roll back: `sudo tailscale serve --https=8443 off`, then `docker compose … 
 
 ## AI player worker (master plan G10)
 
-Status 2026-11-15: the family server has the ViaVersion/ViaBackwards bridge (decision 13, see the [AI player runbook](../development/ai-player.md)). The worker overlay is described in [ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md).
+Status 2026-11-15: the family server has the ViaVersion/ViaBackwards bridge (decision 13, see the [AI player runbook](../development/ai-player.md)). Step 1 is done (stack at `1790652`, script `~/craftlayer-private/g10-update.sh`, log beside it). The worker is running and waiting for its host key; steps 2 and 3 are the owner's. The worker overlay is described in [ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md).
 
 1. **Operator (owner-approved):** update the checkout. Create `~/craftlayer-private/ai-player` (0700) and `~/craftlayer-private/ai-player-state` (0700). Add `CRAFTLAYER_AI_PLAYER_SECRET_DIR` and `CRAFTLAYER_AI_PLAYER_STATE_DIR` to `.env`, and add `infra/compose/providers.yml` and `infra/compose/ai-player.yml` to `COMPOSE_FILE`. Create the protected provider files in `.secrets/` (key ring, and a policy with the approved OpenRouter models, `allow_paid` and an instance cap). Rebuild and `up -d`. Migrations 0038–0041 are additive. The game server is not touched.
 2. **Owner:** on **AI players → Computers that run AI players**, add "Family VPS" and copy the key. Then, from your own terminal: `ssh craftlayer-contabo 'umask 077; cat > ~/craftlayer-private/ai-player/host.token'`, paste the key and press Ctrl-D. The worker picks it up on its next restart (it restarts by itself until the file exists).
