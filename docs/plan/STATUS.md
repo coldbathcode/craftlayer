@@ -82,7 +82,7 @@ Decided on 2026-11-08 unless noted.
 | 10 | Who may instruct the AI player (2026-11-15) | **Only the owner** | G8 accepts the owner's identities only |
 | 11 | Where it may dig and build (2026-11-15) | **Anywhere: free run of the world** | No zones by default; no attacking players; block journal; family world only after a verified backup |
 | 12 | What it does unasked (2026-11-15) | **Owner-allowed master tasks** (unasked work only; direct instructions unrestricted) | G3 task list; G6 picks tasks when idle |
-| 13 | Install the ViaVersion/ViaBackwards bridge on the family server | *Open* — needed before the AI player can join the family world (one restart, verified backup first) | Without it the AI player can join only the test world; G1 shows why it is needed |
+| 13 | Install the ViaVersion/ViaBackwards bridge on the family server (2026-11-15) | **Yes** (owner: "thats fine do it") | Installed 2026-11-15 after a verified cold copy (about 1 min 40 s down, nobody online). Follow-up: block 1.20.5–1.21.4 clients, which ViaVersion warns are exploitable, at the next restart |
 
 ## Change log
 
