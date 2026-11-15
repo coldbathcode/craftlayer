@@ -42,6 +42,63 @@ const resultSchema = z.object({
     .optional(),
 });
 
+const anthropicResultSchema = z.object({
+  id: z.string().max(200).optional(),
+  type: z.literal("message"),
+  content: z
+    .array(
+      z.discriminatedUnion("type", [
+        z.object({ type: z.literal("text"), text: z.string() }),
+        z.object({
+          type: z.literal("tool_use"),
+          name: z.string(),
+          input: z.record(z.string(), z.json()),
+        }),
+        z.object({ type: z.literal("thinking") }).loose(),
+        z.object({ type: z.literal("redacted_thinking") }).loose(),
+      ]),
+    )
+    .max(32),
+  stop_reason: z.enum([
+    "end_turn",
+    "max_tokens",
+    "stop_sequence",
+    "tool_use",
+    "pause_turn",
+    "refusal",
+  ]),
+  usage: z
+    .object({
+      input_tokens: z.number().int().nonnegative(),
+      output_tokens: z.number().int().nonnegative(),
+    })
+    .optional(),
+});
+
+type ChatMessage = GenerateRequest["messages"][number];
+/**
+ * Anthropic's Messages API takes the system prompt separately and expects the
+ * conversation to start with the user and alternate. Consecutive turns from the
+ * same role are joined; nothing is invented except a one-word opener when the
+ * history would otherwise start with the assistant.
+ */
+export function anthropicMessages(messages: ChatMessage[]) {
+  const system = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const turns: Array<{ role: "user" | "assistant"; content: string }> = [];
+  for (const m of messages) {
+    if (m.role === "system") continue;
+    const last = turns.at(-1);
+    if (last && last.role === m.role) last.content += `\n\n${m.content}`;
+    else turns.push({ role: m.role, content: m.content });
+  }
+  if (turns[0]?.role !== "user")
+    turns.unshift({ role: "user", content: "Continue." });
+  return { system, turns };
+}
+
 const unit = {
   input: "token",
   output: "token",
@@ -91,6 +148,57 @@ export function describeCompatible(
       },
     }),
   );
+}
+
+function anthropicBody(model: string, request: GenerateRequest) {
+  const { system, turns } = anthropicMessages(request.messages);
+  return {
+    model,
+    max_tokens: request.max_output_tokens,
+    ...(system ? { system } : {}),
+    messages: turns,
+    ...(request.tools.length
+      ? {
+          tools: request.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            input_schema: t.parameters,
+          })),
+          tool_choice: { type: "auto" },
+        }
+      : {}),
+  };
+}
+
+function anthropicResult(raw: unknown, request: GenerateRequest) {
+  const result = anthropicResultSchema.parse(raw);
+  const text = result.content
+    .flatMap((b) => (b.type === "text" ? [b.text] : []))
+    .join("");
+  const tools = result.content.flatMap((b) =>
+    b.type === "tool_use" ? [{ name: b.name, arguments: b.input }] : [],
+  );
+  if (
+    tools.length > 16 ||
+    tools.some((t) => !request.tools.some((allowed) => allowed.name === t.name))
+  )
+    throw new ProviderError("malformed_response", true);
+  return generateResultSchema.parse({
+    text,
+    tool_calls: tools,
+    finish_reason:
+      result.stop_reason === "tool_use"
+        ? "tool_calls"
+        : result.stop_reason === "max_tokens"
+          ? "length"
+          : "stop",
+    usage: {
+      input_tokens: result.usage?.input_tokens ?? null,
+      output_tokens: result.usage?.output_tokens ?? null,
+      quality: result.usage ? "observed" : "unknown",
+    },
+    provider_request_id: result.id ?? null,
+  });
 }
 
 function rejectSecret(value: unknown, secret: string) {
@@ -144,6 +252,9 @@ export class CompatibleProvider implements ModelProvider {
     )
       throw new ProviderError("policy_denied", false);
     const secret = this.#secret;
+    const anthropic = this.endpoint.api === "anthropic_messages";
+    if (anthropic && request.response_format === "json")
+      throw new ProviderError("policy_denied", false);
     try {
       const raw = await this.wire.json({
         target: {
@@ -153,6 +264,7 @@ export class CompatibleProvider implements ModelProvider {
           network: this.endpoint.network,
           addresses: this.endpoint.addresses,
           auth_header: this.endpoint.auth_header,
+          api: this.endpoint.api,
         },
         path: this.endpoint.chat_path,
         method: "POST",
@@ -161,26 +273,29 @@ export class CompatibleProvider implements ModelProvider {
         timeout_ms: request.timeout_ms,
         effectful: true,
         before_dispatch: beforeDispatch,
-        body: {
-          model: model.id,
-          messages: request.messages,
-          max_tokens: request.max_output_tokens,
-          stream: false,
-          ...(request.response_format === "json"
-            ? { response_format: { type: "json_object" } }
-            : {}),
-          ...(request.tools.length
-            ? {
-                tools: request.tools.map((t) => ({
-                  type: "function",
-                  function: t,
-                })),
-                tool_choice: "auto",
-              }
-            : {}),
-        },
+        body: anthropic
+          ? anthropicBody(model.id, request)
+          : {
+              model: model.id,
+              messages: request.messages,
+              max_tokens: request.max_output_tokens,
+              stream: false,
+              ...(request.response_format === "json"
+                ? { response_format: { type: "json_object" } }
+                : {}),
+              ...(request.tools.length
+                ? {
+                    tools: request.tools.map((t) => ({
+                      type: "function",
+                      function: t,
+                    })),
+                    tool_choice: "auto",
+                  }
+                : {}),
+            },
       });
       rejectSecret(raw, secret);
+      if (anthropic) return anthropicResult(raw, request);
       const inBand = z
         .object({ error: z.object({ code: z.number() }) })
         .safeParse(raw);

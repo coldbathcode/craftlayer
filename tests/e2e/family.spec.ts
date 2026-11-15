@@ -3,15 +3,23 @@ import {
   agentRequestPage,
   agentTokenCreatedSchema,
   agentTokenSchema,
+  aiPlayerHostList,
+  aiPlayerList,
   authoritySchema,
   backupListView,
   backupPolicyView,
   backupRequestAccepted,
   backupStatusView,
+  budgetViewSchema,
+  connectionSchema,
+  defaultBudgetLimits,
+  defaultModelPolicy,
   knockAllowed,
   knockPage,
   memberSchema,
   meSchema,
+  modelPolicySchema,
+  providerEndpointsSchema,
   serverActionAccepted,
   serverActionPage,
   serverActionView,
@@ -50,6 +58,9 @@ interface World {
   helpers: Array<ReturnType<typeof agentTokenSchema.parse>>;
   asking: "pending" | "approved" | "declined";
   calls: string[];
+  aiPlayers: boolean;
+  connections: Array<ReturnType<typeof connectionSchema.parse>>;
+  policy: ReturnType<typeof modelPolicySchema.parse>;
 }
 const helperKey = `cla_${"k".repeat(43)}`;
 function action(kind: string, request: unknown, n: number) {
@@ -85,6 +96,9 @@ async function standIn(page: Page, start: Partial<World> = {}) {
     helpers: [],
     asking: "pending",
     calls: [],
+    aiPlayers: false,
+    connections: [],
+    policy: modelPolicySchema.parse(defaultModelPolicy),
     ...start,
   };
   const manager = () => w.role === "manager";
@@ -159,7 +173,12 @@ async function standIn(page: Page, start: Partial<World> = {}) {
           membership_version: 1,
           roles: [manager() ? "org_admin" : "viewer"],
           permissions: manager()
-            ? ["server:read", "player:manage", "server:control"]
+            ? [
+                "server:read",
+                "player:manage",
+                "server:control",
+                ...(w.aiPlayers ? ["ai_player:manage"] : []),
+              ]
             : ["server:read"],
           can_manage_members: manager(),
           can_manage_roles: manager(),
@@ -417,6 +436,77 @@ async function standIn(page: Page, start: Partial<World> = {}) {
     }
     if (path === "/agent-tokens")
       return manager() ? json({ items: w.helpers }) : deny(403, "FORBIDDEN");
+    // AI players screen (G10): model services and paid-model spending.
+    if (path === "/ai-players")
+      return json(aiPlayerList.parse({ players: [] }));
+    if (path === "/ai-player-hosts")
+      return json(aiPlayerHostList.parse({ hosts: [] }));
+    if (path === "/projects")
+      return json({ items: [{ id: project, name: "Family" }] });
+    if (path === "/provider-endpoints")
+      return json(
+        providerEndpointsSchema.parse({
+          items: [
+            {
+              kind: "openrouter",
+              endpoint_id: "openrouter",
+              label: "OpenRouter",
+              flavor: "openrouter",
+              needs_secret: true,
+              models: 3,
+            },
+          ],
+          paid: { allowed: true, max_micro_usd: "2000000" },
+        }),
+      );
+    if (path === "/providers" && method === "POST") {
+      const body = JSON.parse(request.postData() ?? "{}");
+      const made = connectionSchema.parse({
+        id: "00000000-0000-4000-8000-000000000301",
+        kind: body.kind,
+        endpoint_id: body.endpoint_id,
+        label: body.label,
+        enabled: true,
+        version: 1,
+        credential_configured: Boolean(body.secret),
+        key_id: "one",
+      });
+      w.connections.push(made);
+      return json(made);
+    }
+    if (path === "/providers") return json({ items: w.connections });
+    if (/^\/providers\/[^/]+\/(refresh|models)$/.test(path))
+      return json({ items: [] });
+    if (path === `/model-policy/organization/${org}`) {
+      if (method === "PUT")
+        w.policy = modelPolicySchema.parse(
+          JSON.parse(request.postData() ?? "{}").policy,
+        );
+      return json({ version: method === "PUT" ? 1 : 0, policy: w.policy });
+    }
+    if (path.startsWith("/budgets/")) {
+      const limits =
+        method === "PUT"
+          ? JSON.parse(request.postData() ?? "{}").limits
+          : defaultBudgetLimits;
+      const zero = {
+        calls: "0",
+        input_tokens: "0",
+        output_tokens: "0",
+        total_tokens: "0",
+        micro_usd: "0",
+      };
+      return json(
+        budgetViewSchema.parse({
+          version: method === "PUT" ? 1 : 0,
+          limits,
+          active: 0,
+          window_start: iso(),
+          reserved: zero,
+          used: zero,
+        }),
+      );
+    }
     return deny(404, "NOT_FOUND");
   });
   return w;
@@ -737,4 +827,75 @@ test("a watcher can see what a helper is asking but cannot answer or connect one
     page.getByText("Only a manager can see everyone here."),
   ).toBeVisible();
   expect(w.calls).toEqual([]);
+});
+
+test("a manager connects a model service with a key and allows paid models up to a cap", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const w = await standIn(page, { knocking: false, aiPlayers: true });
+  await page.goto("/home#/ai-players");
+  await expect(
+    page.getByRole("heading", { name: "Model services" }),
+  ).toBeVisible();
+  await expect(page.getByText("Only free models for now.")).toBeVisible();
+  await page.getByLabel("Connect a service").selectOption({
+    label: "OpenRouter · OpenRouter: hundreds of models with one key",
+  });
+  const key = `sk-or-${"x".repeat(40)}`;
+  await page.getByLabel("Its API key").fill(key);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByText("0 models an AI player can use.")).toBeVisible();
+  await expect(
+    page.locator(".fam-list li").filter({ hasText: /^OpenRouter · on/ }),
+  ).toBeVisible();
+  // The key went to the API once and is not kept on the page.
+  expect(
+    w.calls.filter((c) => c.startsWith("POST /providers ") && c.includes(key)),
+  ).toHaveLength(1);
+  expect(await page.getByLabel("Its API key").count()).toBe(0);
+  expect(await page.content()).not.toContain(key);
+  expect(w.calls.some((c) => /^POST \/providers\/[^ ]+\/refresh/.test(c))).toBe(
+    true,
+  );
+
+  // More than the instance allows is refused before anything is sent.
+  await page.getByLabel(/Allow paid models, up to this much an hour/).fill("5");
+  await page.getByRole("button", { name: "Allow paid models" }).click();
+  await expect(
+    page.getByText("This CraftLayer allows at most $2.00 an hour."),
+  ).toBeVisible();
+  expect(w.calls.some((c) => c.startsWith("PUT /model-policy"))).toBe(false);
+
+  await page
+    .getByLabel(/Allow paid models, up to this much an hour/)
+    .fill("1.00");
+  await page.getByRole("button", { name: "Allow paid models" }).click();
+  await expect(
+    page.getByText(
+      /Paid models allowed, up to \$1\.00 an hour\. Each AI player/,
+    ),
+  ).toBeVisible();
+  expect(w.policy).toMatchObject({
+    free_only: false,
+    allow_hosted: true,
+    max_paid_micro_usd: "1000000",
+  });
+  const budgets = w.calls.filter((c) => c.startsWith("PUT /budgets/"));
+  expect(budgets.map((c) => c.split(" ")[1]?.split("/")[2])).toEqual([
+    "organization",
+    "user",
+    "project",
+  ]);
+  for (const c of budgets)
+    expect(JSON.parse(c.slice(c.indexOf("{")))).toMatchObject({
+      limits: { micro_usd: "1000000", calls: 600 },
+    });
+  await fits(page);
+  await shot(page, "model-services");
+  await page.getByRole("button", { name: "Free models only" }).click();
+  await expect(page.getByText("Only free models now.")).toBeVisible();
+  expect(w.policy).toMatchObject({ free_only: true, max_paid_micro_usd: "0" });
+  expect(errors).toEqual([]);
 });

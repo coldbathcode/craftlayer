@@ -58,6 +58,16 @@ Status 2026-11-12: built and verified locally ([ADR 0048](../architecture/decisi
 
 To roll back: `sudo tailscale serve --https=8443 off`, then `docker compose … rm -sf mcp`. Nothing else depends on the service; the local stdio server keeps working.
 
+## AI player worker (master plan G10)
+
+Status 2026-11-15: the family server has the ViaVersion/ViaBackwards bridge (decision 13, see the [AI player runbook](../development/ai-player.md)). The worker overlay is described in [ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md).
+
+1. **Operator (owner-approved):** update the checkout. Create `~/craftlayer-private/ai-player` (0700) and `~/craftlayer-private/ai-player-state` (0700). Add `CRAFTLAYER_AI_PLAYER_SECRET_DIR` and `CRAFTLAYER_AI_PLAYER_STATE_DIR` to `.env`, and add `infra/compose/providers.yml` and `infra/compose/ai-player.yml` to `COMPOSE_FILE`. Create the protected provider files in `.secrets/` (key ring, and a policy with the approved OpenRouter models, `allow_paid` and an instance cap). Rebuild and `up -d`. Migrations 0038–0041 are additive. The game server is not touched.
+2. **Owner:** on **AI players → Computers that run AI players**, add "Family VPS" and copy the key. Then, from your own terminal: `ssh craftlayer-contabo 'umask 077; cat > ~/craftlayer-private/ai-player/host.token'`, paste the key and press Ctrl-D. The worker picks it up on its next restart (it restarts by itself until the file exists).
+3. **Owner:** **Model services**: connect OpenRouter with your key and allow paid models up to an hourly amount. Create the AI player with server address `host.docker.internal`, port `25566`, and Microsoft sign-in. Start it and enter the code shown.
+
+To roll back: `docker compose rm -sf ai-player` and remove the overlay from `COMPOSE_FILE`. To remove the bridge from the game server: stop it, delete the two Via jars from `plugins/`, start it.
+
 ## Dashboard database backup (master plan A1)
 
 Status 2026-11-12: enabled on the VPS the same evening with the owner's approval (folder `/home/oli/craftlayer-db-backups`, time zone `Europe/London`); the first verified dump was written at start. The steps below record how.

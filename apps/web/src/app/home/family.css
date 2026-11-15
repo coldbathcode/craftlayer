@@ -94,6 +94,10 @@
 .fam-big {
   font-size: 24px;
 }
+.fam-subtitle {
+  margin: 1.25rem 0 0.25rem;
+  font-size: 1rem;
+}
 .fam-quiet {
   color: var(--muted);
   font-size: 15px;
@@ -301,4 +305,32 @@
   display: block;
   padding: 0;
   font-size: 14px;
+}
+
+.fam-spend-chart {
+  width: 100%;
+  height: auto;
+  margin: 0.5rem 0;
+}
+.fam-spend-bar {
+  fill: var(--ink);
+}
+.fam-spend-limit {
+  stroke: var(--muted);
+  stroke-dasharray: 4 4;
+  stroke-width: 1.5;
+}
+.fam-spend-axis {
+  fill: var(--muted);
+  font-size: 12px;
+}
+.fam-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 15px;
+}
+.fam-table th,
+.fam-table td {
+  text-align: left;
+  padding: 0.25rem 0.5rem 0.25rem 0;
 }

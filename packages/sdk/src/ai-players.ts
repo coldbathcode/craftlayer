@@ -8,15 +8,27 @@ import {
   aiPlayerList,
   aiPlayerMemory,
   aiPlayerMemoryList,
+  aiPlayerSpendHistory,
   aiPlayerTranscript,
   aiPlayerView,
+  type BudgetLimits,
+  budgetViewSchema,
   connectionSchema,
   itemsSchema,
+  type ModelPolicy,
+  modelPolicySchema,
   modelSchema,
   projectSchema,
+  providerEndpointsSchema,
 } from "@craftlayer/contracts";
 import { z } from "zod";
 import { identityRequest } from "./index.js";
+
+export type SpendScope = "organization" | "user" | "project";
+const policyView = z.strictObject({
+  version: z.number().int().nonnegative(),
+  policy: modelPolicySchema,
+});
 
 /** Master plan G8: the owner's AI player screens. Same-origin, session and CSRF. */
 export function aiPlayerClient(
@@ -69,6 +81,12 @@ export function aiPlayerClient(
         aiPlayerTranscript,
         context,
       ),
+    spendHistory: (id: string, days = 30) =>
+      identityRequest(
+        player(id, `spend-history?days=${days}`),
+        aiPlayerSpendHistory,
+        context,
+      ),
     memories: (id: string) =>
       identityRequest(player(id, "memories"), aiPlayerMemoryList, context),
     addMemory: (id: string, input: AiPlayerMemoryInput) =>
@@ -116,7 +134,65 @@ export function aiPlayerClient(
       identityRequest(
         `/api/v1/providers/${encodeURIComponent(connection)}/refresh`,
         itemsSchema(modelSchema),
-        send("POST"),
+        send("POST", {}),
+      ),
+    /** Services the operator approved, and the instance's paid-model switch. */
+    endpoints: () =>
+      identityRequest(
+        "/api/v1/provider-endpoints",
+        providerEndpointsSchema,
+        context,
+      ),
+    connect: (input: {
+      kind: "ollama" | "openrouter" | "openai_compatible";
+      endpoint_id: string;
+      label: string;
+      secret?: string;
+    }) =>
+      identityRequest(
+        "/api/v1/providers",
+        connectionSchema,
+        send("POST", input),
+      ),
+    setConnectionEnabled: (id: string, version: number, enabled: boolean) =>
+      identityRequest(
+        `/api/v1/providers/${encodeURIComponent(id)}/status`,
+        connectionSchema,
+        send("PUT", { expected_version: version, enabled }),
+      ),
+    policy: (kind: SpendScope, id: string) =>
+      identityRequest(
+        `/api/v1/model-policy/${kind}/${encodeURIComponent(id)}`,
+        policyView,
+        context,
+      ),
+    setPolicy: (
+      kind: SpendScope,
+      id: string,
+      version: number,
+      policy: ModelPolicy,
+    ) =>
+      identityRequest(
+        `/api/v1/model-policy/${kind}/${encodeURIComponent(id)}`,
+        policyView,
+        send("PUT", { expected_version: version, policy }),
+      ),
+    budget: (kind: SpendScope, id: string) =>
+      identityRequest(
+        `/api/v1/budgets/${kind}/${encodeURIComponent(id)}`,
+        budgetViewSchema,
+        context,
+      ),
+    setBudget: (
+      kind: SpendScope,
+      id: string,
+      version: number,
+      limits: BudgetLimits,
+    ) =>
+      identityRequest(
+        `/api/v1/budgets/${kind}/${encodeURIComponent(id)}`,
+        budgetViewSchema,
+        send("PUT", { expected_version: version, limits }),
       ),
   };
 }

@@ -8,7 +8,9 @@ import type {
 import { ApiError, aiPlayerClient } from "@craftlayer/sdk";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ago, friendly } from "./lib";
+import { ModelServices } from "./model-services";
 import { Card, Confirm, StatusLine } from "./parts";
+import { fillDays, spendCsv } from "./spending";
 import type { ActionStatus } from "./use-action";
 import { type Family, usePolled } from "./use-family";
 
@@ -124,6 +126,7 @@ export function AiPlayersScreen({
           Create an AI player
         </button>
       )}
+      <ModelServices family={family} />
       <Hosts family={family} />
     </>
   );
@@ -305,6 +308,7 @@ const tabs = [
   ["talk", "Talk"],
   ["memory", "Memory"],
   ["tasks", "Master tasks"],
+  ["spending", "Spending"],
   ["settings", "Settings"],
 ] as const;
 type Tab = (typeof tabs)[number][0];
@@ -346,10 +350,144 @@ function PlayerDetail({
       {tab === "tasks" ? (
         <Tasks family={family} player={player} refresh={refresh} />
       ) : null}
+      {tab === "spending" ? (
+        <SpendingTab family={family} player={player} />
+      ) : null}
       {tab === "settings" ? (
         <Settings family={family} player={player} refresh={refresh} />
       ) : null}
     </>
+  );
+}
+
+function SpendingTab({
+  family,
+  player,
+}: {
+  family: Family;
+  player: AiPlayerView;
+}) {
+  const api = aiPlayerClient(family.organization, family.csrf);
+  const history = usePolled(
+    () => api.spendHistory(player.id, 30),
+    60000,
+    family.lost,
+  );
+  if (!history.value)
+    return (
+      <Card>
+        <p className="fam-quiet">
+          {history.failed
+            ? "We couldn't load the spending history."
+            : "Loading…"}
+        </p>
+      </Card>
+    );
+  const days = fillDays(history.value.days, 30, new Date());
+  const amount = (d: (typeof days)[number]) =>
+    Number(d.used_micro) + Number(d.reserved_micro);
+  const top = Math.max(
+    Number(player.spend.daily_limit_micro),
+    ...days.map(amount),
+    1,
+  );
+  const total = days.reduce((n, d) => n + amount(d), 0);
+  const calls = days.reduce((n, d) => n + d.calls, 0);
+  function download() {
+    const blob = new Blob([spendCsv(player.name, history.value?.days ?? [])], {
+      type: "text/csv",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `${player.name.replace(/[^a-z0-9_-]+/gi, "-")}-spending.csv`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+  const w = 600,
+    h = 140,
+    bar = w / days.length,
+    limitY = h - (Number(player.spend.daily_limit_micro) / top) * h;
+  return (
+    <Card title="Last 30 days">
+      <p>
+        {dollars(total)} on {calls} model call{calls === 1 ? "" : "s"}. The
+        dashed line is the daily limit (
+        {dollars(player.spend.daily_limit_micro)}).
+      </p>
+      <svg
+        className="fam-spend-chart"
+        viewBox={`0 0 ${w} ${h + 18}`}
+        role="img"
+        aria-label={`Daily spending for the last 30 days, ${dollars(total)} in total`}
+      >
+        {days.map((d, i) => {
+          const value = amount(d),
+            height = (value / top) * h;
+          return (
+            <rect
+              key={d.day}
+              x={i * bar + 1}
+              y={h - height}
+              width={Math.max(bar - 2, 1)}
+              height={height}
+              className="fam-spend-bar"
+            >
+              <title>{`${d.day}: ${dollars(value)}, ${d.calls} calls`}</title>
+            </rect>
+          );
+        })}
+        <line
+          x1={0}
+          x2={w}
+          y1={limitY}
+          y2={limitY}
+          className="fam-spend-limit"
+        />
+        <text x={0} y={h + 14} className="fam-spend-axis">
+          {days[0]?.day.slice(5)}
+        </text>
+        <text x={w} y={h + 14} textAnchor="end" className="fam-spend-axis">
+          today
+        </text>
+      </svg>
+      <details>
+        <summary>Day by day</summary>
+        <table className="fam-table">
+          <thead>
+            <tr>
+              <th scope="col">Day (UTC)</th>
+              <th scope="col">Spent</th>
+              <th scope="col">Calls</th>
+              <th scope="col">Tokens in / out</th>
+            </tr>
+          </thead>
+          <tbody>
+            {history.value.days
+              .slice()
+              .reverse()
+              .map((d) => (
+                <tr key={d.day}>
+                  <td>{d.day}</td>
+                  <td>{dollars(amount(d))}</td>
+                  <td>{d.calls}</td>
+                  <td>
+                    {d.input_tokens.toLocaleString()} /{" "}
+                    {d.output_tokens.toLocaleString()}
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </details>
+      <button
+        type="button"
+        className="fam-button"
+        onClick={download}
+        disabled={history.value.days.length === 0}
+      >
+        Download as a spreadsheet (CSV)
+      </button>
+    </Card>
   );
 }
 
@@ -766,8 +904,8 @@ function ModelPicker({
       </select>
       {connection && models.value && usable.length === 0 ? (
         <p className="fam-quiet">
-          No tool-capable models here yet. A manager can refresh the
-          connection's models in Advanced.
+          No tool-capable models here yet. Refresh the service's models under
+          Model services below.
         </p>
       ) : null}
     </>

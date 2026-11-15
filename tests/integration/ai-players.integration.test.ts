@@ -69,8 +69,10 @@ class FakeGateway implements AiPlayerGateway {
   calls: GenerateRequest[] = [];
   next: Array<GenerateResult | Error> = [];
   model: ModelDescriptor | null = paidModel();
+  delayMs = 0;
   async generateStanding(_s: unknown, _c: unknown, request: GenerateRequest) {
     this.calls.push(request);
+    if (this.delayMs) await new Promise((r) => setTimeout(r, this.delayMs));
     const outcome = this.next.shift() ?? answer();
     if (outcome instanceof Error) throw outcome;
     return { result: outcome, attempts: 1 };
@@ -426,6 +428,26 @@ describe("AI players (master plan G3)", () => {
     expect(after.spend.today_reserved_micro).toBe("0");
   });
 
+  it("reports daily spending history to managers only (G9)", async () => {
+    const pip = (await players.list(admin.token, org)).players[0];
+    if (!pip) throw new Error("missing fixtures");
+    const history = await players.spendHistory(admin.token, org, pip.id, 30);
+    expect(history.days.length).toBeGreaterThanOrEqual(1);
+    expect(history.days.map((d) => d.day)).toEqual(
+      [...history.days.map((d) => d.day)].sort(),
+    );
+    const last = history.days.at(-1);
+    expect(last?.day).toBe(new Date(now).toISOString().slice(0, 10));
+    expect(last?.calls).toBeGreaterThan(0);
+    // A one-day window holds only today.
+    expect(
+      (await players.spendHistory(admin.token, org, pip.id, 1)).days,
+    ).toHaveLength(1);
+    await expect(
+      players.spendHistory(viewer.token, org, pip.id, 30),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
   it("enforces calls per hour and the stop latch, and hands instructions over once", async () => {
     const pip = (await players.list(admin.token, org)).players[0];
     const hostRow = await tx(runtime, (c) =>
@@ -626,6 +648,41 @@ describe("AI players (master plan G3)", () => {
     ).rejects.toMatchObject({ status: 403 });
     await players.clearStop(admin.token, org, pip.id);
   });
+  it("keeps a worker's model call open over real HTTP longer than the 5 s idle cut (G10)", async () => {
+    const created = await players.createHost(
+      admin.token,
+      org,
+      "Slow test host",
+    );
+    const slow = await players.create(admin.token, org, {
+      ...input("Slowpoke", created.id),
+      mc_username: "SlowpokeBot",
+    });
+    await players.start(admin.token, org, slow.id);
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address();
+    if (!address || typeof address === "string") throw new Error("no port");
+    gateway.delayMs = 6500;
+    try {
+      const response = await fetch(
+        `http://127.0.0.1:${address.port}/api/v1/ai-player-host/players/${slow.id}/think`,
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${created.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(think()),
+        },
+      );
+      expect(response.status).toBe(200);
+      expect((await response.json()).tool_calls).toHaveLength(1);
+    } finally {
+      gateway.delayMs = 0;
+      await players.revokeHost(admin.token, org, created.id);
+    }
+  }, 20000);
+
   it("revoking a host stops and unassigns its players", async () => {
     const hosts = await players.listHosts(admin.token, org);
     const active = hosts.hosts.find((h) => !h.revoked);

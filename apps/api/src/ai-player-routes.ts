@@ -12,6 +12,7 @@ import {
   aiPlayerMemoryList,
   aiPlayerPending,
   aiPlayerReport,
+  aiPlayerSpendHistory,
   aiPlayerTaskInput,
   aiPlayerThink,
   aiPlayerThought,
@@ -26,6 +27,9 @@ import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { requestToken } from "./auth-routes.js";
 
+/** Longer than the gateway's 45 s model timeout and the worker's 70 s wait. */
+const THINK_SOCKET_MS = 75_000;
+
 export type AiPlayerApi = Pick<
   AiPlayers,
   | "list"
@@ -39,6 +43,7 @@ export type AiPlayerApi = Pick<
   | "clearStop"
   | "instruct"
   | "transcript"
+  | "spendHistory"
   | "memories"
   | "addMemory"
   | "forgetMemory"
@@ -175,6 +180,19 @@ export async function registerAiPlayers(
       },
     },
     (r) => players.transcript(token(r), org(r), r.params.id, r.query.after),
+  );
+  api.get(
+    "/api/v1/ai-players/:id/spend-history",
+    {
+      schema: {
+        params: id,
+        querystring: z.strictObject({
+          days: z.coerce.number().int().min(1).max(366).default(30),
+        }),
+        response: ok(aiPlayerSpendHistory),
+      },
+    },
+    (r) => players.spendHistory(token(r), org(r), r.params.id, r.query.days),
   );
   api.get(
     "/api/v1/ai-players/:id/memories",
@@ -372,6 +390,16 @@ export async function registerAiPlayers(
     "/api/v1/ai-player-host/players/:id/think",
     {
       bodyLimit: 262144,
+      // The server cuts sockets idle for 5 s; a model call waits silently for up to
+      // 45 s, so this one route keeps its socket longer and restores it afterwards.
+      onRequest: (r, _reply, done) => {
+        r.raw.socket.setTimeout(THINK_SOCKET_MS);
+        done();
+      },
+      onResponse: (r, _reply, done) => {
+        r.raw.socket.setTimeout(r.server.server.timeout);
+        done();
+      },
       schema: {
         params: player,
         body: aiPlayerThink,

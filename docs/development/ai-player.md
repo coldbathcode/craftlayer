@@ -34,7 +34,7 @@ The single correction is the server's spawn teleport. Before the hitbox fix, the
 ### What this does not prove
 
 - **Online sign-in.** The fixture is offline. Signing in with the owner’s Microsoft account (device code) is proven in G4, on the worker.
-- **The family server has no bridge yet.** Installing ViaVersion and ViaBackwards there is a production change: a restart, a verified backup first, and the owner's approval (decision 13). Until then the AI player can join only the test world. Geyser and Floodgate loaded beside the bridge in every run, but no Bedrock client joined the test world.
+- **The family server got the bridge on 2026-11-15** (decision 13, owner-approved). The server was stopped for about 1 min 40 s with nobody online. A cold copy of the whole data directory was verified file by file (235 files) and also encrypted to the owner's key and checked on the owner's Mac. Then the two pinned plugins were added and the server restarted cleanly, with no new listeners. Rollback: stop, remove the two jars, start. Geyser and Floodgate loaded beside the bridge in every run, but no Bedrock client joined the test world.
 - Long sessions, combat, crafting, chests and mobs (peaceful difficulty) are G5.
 
 ## G3 — Records, worker hosts and spending (2026-11-15)
@@ -64,7 +64,7 @@ Evidence: `pnpm test:db` 255/255, including 7 AI player cases: permissions and c
 
 ### Set up and run an AI player
 
-1. **Connect a model** (adult with `provider:manage`). Declare the endpoint in the protected provider policy file: an Ollama endpoint, OpenRouter models, or a Kong AI Gateway / OpenAI-compatible endpoint ([providers runbook](providers-and-budgets.md#openai-compatible-endpoints-kong-ai-gateway)). Then create the connection and refresh its models. Only tool-capable models are offered. Paid models also need the instance `allow_paid` cap, an organization or project policy with `allow_hosted`, `free_only: false` and a paid cap, and hourly budgets with headroom, because the ledger books each call's worst case.
+1. **Connect a model.** The operator first declares the service in the protected provider policy file: an Ollama endpoint, OpenRouter models, Kong AI Gateway, or OpenAI, Gemini or Anthropic directly ([providers runbook](providers-and-budgets.md#openai-compatible-endpoints-kong-ai-gateway)). Then an adult opens **AI players → Model services**, picks the service, pastes its key and presses **Connect**; the card refreshes the models. Only tool-capable models are offered. For paid models, the adult also sets **Allow paid models, up to this much an hour**, which writes the policy and the hourly budgets. The instance file's `allow_paid` and cap still have to allow it.
 2. **Add the computer that runs it.** In **AI players → Computers that run AI players**, add one and copy its key; it is shown once. On that computer:
 
    ```sh
@@ -88,7 +88,7 @@ Evidence: `pnpm test:db` 255/255, including 7 AI player cases: permissions and c
 5. **Talk to it** in the dashboard's Talk tab, in the game ("Pip, follow me", or a whisper), or from Claude with an agent token that has `ai_player:instruct`.
 6. **Stop** is on its card, in Claude (`stop_ai_player`), or by stopping the worker program. Stop latches: it starts again only when an adult clears the stop and presses Start.
 
-The family server needs the ViaVersion/ViaBackwards bridge before an AI player can join it (decision 13). Until then, point it at a test world.
+The family server has had the ViaVersion/ViaBackwards bridge since 2026-11-15 (decision 13).
 
 ### Evidence (G10, local)
 
@@ -104,5 +104,38 @@ The family server needs the ViaVersion/ViaBackwards bridge before an AI player c
 
 17 model calls, 42,917 input and 406 output tokens, $0. The first run found two integration bugs, now fixed. The API's browser Origin/CSRF check blocked the worker's POSTs, so worker routes are now bearer-only like `/api/v1/worker/`. The brain also declared an input bound below the router's byte count, so every call was refused; the bound is now computed the same way and kept under 16,000.
 
-Not yet proven: a paid model through OpenRouter or Kong; Microsoft sign-in; in-game owner chat from a real second client; long sessions; the family server (decision 13).
+A second run on 2026-11-15 added a real second Java client ("the owner", offline test account) that instructs the player in game chat, and passed 6/6:
+
+| Run 2026-11-15 (second) | Result |
+| --- | --- |
+| look, collect 3 logs, remember, craft planks | 12 s, 30 s, 7 s, 13 s |
+| Owner in game: "Pip, please say hello to me in the chat." | recorded as a game instruction; the player answered in chat, 9 s |
+| Owner whispers "come to me" | recorded; the player walked to within 4 blocks, 23 s |
+| Stop | 1 s; 13 calls, 30,672 in / 298 out tokens, $0 |
+
+That run also found a quality fault: gemma4 answered the hello by writing `say(text="Hi OwnerTester! 👋")` as text, and the player chatted it literally. The brain now runs such a text-written call as the real call and never says call-shaped text ([ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md)). A third run showed a `fetch failed` event in every scenario. The API's 5 s idle-socket cut was killing model calls slower than 5 s; the `think` route now keeps its socket for 75 s. Run 4, after both fixes: PASS 6/6 with no failure events (look 8 s, collect 3 logs 39 s, remember 12 s, craft planks 14 s, hello in game 10 s, "come to me" 18 s, Stop 1 s, $0). Small local models vary from run to run; the report lists each scenario's decisions, replies and events so a failure shows its cause.
+
+### Paid-model runs
+
+The same check runs against a paid model, capped at $1 for the whole run (the player's daily limit, the instance cap and the hourly budgets are all $1):
+
+```sh
+install -m 600 /dev/null ~/.craftlayer/openrouter.key   # paste the key into it
+CRAFTLAYER_ACCEPT_EULA=true AI_PLAYER_E2E_PROVIDER=openrouter \
+  AI_PLAYER_E2E_MODEL=google/gemini-3.1-flash-lite \
+  AI_PLAYER_E2E_SECRET_FILE=~/.craftlayer/openrouter.key pnpm test:ai-player-e2e
+
+# Kong AI Gateway, or OpenAI / Gemini / Anthropic directly: one endpoint declaration in a file
+CRAFTLAYER_ACCEPT_EULA=true AI_PLAYER_E2E_PROVIDER=endpoint \
+  AI_PLAYER_E2E_ENDPOINT_FILE=kong.json AI_PLAYER_E2E_MODEL=<model id in that file> \
+  AI_PLAYER_E2E_SECRET_FILE=~/.craftlayer/kong.key pnpm test:ai-player-e2e
+```
+
+Not yet run: these need the owner's keys.
+
+### On the VPS
+
+`infra/compose/ai-player.yml` runs the worker beside the stack ([ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md)). It is not on the game-control network. It reaches the family server through the host's published Java port: in the AI player's settings, use server address `host.docker.internal` and port `25566`. `.env` needs `CRAFTLAYER_AI_PLAYER_SECRET_DIR` (folder holding `host.token`, 0700, file 0600) and `CRAFTLAYER_AI_PLAYER_STATE_DIR` (0700). The worker restarts until the token file exists.
+
+Not yet proven: a paid model through OpenRouter, Kong or a direct provider; Microsoft sign-in; long sessions; a supervised session on the family server.
 

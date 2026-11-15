@@ -9,6 +9,7 @@ import {
   modelPolicySchema,
   modelSchema,
   okSchema,
+  providerEndpointsSchema,
   usageReportSchema,
 } from "@craftlayer/contracts";
 import type { ProviderGateway } from "@craftlayer/providers";
@@ -56,6 +57,15 @@ export async function registerProviders(
       },
     },
     async (r) => ({ items: await providers.listConnections(token(r), org(r)) }),
+  );
+  api.get(
+    "/api/v1/provider-endpoints",
+    {
+      schema: {
+        response: { ...responses, 200: providerEndpointsSchema },
+      },
+    },
+    async (r) => providers.listEndpoints(token(r), org(r)),
   );
   api.post(
     "/api/v1/providers",

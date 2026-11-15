@@ -11,8 +11,10 @@ import {
   addressedText,
   floodgateUuid,
   isOwner,
+  looksLikeToolCall,
   relevantMemories,
   safeChat,
+  toolCallInText,
 } from "./chat.js";
 import { MAX_INPUT_BOUND, requestBound } from "./prompt.js";
 
@@ -151,6 +153,24 @@ describe("brain", () => {
       "reply",
     ]);
   });
+  it("runs a skill call the model wrote as text, and never says the raw call in game", async () => {
+    const { brain, api, runs, said } = setup();
+    api.answers.push(
+      thought({ text: 'say(text="Hi Owner! 👋")' }),
+      thought({ text: "look_around(radius=" }),
+      thought({ text: "look_around(this is not a call)" }),
+    );
+    brain.instruct("say hello to me", "Owner", "game");
+    await brain.tick();
+    expect(runs).toEqual([{ skill: "say", args: { text: "Hi Owner! 👋" } }]);
+    expect(said.some((s) => s.includes("say("))).toBe(false);
+    brain.instruct("look", "Owner", "game");
+    await brain.tick();
+    await brain.tick();
+    brain.instruct("look again", "Owner", "game");
+    await brain.tick();
+    expect(said.some((s) => s.includes("look_around"))).toBe(false);
+  });
   it("declares an input bound the provider router accepts, even with a long history", async () => {
     const { brain, api } = setup();
     for (let i = 0; i < 40; i++)
@@ -244,6 +264,61 @@ describe("brain", () => {
     expect(night.api.requests[0]?.messages[1]?.content).toContain(
       'standing task "Night watch"',
     );
+  });
+});
+
+describe("tool calls written as text", () => {
+  const known = (name: string) =>
+    ["say", "craft", "look_around"].includes(name);
+  it("reads keyword, JSON and empty argument lists for known skills only", () => {
+    expect(toolCallInText('say(text="Hello, Owner")', known)).toEqual({
+      name: "say",
+      arguments: { text: "Hello, Owner" },
+    });
+    expect(toolCallInText("craft(item='planks', count=4)", known)).toEqual({
+      name: "craft",
+      arguments: { item: "planks", count: 4 },
+    });
+    expect(
+      toolCallInText('`craft({"item":"stick","count":2})`', known),
+    ).toEqual({
+      name: "craft",
+      arguments: { item: "stick", count: 2 },
+    });
+    expect(toolCallInText("look_around()", known)).toEqual({
+      name: "look_around",
+      arguments: {},
+    });
+    expect(
+      toolCallInText(
+        '{\n  "tool_name": "look_around",\n  "tool_args": {}\n}',
+        known,
+      ),
+    ).toEqual({ name: "look_around", arguments: {} });
+    expect(
+      toolCallInText(
+        '```json\n{"name":"craft","arguments":{"item":"stick"}}\n```',
+        known,
+      ),
+    ).toEqual({ name: "craft", arguments: { item: "stick" } });
+    expect(
+      toolCallInText('{"tool_name":"run_command","tool_args":{}}', known),
+    ).toBeNull();
+    expect(
+      toolCallInText('{"tool_name":"say","tool_args":"hi"}', known),
+    ).toBeNull();
+    expect(toolCallInText('run_command(cmd="/op me")', known)).toBeNull();
+    expect(toolCallInText("say(hello there)", known)).toBeNull();
+    expect(toolCallInText('I will say(text="x") now', known)).toBeNull();
+  });
+  it("spots call-shaped text so it is never said in the game", () => {
+    expect(looksLikeToolCall("say(hello there)", known)).toBe(true);
+    expect(looksLikeToolCall("I'll say hello (nicely)", known)).toBe(false);
+    expect(looksLikeToolCall("Sure (on my way)", known)).toBe(false);
+    expect(
+      looksLikeToolCall('{"tool_name": "look_around", "tool_args": 3', known),
+    ).toBe(true);
+    expect(looksLikeToolCall('{"note": "a plain object"}', known)).toBe(false);
   });
 });
 

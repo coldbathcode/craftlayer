@@ -15,7 +15,10 @@ export type WireTarget =
       network: "public" | "private";
       addresses: string[];
       auth_header: "authorization" | "apikey" | "x-api-key";
+      api?: "openai_chat" | "anthropic_messages";
     };
+/** Fixed protocol headers for an API format; never caller-supplied. */
+const ANTHROPIC_VERSION = "2023-06-01";
 export interface WireRequest {
   target: WireTarget;
   path: string;
@@ -202,6 +205,10 @@ export class HttpWire implements JsonWire {
                 }
               : {}),
             ...(input.secret ? credentialHeader(target, input.secret) : {}),
+            ...(target.kind === "compatible" &&
+            target.api === "anthropic_messages"
+              ? { "anthropic-version": ANTHROPIC_VERSION }
+              : {}),
           },
         },
         (response) => {

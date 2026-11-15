@@ -246,3 +246,148 @@ it("keeps the compatible wire on the declared path and addresses", async () => {
     } as never),
   ).rejects.toMatchObject({ code: "policy_denied" });
 });
+
+const anthropic = compatibleEndpointSchema.parse({
+  id: "anthropic",
+  label: "Anthropic",
+  flavor: "anthropic",
+  api: "anthropic_messages",
+  url: "https://api.anthropic.test/v1",
+  chat_path: "messages",
+  auth_header: "x-api-key",
+  network: "public",
+  models: [
+    {
+      id: "claude-fixture",
+      context_tokens: 200000,
+      output_tokens: 8192,
+      tools: true,
+      structured: false,
+      prices,
+      price_source: "Provider price page",
+      price_checked_on: "2026-11-15",
+    },
+  ],
+});
+class AnthropicWire implements JsonWire {
+  calls: WireRequest[] = [];
+  response: unknown = {
+    id: "msg_fixture",
+    type: "message",
+    role: "assistant",
+    content: [
+      { type: "text", text: "On it." },
+      {
+        type: "tool_use",
+        id: "toolu_1",
+        name: "fixture_tool",
+        input: { a: 2 },
+      },
+    ],
+    stop_reason: "tool_use",
+    usage: { input_tokens: 90, output_tokens: 12 },
+  };
+  async json(request: WireRequest) {
+    this.calls.push(request);
+    return structuredClone(this.response);
+  }
+}
+
+it("speaks Anthropic's Messages API for direct Anthropic endpoints", async () => {
+  const clock = new FakeClock(),
+    wire = new AnthropicWire(),
+    provider = new CompatibleProvider(
+      anthropic,
+      "synthetic-anthropic-key-canary",
+      wire,
+      () => clock.now,
+    ),
+    [model] = await provider.discover();
+  if (!model) throw new Error("Missing model");
+  const request = {
+    ...toolRequest(),
+    messages: [
+      { role: "system" as const, content: "You are a fixture." },
+      { role: "assistant" as const, content: "Hello." },
+      { role: "user" as const, content: "First." },
+      { role: "user" as const, content: "Second." },
+    ],
+  };
+  const result = await provider.generate(
+    model,
+    request,
+    AbortSignal.timeout(1000),
+  );
+  expect(result).toMatchObject({
+    text: "On it.",
+    tool_calls: [{ name: "fixture_tool", arguments: { a: 2 } }],
+    finish_reason: "tool_calls",
+    usage: { input_tokens: 90, output_tokens: 12, quality: "observed" },
+    provider_request_id: "msg_fixture",
+  });
+  const call = wire.calls[0];
+  expect(call?.path).toBe("messages");
+  expect(call?.target).toMatchObject({
+    auth_header: "x-api-key",
+    api: "anthropic_messages",
+  });
+  expect(call?.body).toEqual({
+    model: "claude-fixture",
+    max_tokens: request.max_output_tokens,
+    system: "You are a fixture.",
+    messages: [
+      { role: "user", content: "Continue." },
+      { role: "assistant", content: "Hello." },
+      { role: "user", content: "First.\n\nSecond." },
+    ],
+    tools: [
+      {
+        name: "fixture_tool",
+        description: "Synthetic tool",
+        input_schema: { type: "object", properties: { a: { type: "number" } } },
+      },
+    ],
+    tool_choice: { type: "auto" },
+  });
+});
+it("refuses Anthropic tool calls that were not offered, and JSON mode", async () => {
+  const clock = new FakeClock(),
+    wire = new AnthropicWire(),
+    provider = new CompatibleProvider(
+      anthropic,
+      "synthetic-anthropic-key-canary",
+      wire,
+      () => clock.now,
+    ),
+    [model] = await provider.discover();
+  if (!model) throw new Error("Missing model");
+  wire.response = {
+    type: "message",
+    content: [{ type: "tool_use", id: "t", name: "not_offered", input: {} }],
+    stop_reason: "tool_use",
+  };
+  await expect(
+    provider.generate(model, toolRequest(), AbortSignal.timeout(1000)),
+  ).rejects.toMatchObject({
+    code: "malformed_response",
+  });
+  await expect(
+    provider.generate(
+      model,
+      { ...fixtureRequest(), response_format: "json" },
+      AbortSignal.timeout(1000),
+    ),
+  ).rejects.toMatchObject({ code: "policy_denied" });
+  expect(wire.calls).toHaveLength(1);
+});
+it("requires the x-api-key header and a messages path for Anthropic endpoints", () => {
+  const base = { ...anthropic, auth_header: "authorization" };
+  expect(compatibleEndpointSchema.safeParse(base).success).toBe(false);
+  expect(
+    compatibleEndpointSchema.safeParse({
+      ...anthropic,
+      chat_path: "chat/completions",
+    }).success,
+  ).toBe(false);
+  expect(compatibleEndpointSchema.parse({ ...kong }).api).toBe("openai_chat");
+});

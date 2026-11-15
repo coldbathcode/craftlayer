@@ -149,7 +149,7 @@ Still needed for G0: accept the Chapter 03 review and say go for Milestone G.
 
 ## Risks
 
-- **Version support (G1, 2026-11-15: resolved with a bridge).** Mineflayer stops at 26.1 and the family server runs 26.3. G1 proved the bot plays through the ViaVersion/ViaBackwards server plugins ([record](../development/ai-player.md)). Installing them on the family server is a production change needing a restart, a verified backup and the owner's approval (decision 13). When Mineflayer supports 26.3 natively, the bridge can be removed.
+- **Version support (G1, 2026-11-15: resolved with a bridge).** Mineflayer stops at 26.1 and the family server runs 26.3. G1 proved the bot plays through the ViaVersion/ViaBackwards server plugins ([record](../development/ai-player.md)). Installing them on the family server is a production change needing a restart, a verified backup and the owner's approval (decision 13). **Done 2026-11-15** with the owner's approval: about 1 min 40 s of downtime with nobody online, after a cold copy of the world was verified file by file ([ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md)). When Mineflayer supports 26.3 natively, the bridge can be removed.
 - **Model quality varies.** Small local models may choose poor skills. The harness keeps the model's job small (choose a skill and its arguments), and G10 reports results per model so you can see which ones are good enough.
 - **Cost of chatty play.** Event-driven thinking, cheap reflexes, a cap on calls per minute and prompt caching where the provider supports it keep calls down. The hard limit is the backstop.
 - **Children and a talking AI.** It may chat with the children but takes instructions only from the owner; everything it says is filtered and logged.

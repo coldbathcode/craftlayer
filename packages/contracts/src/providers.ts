@@ -209,6 +209,32 @@ export const connectionSchema = z.strictObject({
   credential_configured: z.boolean(),
   key_id: z.string().nullable(),
 });
+/**
+ * A model service the instance operator approved, which an adult can connect.
+ * Labels and IDs only: no URLs, addresses or prices leave the server here.
+ */
+export const providerEndpointSchema = z.strictObject({
+  kind: providerKind,
+  endpoint_id: z.string().max(40),
+  label: z.string().max(80),
+  flavor: z.enum([
+    "openrouter",
+    "ollama",
+    "kong_ai_gateway",
+    "generic",
+    "openai",
+    "anthropic",
+    "google_gemini",
+  ]),
+  needs_secret: z.boolean(),
+  models: z.number().int().nonnegative(),
+});
+export const providerEndpointsSchema = z.strictObject({
+  items: z.array(providerEndpointSchema).max(64),
+  /** The operator's instance-wide switch and per-hour cap for paid models. */
+  paid: z.strictObject({ allowed: z.boolean(), max_micro_usd: microUsd }),
+});
+export type ProviderEndpoint = z.infer<typeof providerEndpointSchema>;
 export const connectionCreateSchema = z.strictObject({
   kind: providerKind,
   endpoint_id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),

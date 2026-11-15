@@ -33,7 +33,24 @@ if (!apiUrl || !tokenFile || !stateDir) {
   );
   process.exit(2);
 }
-const api = new HostClient(apiUrl, await protectedToken(tokenFile));
+/** Waits for the owner to install the token (shown once on the AI players screen). */
+async function waitForToken(path: string): Promise<string> {
+  let told = false;
+  for (;;) {
+    try {
+      return await protectedToken(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if (!told)
+        log(
+          "waiting for the host token file; add it from the AI players screen",
+        );
+      told = true;
+      await delay(10_000);
+    }
+  }
+}
+const api = new HostClient(apiUrl, await waitForToken(tokenFile));
 const controllers = new Map<string, PlayerController>();
 let stopping = false;
 async function shutdown(signal: string) {

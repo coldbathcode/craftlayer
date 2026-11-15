@@ -83,3 +83,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0052 — Model access for AI players: compatible endpoints, usable OpenRouter pricing, standing authority](0052-ai-player-model-access.md).
 - [0053 — AI player records, worker hosts and per-player spending](0053-ai-player-records-and-hosts.md).
 - [0054 — The AI player worker, its brain, and AI agents that instruct it](0054-ai-player-worker-and-agents.md).
+- [0055 — G10 readiness: direct providers, today's OpenRouter catalog, the model services screen, spend history and the worker container](0055-ai-player-g10-readiness.md).

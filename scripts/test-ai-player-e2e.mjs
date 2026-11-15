@@ -7,9 +7,17 @@
 //   CRAFTLAYER_ACCEPT_EULA=true pnpm test:ai-player-e2e
 // Optional: AI_PLAYER_E2E_MODEL (default gemma4:latest), AI_PLAYER_E2E_OLLAMA
 // (default http://[::1]:11434/). Nothing here touches the VPS or any existing world.
+//
+// Paid models (owner-authorized, capped at $1 for the whole run by the player's daily
+// limit and the hourly budgets):
+//   AI_PLAYER_E2E_PROVIDER=openrouter AI_PLAYER_E2E_MODEL=<openrouter model id>
+//   AI_PLAYER_E2E_PROVIDER=endpoint AI_PLAYER_E2E_ENDPOINT_FILE=<endpoint.json>
+//     (one `openai_compatible` declaration: Kong AI Gateway, OpenAI, Gemini or Anthropic)
+//   plus AI_PLAYER_E2E_SECRET_FILE=<file holding the API key, chmod 600>.
+// A second offline Java client ("the owner") joins and instructs the player in game chat.
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,6 +35,16 @@ if (process.env.CRAFTLAYER_ACCEPT_EULA !== "true") {
 const MODEL = process.env.AI_PLAYER_E2E_MODEL ?? "gemma4:latest";
 const OLLAMA = process.env.AI_PLAYER_E2E_OLLAMA ?? "http://[::1]:11434/";
 const OLLAMA_ADDRESS = new URL(OLLAMA).hostname.replace(/^\[|\]$/g, "");
+const PROVIDER = process.env.AI_PLAYER_E2E_PROVIDER ?? "ollama";
+if (!["ollama", "openrouter", "endpoint"].includes(PROVIDER)) {
+  console.error(
+    "AI_PLAYER_E2E_PROVIDER must be ollama, openrouter or endpoint.",
+  );
+  process.exit(2);
+}
+const PAID = PROVIDER !== "ollama";
+/** The most a paid run may spend, in micro-USD ($1). */
+const PAID_CAP = "1000000";
 const report = {};
 const step = (key, value) => {
   report[key] = value;
@@ -74,15 +92,42 @@ const cleanups = [];
 let exitCode = 1;
 try {
   run("pnpm", ["build:server"], { stdio: ["ignore", "ignore", "inherit"] });
-  const show = await fetch(new URL("api/show", OLLAMA), {
-    method: "POST",
-    body: JSON.stringify({ model: MODEL }),
-  }).then((r) => r.json());
-  step("model", {
-    id: MODEL,
-    capabilities: show.capabilities,
-    format: show.details?.format,
+  run("pnpm", ["--filter", "@craftlayer/ai-player", "build"], {
+    stdio: ["ignore", "ignore", "inherit"],
   });
+  let secret, endpoint;
+  if (PAID) {
+    const file = process.env.AI_PLAYER_E2E_SECRET_FILE;
+    if (!file) throw new Error("Set AI_PLAYER_E2E_SECRET_FILE for a paid run.");
+    if (((await stat(file)).mode & 0o077) !== 0)
+      throw new Error(
+        "The secret file must be readable only by you (chmod 600).",
+      );
+    secret = (await readFile(file, "utf8")).trim();
+  }
+  if (PROVIDER === "endpoint") {
+    endpoint = JSON.parse(
+      await readFile(process.env.AI_PLAYER_E2E_ENDPOINT_FILE ?? "", "utf8"),
+    );
+    step("model", {
+      provider: "endpoint",
+      endpoint: endpoint.id,
+      flavor: endpoint.flavor,
+      id: MODEL,
+    });
+  } else if (PROVIDER === "openrouter") {
+    step("model", { provider: "openrouter", id: MODEL });
+  } else {
+    const show = await fetch(new URL("api/show", OLLAMA), {
+      method: "POST",
+      body: JSON.stringify({ model: MODEL }),
+    }).then((r) => r.json());
+    step("model", {
+      id: MODEL,
+      capabilities: show.capabilities,
+      format: show.details?.format,
+    });
+  }
 
   // 1. Disposable database, migrated.
   const password = randomBytes(24).toString("hex"),
@@ -155,7 +200,7 @@ try {
   );
   const { AiPlayers } = await import("../packages/ai-players/dist/index.js");
   const { buildApp } = await import("../apps/api/dist/app.js");
-  const { HostClient, PlayerController } = await import(
+  const { HostClient, MinecraftBody, PlayerController } = await import(
     "../apps/ai-player/dist/index.js"
   );
   const auth = new AuthService({
@@ -245,23 +290,27 @@ try {
     join(files, "policy"),
     JSON.stringify({
       version: 1,
-      openrouter_enabled: false,
-      openrouter_models: [],
-      allow_paid: false,
-      max_paid_micro_usd: "0",
+      openrouter_enabled: PROVIDER === "openrouter",
+      openrouter_models: PROVIDER === "openrouter" ? [MODEL] : [],
+      allow_paid: PAID,
+      max_paid_micro_usd: PAID ? PAID_CAP : "0",
       stopped: false,
       limits: roomy,
-      ollama: [
-        {
-          id: "local",
-          url: OLLAMA,
-          addresses: [OLLAMA_ADDRESS],
-          models: [MODEL],
-          cloud_disabled: true,
-          context_tokens: 32768,
-          output_tokens: 1024,
-        },
-      ],
+      ollama:
+        PROVIDER === "ollama"
+          ? [
+              {
+                id: "local",
+                url: OLLAMA,
+                addresses: [OLLAMA_ADDRESS],
+                models: [MODEL],
+                cloud_disabled: true,
+                context_tokens: 32768,
+                output_tokens: 1024,
+              },
+            ]
+          : [],
+      openai_compatible: endpoint ? [endpoint] : [],
     }),
     { mode: 0o600 },
   );
@@ -274,11 +323,25 @@ try {
     }),
   });
   cleanups.push(() => gateway.close());
-  const connection = await gateway.createConnection(token, org, {
-    kind: "ollama",
-    endpoint_id: "local",
-    label: "Local Ollama",
-  });
+  const connection = await gateway.createConnection(
+    token,
+    org,
+    PROVIDER === "openrouter"
+      ? {
+          kind: "openrouter",
+          endpoint_id: "openrouter",
+          label: "OpenRouter",
+          secret,
+        }
+      : PROVIDER === "endpoint"
+        ? {
+            kind: "openai_compatible",
+            endpoint_id: endpoint.id,
+            label: endpoint.label,
+            secret,
+          }
+        : { kind: "ollama", endpoint_id: "local", label: "Local Ollama" },
+  );
   const models = await gateway.refreshModels(token, org, connection.id);
   step(
     "models",
@@ -290,7 +353,20 @@ try {
     ["project", project],
   ]) {
     const current = await gateway.getBudget(token, org, kind, id);
-    await gateway.setBudget(token, org, kind, id, current.version, roomy);
+    await gateway.setBudget(token, org, kind, id, current.version, {
+      ...roomy,
+      micro_usd: PAID ? PAID_CAP : "0",
+    });
+  }
+  if (PAID) {
+    // The same family-wide setting the AI players screen writes ("allow paid models").
+    const current = await gateway.getPolicy(token, org, "organization", org);
+    await gateway.setPolicy(token, org, "organization", org, current.version, {
+      ...current.policy,
+      free_only: false,
+      allow_hosted: true,
+      max_paid_micro_usd: PAID_CAP,
+    });
   }
 
   // 4. The API with the AI player service, on a loopback port.
@@ -338,7 +414,8 @@ try {
     ]),
   ).directory;
   const data = join(directory, "data");
-  const botName = "PipTheHelper";
+  const botName = "PipTheHelper",
+    ownerName = "OwnerTester";
   const properties = (await readFile(join(data, "server.properties"), "utf8"))
     .replace("online-mode=true", "online-mode=false")
     .replace("enforce-secure-profile=true", "enforce-secure-profile=false")
@@ -350,7 +427,10 @@ try {
   await writeFile(join(data, "eula.txt"), "eula=true\n");
   await writeFile(
     join(data, "whitelist.json"),
-    JSON.stringify([{ uuid: offlineUuid(botName), name: botName }]),
+    JSON.stringify([
+      { uuid: offlineUuid(botName), name: botName },
+      { uuid: offlineUuid(ownerName), name: ownerName },
+    ]),
   );
   for (const plugin of lock.server_plugins)
     await writeFile(
@@ -397,7 +477,9 @@ try {
     game_version: lock.bot.protocol_version,
     mc_username: botName,
     mc_auth: "offline",
-    instructors: [],
+    instructors: [
+      { kind: "java", value: offlineUuid(ownerName), label: ownerName },
+    ],
     daily_limit_micro: "1000000",
     total_limit_micro: "10000000",
     calls_per_hour: 240,
@@ -470,6 +552,9 @@ try {
       decisions: messages
         .filter((m) => m.direction === "decision")
         .map((m) => m.body.slice(0, 160)),
+      events: messages
+        .filter((m) => m.direction === "event")
+        .map((m) => m.body.slice(0, 200)),
       replies: messages
         .filter((m) => m.direction === "reply")
         .map((m) => m.body.slice(0, 160)),
@@ -515,6 +600,82 @@ try {
       "Craft some planks from your logs.",
       async (v) =>
         v.status?.detail.inventory.some((i) => /_planks x/.test(i)) ?? false,
+    ),
+  );
+
+  // 8b. The owner joins with a real second Java client and instructs the player in game
+  // chat, by name, then by whisper. A stranger's message is ignored.
+  const owner = await MinecraftBody.connect({
+    host: "127.0.0.1",
+    port: gamePort,
+    username: ownerName,
+    version: lock.bot.protocol_version,
+    auth: "offline",
+  });
+  cleanups.push(() => owner.bot.quit());
+  const heard = [];
+  owner.on("chat", (username, message) => heard.push({ username, message }));
+  owner.on("whisper", (username, message) =>
+    heard.push({ username, message, whisper: true }),
+  );
+  await until("owner spawned", 60000, async () => owner.bot.entity?.position);
+  await delay(3000);
+  async function gameScenario(name, say, done, ms = 300000) {
+    const before = (await transcriptSince(0)).at(-1)?.seq ?? 0;
+    const heardBefore = heard.length,
+      started = Date.now();
+    say();
+    const outcome = await until(name, ms, async () => {
+      const messages = await transcriptSince(before);
+      const view = await players.get(token, org, created.id);
+      return (await done(messages, view, heard.slice(heardBefore)))
+        ? { messages, view }
+        : null;
+    }).catch((error) => ({ error: String(error.message ?? error) }));
+    const messages = outcome.messages ?? (await transcriptSince(before));
+    const result = {
+      ok: !outcome.error,
+      seconds: Math.round((Date.now() - started) / 1000),
+      owner_chat: messages
+        .filter((m) => m.direction === "instruction")
+        .map((m) => `${m.channel}: ${m.body.slice(0, 120)}`),
+      decisions: messages
+        .filter((m) => m.direction === "decision")
+        .map((m) => m.body.slice(0, 160)),
+      events: messages
+        .filter((m) => m.direction === "event")
+        .map((m) => m.body.slice(0, 200)),
+      heard_in_game: heard
+        .slice(heardBefore)
+        .map((h) => `${h.username}: ${h.message}`.slice(0, 160)),
+      ...(outcome.error ? { error: outcome.error } : {}),
+    };
+    step(`scenario_${name}`, result);
+    return result;
+  }
+  const distance = (view) => {
+    const p = view.status?.detail.position,
+      o = owner.bot.entity?.position;
+    return p && o ? Math.hypot(p.x - o.x, p.z - o.z) : Number.POSITIVE_INFINITY;
+  };
+  results.push(
+    await gameScenario(
+      "game_chat_by_name",
+      () => owner.bot.chat("Pip, please say hello to me in the chat."),
+      async (messages, _view, since) =>
+        messages.some(
+          (m) => m.direction === "instruction" && m.channel === "game",
+        ) && since.some((h) => h.username === botName),
+    ),
+  );
+  results.push(
+    await gameScenario(
+      "game_come_here",
+      () => owner.bot.whisper(botName, "come to me"),
+      async (messages, view) =>
+        messages.some(
+          (m) => m.direction === "instruction" && m.channel === "game",
+        ) && distance(view) <= 4,
     ),
   );
 

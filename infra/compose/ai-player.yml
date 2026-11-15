@@ -1,0 +1,36 @@
+# Optional AI player worker host (master plan G4/G10, ADR 0054). It holds one host token
+# (created on the AI players screen, shown once) and no provider keys, database credential or
+# server-control rights. It is NOT on the game-control network, so it cannot reach RCON.
+# It reaches the API on the internal network and, through its own egress network, the game
+# port published on the host (host.docker.internal) and Microsoft sign-in for online accounts.
+services:
+  ai-player:
+    networks: [default, ai-player-egress]
+    build:
+      { context: ., dockerfile: infra/images/Dockerfile, target: ai-player }
+    user: "${CRAFTLAYER_HOST_UID:?Set the host user that owns the token file}:${CRAFTLAYER_HOST_GID:?Set its group}"
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    pids_limit: 128
+    read_only: true
+    tmpfs: [/tmp]
+    mem_limit: ${CRAFTLAYER_AI_PLAYER_MEMORY:-512m}
+    cpus: 1
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    environment:
+      NODE_ENV: production
+      CRAFTLAYER_API_URL: http://api:4000
+      CRAFTLAYER_AI_PLAYER_TOKEN_FILE: /run/secrets/ai-player/host.token
+      CRAFTLAYER_AI_PLAYER_STATE_DIR: /var/lib/ai-player
+    volumes:
+      # Directory holding host.token (mode 0600). Read-only.
+      - ${CRAFTLAYER_AI_PLAYER_SECRET_DIR:?Set the folder holding host.token}:/run/secrets/ai-player:ro
+      # Microsoft sign-in cache and other worker state (mode 0700).
+      - ${CRAFTLAYER_AI_PLAYER_STATE_DIR:?Set the worker state folder}:/var/lib/ai-player
+    depends_on: { api: { condition: service_healthy } }
+    stop_grace_period: 15s
+    restart: unless-stopped
+    logging: { driver: json-file, options: { max-size: 10m, max-file: "3" } }
+networks:
+  ai-player-egress: {}

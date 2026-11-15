@@ -2446,6 +2446,17 @@ describe("provider credential and connection boundary", () => {
     ];
     await writeFile(policyPath(), JSON.stringify(policy));
     const org = await auth.createOrganization(ownerToken, "Compatible fixture");
+    // The connect screen lists approved services by label only: no URL, address or price.
+    const offered = await providers.listEndpoints(ownerToken, org.id);
+    expect(offered.items).toContainEqual({
+      kind: "openai_compatible",
+      endpoint_id: "kong",
+      label: "Kong AI Gateway",
+      flavor: "kong_ai_gateway",
+      needs_secret: true,
+      models: 1,
+    });
+    expect(JSON.stringify(offered)).not.toContain("example.test");
     // A hosted connection needs a credential; an unknown endpoint is refused.
     await expect(
       providers.createConnection(ownerToken, org.id, {

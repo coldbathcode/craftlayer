@@ -19,6 +19,7 @@ import {
   aiPlayerPending,
   aiPlayerReport,
   aiPlayerSpend,
+  aiPlayerSpendHistory,
   aiPlayerTaskInput,
   aiPlayerThink,
   aiPlayerThought,
@@ -695,6 +696,35 @@ export class AiPlayers {
       },
       channel === "mcp" ? "ai_player:instruct" : "ai_player:manage",
     );
+  }
+  /** Daily spending for the last `days` UTC days, oldest first (G9). */
+  async spendHistory(token: string, org: string, id: string, days = 30) {
+    const span = z.number().int().min(1).max(366).parse(days);
+    return this.#manage(token, org, id, async (c) => {
+      const rows = (
+        await c.query<{
+          day: string;
+          used_micro: string;
+          reserved_micro: string;
+          calls: number;
+          input_tokens: string;
+          output_tokens: string;
+        }>(
+          "select to_char(day,'YYYY-MM-DD') as day,used_micro::text,reserved_micro::text,calls,input_tokens::text,output_tokens::text from ai_player_spend_days where organization_id=$1 and player_id=$2 and day > $3::date - $4::int and day <= $3::date order by day",
+          [org, id, utcDay(this.#now()), span],
+        )
+      ).rows;
+      return aiPlayerSpendHistory.parse({
+        days: rows.map((r) => ({
+          day: r.day,
+          used_micro: r.used_micro,
+          reserved_micro: r.reserved_micro,
+          calls: r.calls,
+          input_tokens: Number(r.input_tokens),
+          output_tokens: Number(r.output_tokens),
+        })),
+      });
+    });
   }
   async transcript(token: string, org: string, id: string, after = 0) {
     return this.#manage(token, org, id, async (c) => {

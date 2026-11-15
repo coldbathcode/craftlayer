@@ -13,7 +13,7 @@ import {
   skillsByName,
   toolSchemas,
 } from "../skills/skills.js";
-import { relevantMemories } from "./chat.js";
+import { looksLikeToolCall, relevantMemories, toolCallInText } from "./chat.js";
 import {
   MAX_INPUT_BOUND,
   requestBound,
@@ -276,7 +276,17 @@ export class Brain {
         body: "I've used 80% of a spending limit.",
       });
     }
-    const reply = thought.text.trim();
+    const known = (name: string) => skillsByName.has(name);
+    let reply = thought.text.trim();
+    if (!thought.tool_calls.length) {
+      const written = toolCallInText(reply, known);
+      if (written) {
+        thought = { ...thought, tool_calls: [written] };
+        reply = "";
+      }
+    }
+    // A malformed call written as text is not a message for anyone.
+    if (looksLikeToolCall(reply, known)) reply = "";
     if (reply) this.#reply(reply, goal.channel === "game");
     if (!thought.tool_calls.length) {
       this.#finish(goal, null);

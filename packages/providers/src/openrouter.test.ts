@@ -177,3 +177,41 @@ it("counts a reasoning price only above the output price and ignores zero-valued
   );
   expect(surprise?.pricing.unknown_dimensions).toEqual(["per_hour_fee"]);
 });
+it("prices today's catalog entries, which omit zero request and image fees", () => {
+  const clock = new FakeClock(),
+    current = normalizeOpenRouter(
+      {
+        ...entry,
+        id: "fixture/current",
+        pricing: {
+          prompt: "0.00000025",
+          completion: "0.000002",
+          web_search: "0.01",
+          input_cache_read: "0.000000025",
+          input_cache_write_1h: "0.0000002",
+          input_audio_cache: "0.00000003",
+        },
+        supported_parameters: ["max_tokens", "tools"],
+      },
+      clock.now,
+    );
+  if (!current) throw new Error("Missing fixture");
+  expect(current.pricing.unknown_dimensions).toEqual([]);
+  expect(current.pricing.dimensions.request?.amount).toBe("0");
+  expect(current.pricing.dimensions.image?.amount).toBe("0");
+  // A listed request fee is still charged; tiered "overrides" stay unknown.
+  const fee = normalizeOpenRouter(
+    {
+      ...entry,
+      pricing: {
+        prompt: "0.000001",
+        completion: "0.000002",
+        request: "0.001",
+        overrides: [{ min_prompt_tokens: 100000, prompt: "0.000002" }],
+      },
+    },
+    clock.now,
+  );
+  expect(fee?.pricing.dimensions.request?.amount).toBe("0.001");
+  expect(fee?.pricing.unknown_dimensions).toEqual(["overrides"]);
+});

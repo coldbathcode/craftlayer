@@ -7,6 +7,7 @@ import {
 import {
   connectionCreateSchema,
   connectionSchema,
+  providerEndpointsSchema,
 } from "@craftlayer/contracts";
 import pg from "pg";
 import { z } from "zod";
@@ -166,6 +167,48 @@ export class ConnectionService {
       "insert into audit_events(organization_id,actor_id,action,target_id,outcome) values($1,$2,$3,$4,'allowed')",
       [org, actor, action, target],
     );
+  }
+  /** Services an adult may connect, from the operator's protected policy file. */
+  async listEndpoints(token: string, org: string) {
+    return this.admin(token, org, async () => {
+      const policy = await this.files.policy();
+      return providerEndpointsSchema.parse({
+        items: [
+          ...(policy.openrouter_enabled
+            ? [
+                {
+                  kind: "openrouter",
+                  endpoint_id: "openrouter",
+                  label: "OpenRouter",
+                  flavor: "openrouter",
+                  needs_secret: true,
+                  models: policy.openrouter_models.length,
+                },
+              ]
+            : []),
+          ...policy.openai_compatible.map((e) => ({
+            kind: "openai_compatible",
+            endpoint_id: e.id,
+            label: e.label,
+            flavor: e.flavor,
+            needs_secret: true,
+            models: e.models.length,
+          })),
+          ...policy.ollama.map((e) => ({
+            kind: "ollama",
+            endpoint_id: e.id,
+            label: `Ollama (${e.id})`,
+            flavor: "ollama",
+            needs_secret: false,
+            models: e.models.length,
+          })),
+        ],
+        paid: {
+          allowed: policy.allow_paid,
+          max_micro_usd: policy.allow_paid ? policy.max_paid_micro_usd : "0",
+        },
+      });
+    });
   }
   async listConnections(token: string, org: string) {
     return this.admin(token, org, async (client) =>

@@ -120,6 +120,26 @@ Declare each endpoint under `openai_compatible`. Kong AI Gateway's AI Proxy plug
 - Then, as an adult with `provider:manage`: `POST /api/v1/providers` with `{"kind":"openai_compatible","endpoint_id":"kong","label":"Kong AI Gateway","secret":"<consumer key>"}`, then `POST /api/v1/providers/:id/refresh`. The key is sealed with the active master key and never returned.
 - Kong's own token rate limiting and cost analytics can run alongside. The limit that stops an AI player is CraftLayer's.
 
+### Direct providers (OpenAI, Google Gemini, Anthropic)
+
+The same declaration reaches a provider directly ([ADR 0055](../architecture/decisions/0055-ai-player-g10-readiness.md)). Only the fields below differ from the Kong example. Take every model's prices from the provider's own price page, divide per-million prices by 1,000,000, and record the page and date.
+
+| Provider | `flavor` | `api` | `url` | `chat_path` | `auth_header` |
+| --- | --- | --- | --- | --- | --- |
+| OpenAI | `openai` | `openai_chat` (default) | `https://api.openai.com/v1` | `chat/completions` | `authorization` |
+| Google Gemini | `google_gemini` | `openai_chat` | `https://generativelanguage.googleapis.com/v1beta/openai` | `chat/completions` | `authorization` |
+| Anthropic | `anthropic` | `anthropic_messages` | `https://api.anthropic.com/v1` | `messages` | `x-api-key` |
+
+All three use `"network": "public"`. Anthropic endpoints must use `x-api-key` and a `messages` path; the wire adds `anthropic-version: 2023-06-01` itself. JSON mode is refused for Anthropic, so declare its models with `"structured": false`.
+
+### OpenRouter models that qualify
+
+`openrouter_models` lists the model IDs adults may connect. A model qualifies only if every price in OpenRouter's catalog is one CraftLayer can account for. Prompt and completion prices are charged. A per-request fee is charged when listed and treated as none when absent. Image, cache, web-search and audio prices are zero because CraftLayer never uses those features. **Tiered prices (`overrides`) make a model ineligible**: on 2026-11-15 that excluded, for example, Claude Haiku 5.5 and the GPT-6 Luna family. Claude Haiku 4.5, GPT-5 mini, GPT-5.4 mini, the Gemini Flash models and DeepSeek V4 Flash qualified. To check the current catalog against the real rules, run `normalizeOpenRouter` from `packages/providers/dist/openrouter.js` over `https://openrouter.ai/api/v1/models`.
+
+### Letting adults pay for models
+
+The **Model services** card on the AI players screen does this without the API console. An adult connects an approved service by pasting its key, refreshes its models, and sets **Allow paid models, up to this much an hour**. That writes the organization policy and raises the organization, adult and project hourly budgets to a size an AI player session needs (600 calls, 6M input and 300k output tokens). Existing higher values are never lowered. The instance file still has the final say: `allow_paid` must be true, and its `max_paid_micro_usd` caps what the card accepts.
+
 ## Adult administration API
 
 Authenticate through local identity, select an organization from current membership, and send its ID in `x-craftlayer-organization`. Organization headers select context; membership and scoped permission checks remain authoritative. Mutations require the configured same origin, session cookie and `x-csrf-token`. Use a trusted HTTP client that keeps secret inputs and cookies out of shell history, process arguments and logs. Browser submissions must use the trusted private loopback deployment or protected HTTPS when deployed remotely.

@@ -129,6 +129,22 @@ export const aiPlayerSpend = z.strictObject({
   warning: z.boolean(),
   exhausted: z.boolean(),
 });
+/** One row per UTC day with any model calls, oldest first (master plan G9). */
+export const aiPlayerSpendHistory = z.strictObject({
+  days: z
+    .array(
+      z.strictObject({
+        day: z.iso.date(),
+        used_micro: microUsd,
+        reserved_micro: microUsd,
+        calls: z.number().int().nonnegative(),
+        input_tokens: z.number().int().nonnegative(),
+        output_tokens: z.number().int().nonnegative(),
+      }),
+    )
+    .max(366),
+});
+export type AiPlayerSpendHistory = z.infer<typeof aiPlayerSpendHistory>;
 export const aiPlayerView = z.strictObject({
   id: z.uuid(),
   name: z.string(),

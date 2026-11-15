@@ -72,9 +72,13 @@ const resultSchema = z.object({
 const contained = new Set([
   "input_cache_read",
   "input_cache_write",
+  // One-hour cache writes: CraftLayer never sends cache_control.
+  "input_cache_write_1h",
   "web_search",
   "internal_reasoning",
   "audio",
+  // Cached audio input: CraftLayer never sends audio.
+  "input_audio_cache",
 ]);
 function priceDifference(a: string, b: string): string {
   const diff = scaledPrice(a) - scaledPrice(b);
@@ -125,10 +129,15 @@ export function normalizeOpenRouter(
   }
   // Prices that are inside the token counts or for features never sent are zero;
   // a reasoning price above the output price counts only by the difference.
-  const zero = (u: "token" | "second" | "tool_call") => ({
+  const zero = (u: "token" | "second" | "tool_call" | "image") => ({
     amount: "0",
     unit: u,
   });
+  // CraftLayer never sends images. The catalog omits a per-request fee when there is
+  // none (seen 2026-11-15 across the whole catalog); a listed fee is still charged.
+  dimensions.image = zero("image");
+  if (entry.pricing && !Object.hasOwn(entry.pricing, "request"))
+    dimensions.request = { amount: "0", unit: "request" };
   dimensions.cache_read = zero("token");
   dimensions.cache_write = zero("token");
   dimensions.audio = zero("second");

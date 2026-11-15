@@ -96,7 +96,19 @@ export const compatibleEndpointSchema = z
   .strictObject({
     id: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
     label: z.string().trim().min(1).max(80),
-    flavor: z.enum(["kong_ai_gateway", "generic"]),
+    flavor: z.enum([
+      "kong_ai_gateway",
+      "generic",
+      "openai",
+      "anthropic",
+      "google_gemini",
+    ]),
+    /**
+     * Request format. "openai_chat" (default) for OpenAI-format chat completions:
+     * Kong AI Gateway, OpenRouter-style gateways, OpenAI and Gemini's OpenAI endpoint.
+     * "anthropic_messages" for Anthropic's Messages API (path "messages", x-api-key).
+     */
+    api: z.enum(["openai_chat", "anthropic_messages"]).default("openai_chat"),
     url: z.url().refine((value) => {
       const u = new URL(value);
       return (
@@ -131,6 +143,12 @@ export const compatibleEndpointSchema = z
   .refine(
     (e) => new URL(e.url).protocol === "https:" || e.network === "private",
     "Public endpoints require HTTPS",
+  )
+  .refine(
+    (e) =>
+      e.api === "openai_chat" ||
+      (e.auth_header === "x-api-key" && e.chat_path.endsWith("messages")),
+    "Anthropic Messages endpoints use the x-api-key header and a messages path",
   )
   .refine(
     (e) => new Set(e.models.map((m) => m.id)).size === e.models.length,

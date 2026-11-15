@@ -84,3 +84,113 @@ export function relevantMemories(
     .slice(0, limit)
     .map((s) => s.m);
 }
+
+const PAIR =
+  /([a-zA-Z_][a-zA-Z0-9_]*)\s*[=:]\s*("(?:[^"\\]|\\.)*"|'[^']*'|-?\d+(?:\.\d+)?|true|false)/g;
+const NAME_KEYS = ["tool_name", "tool", "name", "function"] as const;
+const ARG_KEYS = [
+  "tool_args",
+  "arguments",
+  "args",
+  "parameters",
+  "input",
+] as const;
+/**
+ * The other shape small models write: a JSON object such as
+ * `{"tool_name": "look_around", "tool_args": {}}`, possibly in a code fence.
+ */
+function jsonToolCall(
+  text: string,
+  known: (name: string) => boolean,
+): { name: string; arguments: Record<string, unknown> } | null {
+  const body = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  if (!body.startsWith("{")) return null;
+  let value: unknown;
+  try {
+    value = JSON.parse(body);
+  } catch {
+    return null;
+  }
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const name = NAME_KEYS.map((k) => record[k]).find(
+    (v): v is string => typeof v === "string",
+  );
+  if (!name || !known(name)) return null;
+  const args =
+    ARG_KEYS.map((k) => record[k]).find((v) => v !== undefined) ?? {};
+  return args && typeof args === "object" && !Array.isArray(args)
+    ? { name, arguments: args as Record<string, unknown> }
+    : null;
+}
+
+/**
+ * Small models sometimes write a tool call as text, for example
+ * `say(text="Hi!")`, instead of making the call. If the whole reply is one call
+ * to a known skill with readable arguments, return it so the brain can run it
+ * (after the usual argument check). Anything else returns null.
+ */
+export function toolCallInText(
+  text: string,
+  known: (name: string) => boolean,
+): { name: string; arguments: Record<string, unknown> } | null {
+  const json = jsonToolCall(text, known);
+  if (json) return json;
+  const match = /^`*\s*([a-z_][a-z0-9_]*)\s*\(([\s\S]*)\)\s*`*$/i.exec(
+    text.trim(),
+  );
+  if (!match?.[1] || !known(match[1])) return null;
+  const inside = (match[2] ?? "").trim();
+  if (!inside) return { name: match[1], arguments: {} };
+  if (inside.startsWith("{")) {
+    try {
+      const value = JSON.parse(inside);
+      return value && typeof value === "object" && !Array.isArray(value)
+        ? { name: match[1], arguments: value }
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  const args: Record<string, unknown> = {};
+  let consumed = inside;
+  for (const [whole, key, raw] of inside.matchAll(PAIR)) {
+    if (!key || raw === undefined) continue;
+    consumed = consumed.replace(whole, "");
+    args[key] = raw.startsWith('"')
+      ? JSON.parse(raw)
+      : raw.startsWith("'")
+        ? raw.slice(1, -1)
+        : raw === "true" || raw === "false"
+          ? raw === "true"
+          : Number(raw);
+  }
+  // Only separators may be left over; otherwise the text was not a clean call.
+  return Object.keys(args).length && /^[\s,]*$/.test(consumed)
+    ? { name: match[1], arguments: args }
+    : null;
+}
+
+/**
+ * Text that starts like a call to a known skill (even a cut-off one) must never
+ * be said in the game.
+ */
+export function looksLikeToolCall(
+  text: string,
+  known: (name: string) => boolean,
+) {
+  const match = /^`*\s*([a-z_][a-z0-9_]*)\s*\(/i.exec(text.trim());
+  if (match?.[1] && known(match[1])) return true;
+  // A JSON object naming a known skill is a call, not a message.
+  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "");
+  if (!trimmed.startsWith("{")) return false;
+  return NAME_KEYS.some((key) => {
+    const named = new RegExp(`"${key}"\\s*:\\s*"([a-z_][a-z0-9_]*)"`, "i").exec(
+      trimmed,
+    );
+    return !!named?.[1] && known(named[1]);
+  });
+}

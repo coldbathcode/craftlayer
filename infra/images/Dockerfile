@@ -12,6 +12,7 @@ COPY apps/worker/package.json apps/worker/package.json
 COPY apps/cli/package.json apps/cli/package.json
 COPY apps/minecraft-node/package.json apps/minecraft-node/package.json
 COPY apps/mcp/package.json apps/mcp/package.json
+COPY apps/ai-player/package.json apps/ai-player/package.json
 COPY packages/core/package.json packages/core/package.json
 COPY packages/auth/package.json packages/auth/package.json
 COPY packages/sdk/package.json packages/sdk/package.json
@@ -22,6 +23,7 @@ COPY packages/node-protocol/package.json packages/node-protocol/package.json
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY packages/config/package.json packages/config/package.json
 COPY packages/db/package.json packages/db/package.json
+COPY packages/ai-players/package.json packages/ai-players/package.json
 RUN pnpm install --frozen-lockfile
 COPY . .
 ARG CRAFTLAYER_API_ORIGIN=http://api:4000
@@ -32,7 +34,8 @@ RUN pnpm --filter @craftlayer/api deploy --prod /prod/api \
  && pnpm --filter @craftlayer/worker deploy --prod /prod/worker \
  && pnpm --filter @craftlayer/db deploy --prod /prod/db \
  && pnpm --filter @craftlayer/minecraft-node deploy --prod /prod/node \
- && pnpm --filter @craftlayer/mcp deploy --prod /prod/mcp
+ && pnpm --filter @craftlayer/mcp deploy --prod /prod/mcp \
+ && pnpm --filter @craftlayer/ai-player deploy --prod /prod/ai-player
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS api
 ENV NODE_ENV=production
@@ -65,6 +68,15 @@ WORKDIR /app
 COPY --from=build --chown=node:node /prod/mcp .
 USER node
 CMD ["node", "dist/remote-main.js"]
+
+# AI player worker host (master plan G4): holds one host token and no provider keys,
+# database credentials or server-control rights.
+FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS ai-player
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=build --chown=node:node /prod/ai-player .
+USER node
+CMD ["node", "dist/main.js"]
 
 FROM node:22.23.3-bookworm-slim@sha256:3ed98443660ff48413b5af19ecefce3b9d50845a901a43420d47cc63a9fddbe9 AS migrate
 ENV NODE_ENV=production
