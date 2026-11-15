@@ -11,7 +11,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-15. Stat
 - **Earlier note:** Everything needed to take one is now built and tested locally (2026-11-12): the server helper takes the nightly backup and "Back up now", checks the archive and reports it. It starts on the VPS once the helper is live (A2) and a backup folder is approved.
 - **Dashboard:** on the VPS over Tailscale, including the family screens at `/home` since 2026-11-12 (build `3f7398e`). They have not yet been used there by the owner; live details appear once the server is bound to the host.
 - **AI agents:** read-only access works end to end (C1, C2), and agents can now *ask* for typed actions that an adult approves or declines (C3, built 2026-11-08); an approved request becomes a pending server action that waits for the node (A2). Only from the owner's machine until A1.
-- **Next milestone:** [G — AI player harness](G-ai-player.md) (owner request 2026-11-15): a named AI player driven by any model, with memory, game sense and a spending limit. Planned only; waits on the owner's G0 step.
+- **Next milestone:** [G — AI player harness](G-ai-player.md) (owner request 2026-11-15): a named AI player driven by any model (OpenRouter, Kong AI Gateway, Ollama, direct providers), with memory, game sense, master tasks and a spending limit. Decisions answered; planned only until the owner accepts the Chapter 03 review and says go.
 - **Server helper (node agent):** running on the VPS since the owner approved the host on 2026-11-12 ("Family VPS", checking in every ten seconds). The owner-approved restart on 2026-11-12 (19:00–19:02 UTC, nobody playing) turned on the private control channel and installed the asking-to-join plugin; the helper is configured to report status, read knocks, turn the server on and off and take backups. It does none of that until the owner chooses **Use this host** for the server on the Hosts page.
 
 ## Milestones
@@ -24,7 +24,7 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-15. Stat
 | [D — Backups](D-backups.md) | In progress | D1: switch the nightly loop on for the VPS (needs A2 live and a backup folder), then D2 |
 | [E — New servers](E-new-servers.md) | In progress | Engine built; waits on A and D |
 | [F — AI built in](F-ai-built-in.md) | Not started | F2a is delivered by G; F1, F2b and F2c follow G |
-| [G — AI player harness](G-ai-player.md) | Needs decision (next) | Owner G0: accept the Chapter 03 review, authorize G, answer decisions 8–12; then G1–G3 in parallel |
+| [G — AI player harness](G-ai-player.md) | Needs decision (next) | Decisions 8–12 answered; owner G0 still needs: accept the Chapter 03 review and authorize G; then G1–G3 in parallel |
 
 ## Steps
 
@@ -52,21 +52,21 @@ Part of the [master plan](../MASTER_PLAN.md). **Last updated:** 2026-11-15. Stat
 | E4 | Decommission with retained backup | E2 | Not started | — |
 | F1 | Dashboard assistant | C3, B2, Decision 3 | Not started | Provider gateway built (Chapter 02) |
 | F2 | In-game AI helpers | G (F2a); F2b/F2c build on G | Not started | Fleet runtime built (Chapter 03); F2a is carried by Milestone G |
-| G0 | Owner gate: accept Chapter 03 review, authorize G, decisions 8–12 | — | Needs decision | Plan written 2026-11-15 ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); Chapter 03 review prepared (`docs/reviews/03-fleet-engine.md`) |
-| G1 | Compatibility spike and sealed local test world | G0 | Not started | Mineflayer support for Paper 26.3 is unverified; fallback needs separate approval |
-| G2 | Pick any model: Anthropic, OpenAI, Gemini adapters; price table; one catalog | G0 | Not started | OpenRouter and Ollama adapters exist (Chapter 02) |
-| G3 | AI player profiles, Minecraft account sign-in, per-player spending limits | G0 | Not started | Ledger has micro-USD and mission/task scopes; AI-player scope is new |
+| G0 | Owner gate: accept Chapter 03 review, authorize G | — | Needs decision | Plan written 2026-11-15 ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); decisions 8–12 answered the same day; Chapter 03 review prepared (`docs/reviews/03-fleet-engine.md`) |
+| G1 | Compatibility spike and sealed local test world; owner-account sign-in | G0 | Not started | Mineflayer support for Paper 26.3 is unverified; fallback needs separate approval |
+| G2 | Pick any model: Kong AI Gateway and OpenAI-compatible connections, then Anthropic, OpenAI, Gemini; price table; one catalog | G0 | Not started | OpenRouter and Ollama adapters exist (Chapter 02) |
+| G3 | AI player profiles, master tasks, account sign-in, per-player spending limits ($1/day, $10 total) | G0 | Not started | Ledger has micro-USD and mission/task scopes; AI-player scope is new |
 | G4 | Body: player worker, single session, stop, reconnect, observations | G1, G3 | Not started | CL-04-03, CL-04-04 |
 | G5 | Skills and reflexes with zone checks and receipts | G4 | Not started | CL-04-05, CL-04-06 |
 | G6 | Brain: harness loop, game-sense frame, skill-call validation | G3, G5 | Not started | Scripted fake model and fake body first |
 | G7 | Memory: working, episodic, facts; read/correct/forget | G6 | Not started | — |
 | G8 | Talk to it: game chat, dashboard chat, MCP tools | G6 | Not started | Reuses Milestone C agent tokens |
 | G9 | Cost monitor: live spend, 80% warning, hard stop | G3, G6 | Not started | — |
-| G10 | Prove it: test-world scenarios, then supervised family-world trial | G5–G9 | Not started | CL-04-07 and Milestone G review |
+| G10 | Prove it: test-world scenarios, then supervised family-world trial | G5–G9; D1 for the family world | Not started | CL-04-07 and Milestone G review; family world only after a verified backup |
 
 ## Owner decisions
 
-Decided on 2026-11-08 unless noted. Decisions 8–12 are open.
+Decided on 2026-11-08 unless noted.
 
 | # | Decision | Answer | Consequence |
 | --- | --- | --- | --- |
@@ -77,11 +77,11 @@ Decided on 2026-11-08 unless noted. Decisions 8–12 are open.
 | 5 | The original world | **Remove it; keep things fresh** | Its encrypted archive and key stay on the owner's Mac. Removal of the stopped container and `/opt/minecraft-java` is a destructive VPS change: it runs only after a fresh decrypt-and-verify of the archive and one explicit confirmation of the exact scope |
 | 6 | Which AI agent to connect first | **Claude Desktop** | Setup steps are in the [agent runbook](../development/agent-access.md#connect-claude-mcp-read-only) |
 | 7 | Screen designs (B1) | **Approved** | B2 may start once A3 actions can run |
-| 8 | Minecraft Java account for the first AI player | *Open (G0)* — recommended: buy one now | Online sign-in stays on, so each AI player needs its own account |
-| 9 | First model providers and spending limit | *Open (G0)* — recommended: OpenRouter + Ollama, then Anthropic; $1/day, $10 total per AI player | Sets G2 order and the first G3 limits |
-| 10 | Who may instruct the AI player in game | *Open (G0)* — recommended: owner only; children's preset phrases after the trial | G8 trusted voices |
-| 11 | Where it may build and dig on the family world | *Open (G0)* — recommended: a marked area, children's builds protected | G3/G5 zones |
-| 12 | Idle behaviour | *Open (G0)* — recommended: stay home, follow the owner, no idle thinking | G6 triggers and cost |
+| 8 | How the AI player signs in (2026-11-15) | **The owner's own Java account** (offline mode stays ruled out; dedicated account possible later) | G1/G3 device-code sign-in; the owner plays from another identity while it is on; it never reconnects over the owner |
+| 9 | Models and spending limit (2026-11-15) | **Any model; must work with OpenRouter and Kong AI Gateway.** $1/day, $10 total per AI player | G2 adds Kong AI Gateway first; G3 limits |
+| 10 | Who may instruct the AI player (2026-11-15) | **Only the owner** | G8 accepts the owner's identities only |
+| 11 | Where it may dig and build (2026-11-15) | **Anywhere: free run of the world** | No zones by default; no attacking players; block journal; family world only after a verified backup |
+| 12 | What it does unasked (2026-11-15) | **Owner-allowed master tasks** (unasked work only; direct instructions unrestricted) | G3 task list; G6 picks tasks when idle |
 
 ## Change log
 
@@ -113,3 +113,4 @@ Decided on 2026-11-08 unless noted. Decisions 8–12 are open.
 - 2026-11-13 — D2 built: encrypted off-server copy pulled and proven on the owner's Mac. The dashboard line for it is a later step.
 - 2026-11-13 — VPS updated to `7e4bb88` (migration 0037, expiry, encryption to the owner's key; game untouched). Off-server pull job installed on the owner's Mac. Still waiting on the owner's taps for the first backup.
 - 2026-11-15 — Milestone G (AI player harness) planned and placed next at the owner's request ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); waits on the owner's G0 step.
+- 2026-11-15 — Owner answered G decisions 8–12: own Java account, any model via OpenRouter and Kong AI Gateway with $1/day and $10 total, owner-only instructions, free run of the world, master tasks for unasked work.

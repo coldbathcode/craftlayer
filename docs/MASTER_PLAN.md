@@ -37,7 +37,7 @@ An AI agent (for example Claude) connected through MCP can answer "Is the server
 | D | **Backups you can trust** | Nightly backups, off-machine copy, tested restore, shown as a simple ✓ | [D — backups](plan/D-backups.md) |
 | E | **New servers in a few taps** | Create a new world from the phone with a 3-question wizard | [E — new servers](plan/E-new-servers.md) |
 | F | **AI built in** | An assistant in the dashboard, then AI helpers in the game | [F — AI built in](plan/F-ai-built-in.md) |
-| G | **AI player harness** (next, 2026-11-15) | A named AI player you talk to, driven by any model (foundation providers, OpenRouter, Ollama), with memory, game sense and a spending limit | [G — AI player harness](plan/G-ai-player.md) |
+| G | **AI player harness** (next, 2026-11-15) | A named AI player you talk to, driven by any model (OpenRouter, Kong AI Gateway, Ollama, foundation providers), with memory, game sense and a spending limit | [G — AI player harness](plan/G-ai-player.md) |
 
 How work is run, checked and published: [how to run the plan](plan/RUNNING.md). The owner's decisions are recorded on the [status board](plan/STATUS.md#owner-decisions).
 
