@@ -79,3 +79,4 @@ Version selection, exact auth library, Minecraft authentication compatibility, s
 - [0048 — Remote MCP over Streamable HTTP](0048-remote-mcp.md).
 - [0049 — Old backup archives are deleted by the bound node, only as the retention rules allow](0049-backup-archive-expiry.md).
 - [0050 — Off-server backup copy: encrypted on the host, pulled and proven on the owner's machine](0050-offsite-backup-copy.md).
+- [0051 — AI player harness: a named, model-agnostic, budgeted player placed next in the plan](0051-ai-player-harness.md).

@@ -16,6 +16,8 @@ AI helps the family in two ways: an assistant in the dashboard that manages serv
 
 ## F2 — AI helpers in the game
 
+> **2026-11-15:** [Milestone G — AI player harness](G-ai-player.md) is now next and delivers F2a (plus conversation, memory and model choice for adults). F2b and F2c build on G's profiles, skills and limits; F1 follows G.
+
 This is the original CraftLayer vision ([Chapter 04](../chapters/04-minecraft-adapter.md), [05](../chapters/05-dashboard-and-kid-mode.md), [06](../chapters/06-cooperative-armies.md)), now built on the live, managed server instead of fixtures.
 
 - **F2a — One helper bot** joins a chosen world as an allowlisted bot account, follows a child, gathers or builds from approved presets, and stops instantly on Stop All. Uses the completed fleet runtime (Chapter 03).

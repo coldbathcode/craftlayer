@@ -4,6 +4,8 @@
 
 **Milestone:** M2. **Requirements:** PR-009–010; NFR-03–04.
 
+Master plan amendment (2026-11-15): this chapter's tasks are carried by [Milestone G — AI player harness](../plan/G-ai-player.md) ([ADR 0051](../architecture/decisions/0051-ai-player-harness.md)); the owner's G0 step is the Chapter 04 authorization and replaces the F3 gate below for G.
+
 Unified priority amendment: new bot work follows F0–F3 management and the Chapter 03 gate, then explicit Chapter 04 authorization. Reuse approved server/auth/plugin fixtures and registry; never recreate the adopted production server. See [track](../delivery/minecraft-track.md).
 
 ## Objective

@@ -1,6 +1,6 @@
 # CraftLayer master plan
 
-**Last updated:** 2026-11-08. **Where we are:** see the [plan status board](plan/STATUS.md).
+**Last updated:** 2026-11-15 (Milestone G added as next). **Where we are:** see the [plan status board](plan/STATUS.md).
 
 This is the single plan for turning CraftLayer into something a parent can actually use: manage the family Minecraft server from a phone, add or remove players, back up worlds, create new servers, and let AI agents help — safely. It sits on top of the existing engineering plan ([roadmap](delivery/roadmap.md), [Minecraft track](delivery/minecraft-track.md), [backlog](delivery/backlog.md)). Those stay the detailed source for completed and in-progress engineering tasks; this plan sets the **order and the user outcome**. Where they conflict on order, this plan wins ([ADR 0034](architecture/decisions/0034-master-plan-usable-first.md)). Where they conflict on safety, the stricter rule wins.
 
@@ -37,6 +37,7 @@ An AI agent (for example Claude) connected through MCP can answer "Is the server
 | D | **Backups you can trust** | Nightly backups, off-machine copy, tested restore, shown as a simple ✓ | [D — backups](plan/D-backups.md) |
 | E | **New servers in a few taps** | Create a new world from the phone with a 3-question wizard | [E — new servers](plan/E-new-servers.md) |
 | F | **AI built in** | An assistant in the dashboard, then AI helpers in the game | [F — AI built in](plan/F-ai-built-in.md) |
+| G | **AI player harness** (next, 2026-11-15) | A named AI player you talk to, driven by any model (foundation providers, OpenRouter, Ollama), with memory, game sense and a spending limit | [G — AI player harness](plan/G-ai-player.md) |
 
 How work is run, checked and published: [how to run the plan](plan/RUNNING.md). The owner's decisions are recorded on the [status board](plan/STATUS.md#owner-decisions).
 
@@ -59,9 +60,14 @@ flowchart LR
   C3 --> F1[F1 Dashboard assistant]
   B2 --> F1
   F1 --> F2[F2 In-game AI helpers]
+  C3 --> G[G AI player harness]
+  A3 --> G
+  G --> F2
 ```
 
 **Fastest useful path:** A1 → A2 → A3 gives real buttons. C1 → C2 runs alongside, so an AI agent can read server status as soon as A2 lands. B1 (design) starts immediately because it needs no code.
+
+**Next (owner request, 2026-11-15):** Milestone G is the next build milestone, after the owner's G0 gate. It delivers F2a and goes further for adults; F2b/F2c build on it and F1 follows it ([ADR 0051](architecture/decisions/0051-ai-player-harness.md)). The remaining A, B and D steps are owner taps and VPS updates and continue alongside.
 
 ## Rules that do not change
 
@@ -86,5 +92,6 @@ These come from [AGENTS.md](../AGENTS.md) and apply to every step:
 | E | CL-F25-03 to CL-F25-05 |
 | F2 | Chapters 04–06 (still need separate authorization) |
 | F1 | New: dashboard assistant using the existing [provider gateway](chapters/02-provider-gateway.md) |
+| G | Chapter 04 (CL-04-01 to CL-04-07), the Anthropic/OpenAI/Gemini part of Chapter 07, and new harness, memory and cost-monitor work |
 
-Chapter 04 and later remain gated until the owner authorizes them. This plan does not by itself authorize production changes; each VPS-touching step says what approval it needs.
+Chapter 04 and later remain gated until the owner authorizes them; for G, the owner's G0 step is that authorization. This plan does not by itself authorize production changes; each VPS-touching step says what approval it needs.
